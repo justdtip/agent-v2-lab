@@ -90,3 +90,38 @@ Gemma 4 text model on a CPU, which certifies the adapter's bookkeeping, not Gemm
 3. F3 and F5: the two sentences in the spec, and the differing keys in the comparison's refusal.
 4. Then the importer (F6), with its own tests: rendering under the original template and thinking setting, ids
    reconciled against the supplied trajectory, the correspondence flag set only by that path.
+
+## Second review, Chief, 2026-09-10 (~11:05Z) — the corrections and the importer, uncommitted on `codex/gemma4-interpretability`
+
+Read: `importer.py` (286 lines) and its 26 tests, and the four corrections in place. Executed on the laptop's CPU
+with caches in the session scratchpad: 107 collected, 107 passed, none skipped (the worktree untouched).
+
+**The four corrections are in.** F1: the config digest goes through `to_json_string(use_diff=False)`, so every
+HF config serialises; the five runtime tests that failed on the integer `id2label` keys pass. F2: the inspector
+reports `tie_word_embeddings` and `lm_head_present` and refuses an untied checkpoint without a readout. F3: the spec
+now says routing is observed on the layer's own MoE input after `pre_feedforward_layernorm_2`, not on the recorded
+residual. F5: a comparison refusal names the differing runtime keys.
+
+**The importer does what the first review asked for, and refuses the right things.** It renders the case's
+messages through the installed HF chat-template renderer with the literal template text (a template name is
+refused), tokenises the rendered text and checks it against the tokenizer's own direct tokenisation, then
+requires the supplied `prompt_ids` to equal the rendered ids exactly, reporting the first differing index. For
+replay it renders the full turn, requires the prompt rendering to be a prefix, and requires the supplied
+`replay_ids` to equal the suffix — so a missing terminator is a refusal, never an appended token. The thinking
+setting must be a known boolean bound to a named template argument that the template actually references;
+reserved rendering controls cannot be smuggled through `template_kwargs`; time-dependent and random templates
+are refused; the tokenizer's backend is fingerprinted before and after and must not change. The receipt
+carries the rendering, the tokenizer pin and fingerprint, the rendered texts and their digests, the package
+versions and the importer's own source hash, and is digested; `verify_import` re-renders and compares rather
+than trusting the stored boolean, which is the property that matters (`test_saved_boolean_does_not_establish_
+correspondence`). Two limits are stated correctly in the code: `tokenizer_revision_verified` is false — the pin
+is the caller's claim until the files are hashed against a snapshot — and a receipt shows correspondence with a
+template, not that the source service used that template.
+
+**Requested before the real exchange is imported.** (1) The tokenizer pin should be checked the way the checkpoint
+is: hash `tokenizer.json`, `tokenizer_config.json` and the template file of the named snapshot into the receipt
+and compare on verification, so `tokenizer_revision_verified` can become true by evidence rather than stay false
+by design. (2) One real-tokenizer regression on the CPU with the actual Gemma 4 tokenizer files once Daniel has
+downloaded a checkpoint — the synthetic fast tokenizer proves the reconciliation rules, not Gemma 4's template.
+Neither blocks committing the slice. Verdict: accept; commit on the branch; the next slice is the import of the
+actual exchange, then gates 1–5 as designed. Nothing merged, nothing run on the card.
