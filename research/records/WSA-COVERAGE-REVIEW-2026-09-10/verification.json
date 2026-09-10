@@ -1,0 +1,46 @@
+{
+  "basis": "fresh model-free verification",
+  "check_sha256": "c9bf5dffaa570c9fc8ff026ffb694d26d2971daf9b0dd0882c97517fb09fd5a7",
+  "forbidden_imports": [
+    "jlens",
+    "local_llm_lab",
+    "mlx",
+    "mlx_lm",
+    "numpy",
+    "torch",
+    "transformers"
+  ],
+  "forbidden_modules_imported": [],
+  "missing_manifest_control": "refused completeness",
+  "output_receipt_mutations_detected": [
+    "repeat",
+    "checkpoint",
+    "capture",
+    "gate_counts"
+  ],
+  "recorded_output_reproduced": true,
+  "relocated_output_reproduced": true,
+  "repeat_cases": 5,
+  "resume_cases": 5,
+  "source_corruptions_refused": [
+    "source/order.md",
+    "source/primer.md",
+    "source/method.md",
+    "source/capture.py",
+    "source/runner.py",
+    "source/test_capture.py",
+    "source/repeat_gate.py",
+    "source/ladder.py",
+    "source/hf_text.py",
+    "source/previous-audit.json"
+  ],
+  "source_count": 10,
+  "unexecuted": [
+    "all model forwards and real tensor storage",
+    "real repeat and boundary checks",
+    "ladder archive array validation",
+    "native suites",
+    "workspace or plan-progress capture analysis"
+  ],
+  "verify_sha256": "d64ce82759e0a37d96a943bff0045dc75480e093e6315b8fc95f61f4dbe07eea"
+}
