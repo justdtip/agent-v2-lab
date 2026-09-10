@@ -571,7 +571,11 @@ def _validate_anchor_table(table: dict[str, Any]) -> dict[str, Any]:
                 f"{where}.native_anchor_read_in_the_float32_tail",
             )
         for layer, pairing in (entry.get("measured_pairings") or {}).items():
-            _validate_pairing(pairing, f"{model}.measured_pairings[{layer}]")
+            records = pairing if isinstance(pairing, list) else [pairing]
+            if not records:
+                raise ValueError(f"{model}.measured_pairings[{layer}] must be nonempty")
+            for record in records:
+                _validate_pairing(record, f"{model}.measured_pairings[{layer}]")
     return table
 
 
@@ -651,6 +655,9 @@ PAIR_FIELDS = (
 
 #: The subset the caller declares about the reading; the rest is read off the lens.
 READING_FIELDS = ("positions", "reduction", "endpoint", "context_tokens")
+
+# A generated T5 basis cannot lose its cell receipts and become a legacy registration.
+T5_PAIRING_BASIS_PREFIX = "T5 measure_pairings: "
 
 
 def _validate_pairing(pairing: Any, where: str) -> None:

@@ -215,6 +215,9 @@ def _pairing_tables(path):
     if not isinstance(raw, dict):
         raise ValueError("pairing registration must be a model-keyed table")
     out = {}
+    provenance = raw.get("_provenance")
+    if isinstance(provenance, dict) and provenance.get("producer") == "measure_pairings":
+        out["_provenance"] = provenance
     for base, entry in raw.items():
         if base.startswith("_"):
             continue
@@ -225,12 +228,26 @@ def _pairing_tables(path):
             records = registrations if isinstance(registrations, list) else [registrations]
             for record in records:
                 B._validate_anchor_table({base: {**shell, "measured_pairings": {layer: record}}})
+                if (record["basis"].startswith(B.T5_PAIRING_BASIS_PREFIX)
+                        and "_provenance" not in out):
+                    raise ValueError("T5 pairing table requires its cell provenance")
             out[base, layer] = (shell, records)
     return out
 
 
-def _cell_pairing(tables, base, layer, identity):
+def _cell_pairing(tables, base, layer, identity, *, cell=None):
     shell, records = tables.get((base, str(layer)), ({}, []))
+    provenance = tables.get("_provenance")
+    if provenance is not None:
+        # Eleven pair fields alone cannot distinguish two prompts of equal token length.
+        # T5's parallel cell receipts bind each record without changing the pair schema.
+        receipts = provenance.get("measurements", {}).get(str(layer), [])
+        if len(receipts) != len(records) or cell is None:
+            raise ValueError(f"pairing registration requires exact cell provenance at layer {layer}")
+        records = [r for r, receipt in zip(records, receipts, strict=True)
+                   if receipt.get("cell") == cell]
+        if not records:
+            raise ValueError(f"pairing registration has no measurement for this cell at layer {layer}")
     exact = [r for r in records if r["pair"] == identity]
     if len(exact) > 1:
         raise ValueError(f"pairing registration is ambiguous at layer {layer}")
@@ -249,9 +266,10 @@ def _cell_pairing(tables, base, layer, identity):
     return {base: {**shell, "measured_pairings": {} if record is None else {str(layer): record}}}
 
 
-def _capture(
-    directory, positions_path, corpus_path, snapshot, metadata, lens, conf, dictionary, pairings
+def _capture_cells(
+    directory, positions_path, corpus_path, snapshot, metadata, lens, conf, requested_layers
 ):
+    """Shared file admission and exact token reconstruction, without granting a reading."""
     from tokenizers import Tokenizer
 
     seal = _json(positions_path)
@@ -296,9 +314,8 @@ def _capture(
         or any(type(x) is not int or not 1 <= x <= lens.num_layers for x in layers)
     ):
         raise ValueError("capture repo_layers must be unique ascending repository layers")
-    layer = B.layer_for_hook(dictionary.hook_point)
-    if layer not in layers:
-        raise ValueError(f"capture repo_layers missing dictionary layer {layer}")
+    if not requested_layers or any(layer not in layers for layer in requested_layers):
+        raise ValueError(f"requested layers outside the capture: {requested_layers}")
     arrays = {}
     for name in ("note", "act"):
         array = np.load(directory / f"residual_{name}.npy", mmap_mode="r", allow_pickle=False)
@@ -337,7 +354,7 @@ def _capture(
     if not isinstance(cells, list) or not cells:
         raise ValueError("positions cells must be nonempty")
     tok = Tokenizer.from_file(str(snapshot / "tokenizer.json"))
-    tables, readings, selected_residuals, used = _pairing_tables(pairings), [], [], set()
+    prepared, used = [], set()
     for cell in cells:
         i, position = cell.get("row"), cell.get("position")
         _integer(i, "positions row", 0)
@@ -389,7 +406,46 @@ def _capture(
             capture_batch=manifest["width"],
             reading=reading,
         )
-        table = _cell_pairing(tables, conf["model_base"], layer, identity)
+        residuals = {layer: arrays[position][i - low, layers.index(layer)] for layer in requested_layers}
+        if any(not np.isfinite(h).all() for h in residuals.values()):
+            raise ValueError(f"capture row {i} {position} residual is not finite")
+        prepared.append({
+            "cell": cell, "reading": reading, "identity": identity,
+            "input_ids": prompt.ids + completion.ids[:target + 1],
+            "prompt_sha256": hashlib.sha256(row["prompt"].encode()).hexdigest(),
+            "prompt_identity": row["metadata"], "residuals": residuals,
+            "capture_forward": {"output_attentions": ix.get("in_sample"),
+                                "logits_to_keep": [actual["P_note"], actual["P_act"]]},
+        })
+    return prepared, {
+        "manifest": manifest,
+        "files_sha256": hashes,
+        "positions_sha256": _hash(positions_path),
+        "corpus_sha256": seal["corpus_sha256"],
+        "tokenizer_sha256": seal["tokenizer_sha256"],
+        "domain_of_validity": seal.get("domain_of_validity"),
+    }
+
+
+def _capture(
+    directory, positions_path, corpus_path, snapshot, metadata, lens, conf, dictionary, pairings
+):
+    layer = B.layer_for_hook(dictionary.hook_point)
+    if layer not in _json(directory / "manifest.json").get("repo_layers", []):
+        raise ValueError(f"capture repo_layers missing dictionary layer {layer}")
+    prepared, provenance = _capture_cells(
+        directory, positions_path, corpus_path, snapshot, metadata, lens, conf, [layer]
+    )
+    tables = _pairing_tables(pairings)
+    measured = tables.get("_provenance")
+    if measured is not None:
+        for key in ("files_sha256", "corpus_sha256", "tokenizer_sha256"):
+            _equal(measured.get(key), provenance[key], f"pairing provenance {key}")
+    readings, selected_residuals = [], []
+    manifest = provenance["manifest"]
+    for item in prepared:
+        cell, reading, identity = item["cell"], item["reading"], item["identity"]
+        table = _cell_pairing(tables, conf["model_base"], layer, identity, cell=cell)
         B.hook_alignment(
             dictionary,
             lens,
@@ -411,17 +467,14 @@ def _capture(
             reading=reading,
             pairing_table=table,
         )
-        residual = arrays[position][i - low, layers.index(layer)]
-        if not np.isfinite(residual).all():
-            raise ValueError(f"capture row {i} {position} residual is not finite")
         readings.append(
             {**cell, "target_source": "expert corpus completion", "fit_precision": fit_record}
         )
-        selected_residuals.append(residual)
+        selected_residuals.append(item["residuals"][layer])
     outside = [
         r for r in readings if not 16 <= r["token_index"] <= 126 or r["context_tokens"] != 128
     ]
-    domain = seal.get("domain_of_validity")
+    domain = provenance["domain_of_validity"]
     if outside:
         if (
             not isinstance(domain, dict)
@@ -438,19 +491,7 @@ def _capture(
             ("context_tokens", sorted({r["context_tokens"] for r in outside})),
         ):
             _equal(domain.get(field), expected, f"domain_of_validity {field}")
-    return (
-        selected_residuals,
-        readings,
-        {
-            "manifest": manifest,
-            "files_sha256": hashes,
-            "positions_sha256": _hash(positions_path),
-            "corpus_sha256": seal["corpus_sha256"],
-            "tokenizer_sha256": seal["tokenizer_sha256"],
-            "pairings_sha256": _hash(pairings),
-            "domain_of_validity": domain,
-        },
-    )
+    return selected_residuals, readings, {**provenance, "pairings_sha256": _hash(pairings)}
 
 
 def run_bridge(
