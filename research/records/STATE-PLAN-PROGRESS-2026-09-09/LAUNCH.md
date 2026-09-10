@@ -70,9 +70,22 @@ the 4B pass below.
 
 ## 3. The 4B capture — beside the Chief's 12B capture, neither measures time
 
+**On the lease, because it was set carelessly the first time.** `--minutes` is **advisory**: a window
+past its expected end is labelled `overdue` in `runlock status` and nothing is killed
+(`WINDOW_OVERDUE_SECONDS`, "reported, never enforced"). So an under-lease does not end the pass — it
+makes the window a *false promise to the other seat*, which is worse, since the window exists so
+another seat can tell whether the card is spoken for. It is leased long here, and `runlock extend`
+takes it further if the measured rate says so.
+
+**The rate is measured, not assumed.** The first `shard` event carries its elapsed time, so 256
+decisions in, the true seconds-per-decision is known and the remaining time is arithmetic. The
+laptop's own anchor is 19 ms per 128-token forward at width 1 on the 4B; these rows are ~1,200 tokens
+median with quadratic attention, so the honest range before measuring is wide and the lease reflects
+that rather than a point estimate.
+
 ```bash
 $VENV -m local_llm_lab.runlock run --seat d-cro \
-  --purpose "plan-progress capture, 4B, native bf16, width 1, nothing read" --minutes 180 -- \
+  --purpose "plan-progress capture, 4B, native bf16, width 1, nothing read" --minutes 420 -- \
   $VENV scripts/state_capture.py --checkpoint "$SNAP4B" \
   --capture-set research/records/STATE-PLAN-PROGRESS-2026-09-09/capture-set.jsonl \
   --corpus "$CORPUS" --out /workspace/captures/gemma3-4b-cuda-bf16 \
@@ -89,7 +102,7 @@ waits for their capture to end or runs beside their 12B W-3b later.
 
 ```bash
 $VENV -m local_llm_lab.runlock run --seat d-cro \
-  --purpose "plan-progress capture, 12B, native bf16, width 1, nothing read" --minutes 240 -- \
+  --purpose "plan-progress capture, 12B, native bf16, width 1, nothing read" --minutes 600 -- \
   $VENV scripts/state_capture.py --checkpoint "$SNAP12B" \
   --capture-set research/records/STATE-PLAN-PROGRESS-2026-09-09/capture-set.jsonl \
   --corpus "$CORPUS" --out /workspace/captures/gemma3-12b-cuda-bf16 \
@@ -101,6 +114,12 @@ $VENV -m local_llm_lab.runlock run --seat d-cro \
 7,629 distinct decisions, one position each, every layer, native bf16 at width 1. §16.18 permits the
 captures to be made before the seal so long as **none is read**, and none is: these four commands
 write shards and manifests and nothing opens them. The seal follows Codex's file-only review.
+
+**If a pass runs past its lease**, extend it rather than letting the window go stale:
+
+```bash
+$VENV -m local_llm_lab.runlock extend --minutes N     # the nonce comes from `runlock status`
+```
 
 Both capture passes are resumable and every resumed cell is verified against the checkpoint identity,
 the semantic record, the rendered bytes, the request's own enumeration, the shard's bytes and the ids
