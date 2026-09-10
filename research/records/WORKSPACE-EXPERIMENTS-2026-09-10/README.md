@@ -301,7 +301,7 @@ capture (pid 46534) started 00:22:51Z; `fit_lens_f32.py` last modified 14:30Z on
 
 Corpus (the three splits concatenated, 7,629 distinct decisions, 1,128 episodes, twelve families):
 sha256 `790cefffc29b…`. 4B lens archive `out/lens4b-f32/exact-maps.npz`: sha256 `56c7b49e1c71…`
-(201 prompts, float32, width 16 fit; anchor 16). 12B lens `out/lens12b-f32/exact-maps.npz`: sha256 `e7942f1d6a73…` (201 prompts, 47 layers; c1 and c2 at width 16, c3 at width 8, merged 06:40Z weighted by rows, none skipped). Checkpoints by the
+(201 prompts, float32; the fit's dimension batch was 32, as its manifest and ν record declare — an earlier line here said 16, corrected on Codex's reading of the files; the lens was fitted on 128-token prose contexts, positions 16–126, so task readouts at longer positions are extrapolation, which W-5 measures by prompt-length band). 12B lens `out/lens12b-f32/exact-maps.npz`: sha256 `e7942f1d6a73…` (201 prompts, 47 layers; c1 and c2 at width 16, c3 at width 8, merged 06:40Z weighted by rows, none skipped). Checkpoints by the
 loader's complete hash manifest (`load_report_sha256` in each capture manifest). Arithmetic: float32,
 TF32 off, highest matmul precision, eager attention, width 1 at capture; determinism pinned. Sample
 rule: per family, sorted (task_id, step), prompts ≤ 1,500 tokens, every k-th to 25; 300 decisions.
@@ -334,9 +334,7 @@ the prior favourite `read_file` in 0.83 of those (the calculate family: all 223,
 explains the lens's crossing: through the fitted maps the six-tool readout at P_act is below the floor
 in every row through layer 23 in every prompt-length band, resolves at layer 24 (1,897 of 3,184, 1,493
 of 3,476 and 526 of 969 rows resolved in the ≤ 1,024, ≤ 2,048 and > 2,048 bands; agreement with the
-model's own argmax 0.99, 0.99, 0.98) and is fully resolved from layer 26 (agreement 0.92–1.00 through
-33); the unembedding resolves from layer 18 (agreement 0.48, 0.96, 0.92 by band) and agrees fully from
-layer 24; no band dependence at layers ≥ 24. The fitted lens is silent and then right: its "first
+model's own argmax 0.99, 0.99, 0.98) and is resolved in most rows from layer 26 (305 unresolved at 26, 235 at 27, 35 at 28, none at 29–31, 6 at 32, none at 33; agreement 0.92–1.00 where resolved); the unembedding resolves from layer 18 (1,352 rows; agreement 0.48, 0.96, 0.92 by band) and agrees fully from layer 24; no band dependence at layers ≥ 24. The bands are prompt-token counts. The fitted lens is silent and then right: its "first
 crossing" is its first resolved layer, a property of the readout at this floor, not of the model.
 
 **W-3, direct attention to the tagged spans (300-sample, eager kernel).** Gate: local-layer mass beyond
@@ -414,6 +412,20 @@ the note's prose is what those 63 decisions read, not the count of edges removed
 spans loses the winner in 37 of 179 against 9 of 179 for the same count of task tokens: the control
 depresses the margin as much on the median but flips far fewer; the carrier spans' joint removal is
 what flips the 37. Each single carrier span costs less than the equal-count control.
+
+**Correction to the carrier comparison (Codex, WORKSPACE-DATA-READOUT-2026-09-10; verified on the rows).** The
+v3.2 control draws `min(requested, pool)` keys, and in 55 of the 187 rows with carriers — the long episodes — the
+carrier count exceeds the non-carrier pool (median shortfall 172 keys), so the control removed fewer keys than the
+carrier mask and the every-row figure, 37 of 179 against 9 of 179, is not wholly count-matched. On the 132 rows
+where the counts match, the carrier mask loses the winner in 13 of 125 and its control in 5 of 124 (one control
+reading unresolved at the floor, kept separate). Across all 179, 36 lose only under the carrier mask, 8 only
+under the control, 1 under both. The note comparison is count-matched on every row; a post-hoc restriction to
+rows whose masked keys all lie inside the final query's 1,024-token window (235 rows, 224 winners) gives 48
+against 1. So the note reading stands and the carrier reading narrows: a real but smaller joint effect, and none
+of these controls matches key position, contiguity or local-layer reach. v3.3 (script 359ca54b1862, analyzer
+d4f7f563d2f4) adds `all_carriers_matched` — the carrier keys subsampled to the pool's size where they outnumber
+it, else all of them — so the carrier arm is count-matched to its control in every row; the 12B pass runs it and
+the 4B is repeated behind `GO-W3B-4B-V33` when the card is next free, at Daniel's instruction.
 
 **W-2, the primary of W-4: linear decodability of the expert action at P_note and P_act (all 7,629
 decisions, 1,128 episodes; unit the episode, accuracies are episode means).** A PCA-r projection fitted

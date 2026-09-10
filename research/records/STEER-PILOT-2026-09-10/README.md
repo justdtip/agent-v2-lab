@@ -154,8 +154,13 @@ Under the three path donors the Δ margin of the expert tool stays within a few 
 the donor's, no directory switched, no file switched within the directory, and the tool never changed,
 at any of the eight layers, in any of the 24 recipients. Under the operation donor the switched calls
 are well-formed `calculate` calls with freshly generated expressions (`"10 + 10"`, `"74 + 65 + 83"`);
-the donor record carries no expression, so nothing could be copied, and where the numbers come from was
-not determined.
+the donor record carries no expression. Codex's post-hoc audit (WORKSPACE-DATA-READOUT-2026-09-10), verified here
+on the corpus joined by task id and step: the same expression appears at all four switching layers; 12 of 24 equal
+the donor's expert expression exactly, and every one of the 24 is built from the metric values listed in the
+recipient's own note — one value at step 2 (plus 0, or repeated), the two at step 3, the three at step 4 — the
+donor matches being the recipients whose donor later summed those same values. The vector moved the operation; the
+arguments were assembled from the recipient's context. Codex's proposed discriminating measurement, forcing only
+the token `calculate` into the unmodified recipient, would say whether the rest is ordinary continuation.
 
 **Against the predictions.** The operation prediction held completely from layer 20: the tool switches
 to the donor's in every recipient, the expert tool's first-token margin falling by thirty to fifty
