@@ -93,13 +93,13 @@ card idle.
 The fix, in both scripts: the model's logits are computed only at the two positions read
 (`logits_to_keep=[P_note, P_act]`), which removes the spike entirely; the first row of every run also
 computes the full logits and records the maximum difference at those positions, a hard stop beyond
-1e-4. The kept logits are **not bit-identical** to the full-sequence ones — 3.8e-5 on the CPU
+1e-2 (a guard against a gross error such as wrong positions; the reduction-order difference itself is expected at 1e-5 to 1e-4 and was 7.9e-5 on the GPU's first row). The kept logits are **not bit-identical** to the full-sequence ones — 3.8e-5 on the CPU
 regression, the lm_head matmul's reduction order depending on its shape — and the residuals, the
 sample and the lens readouts are unchanged. Every reading of the model's own logits in this
 programme (the capture's six-tool fields, the W-3b arms' six-tool fields and margins) now takes the
 same path, so comparisons within and across passes share it; the figure is stated here so that no
 later pass is compared with a full-logits one without knowing it. Scripts as re-run:
-`workspace_capture_v2.py` v2.1 (422435f2f0b7), `workspace_w3b.py` v3.1 (23c09ec1fe36), driver
+`workspace_capture_v2.py` v2.1 (6f87954ed5dd; the 4B re-run loaded 422435f2f0b7, identical but for the guard's threshold), `workspace_w3b.py` v3.1 (23c09ec1fe36), driver
 `chief_4b_passes_v2.sh` (387bed5cf3a1), from `/workspace/chief` with expandable segments; CPU regression in
 `recover_4b_test.sh` (residuals and sample identical to v2; receipts and oracle pass; the analyzer
 admits).
@@ -207,7 +207,7 @@ capture (pid 46534) started 00:22:51Z; `fit_lens_f32.py` last modified 14:30Z on
 | `fit_lens_f32.py` | 67fdf5559a1a | the float32 exact lens fit (4B full; 12B chunks) |
 | `merge_chunks.py` | 5c39d626e129 | chunk merge, weighted by requested rows (valid when no row skipped: c1 70/70/0, c2 70/70/0; c3 checked at its end) |
 | `chief_4b_passes.sh`, `chief_12b_passes.sh`, `overnight3.sh`, `chief_analyze.sh` | 0ef283871e02, c97b46a212bb, f3d6edd6541b, 49d0dc5589ba | drivers |
-| `workspace_capture_v2.py`, `reconstruct_index.py`, `merge_tail_capture.py`, `chief_12b_passes_v2.sh` | 422435f2f0b7, 279b16d1b79f, 4d292cf78120, f70cae68e67f | the 12B capture and the insurance (section above) |
+| `workspace_capture_v2.py`, `reconstruct_index.py`, `merge_tail_capture.py`, `chief_12b_passes_v2.sh` | 6f87954ed5dd, 279b16d1b79f, 4d292cf78120, f70cae68e67f | the 12B capture and the insurance (section above) |
 
 Corpus (the three splits concatenated, 7,629 distinct decisions, 1,128 episodes, twelve families):
 sha256 `790cefffc29b…`. 4B lens archive `out/lens4b-f32/exact-maps.npz`: sha256 `56c7b49e1c71…`
