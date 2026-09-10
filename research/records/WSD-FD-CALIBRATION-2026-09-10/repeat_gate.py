@@ -23,8 +23,10 @@ whose hook has never been checked. Nothing below is written if it fails.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import random
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -67,6 +69,24 @@ from local_llm_lab.pipeline.lens_fitting.upstream import (  # noqa: E402
     upstream_index_of_repo_layer,
 )
 
+from local_llm_lab.pipeline.state_programme.capture import checkpoint_identity  # noqa: E402
+
+
+def source_commit() -> str:
+    """The commit this script ran from. Refused rather than defaulted: a durable row whose source
+    commit is 'unknown' cannot be re-run, and 'unknown' is the value nobody notices."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(Path(__file__).resolve().parent), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise SystemExit(f"cannot determine the source commit: {error}") from error
+    return result.stdout.strip()
+
+
+COMMIT = source_commit()
+
 model, report = hf_text.load_text_causal_lm(
     SNAPSHOT, dtype="bfloat16", attn_implementation="eager", device="cuda:0"
 )
@@ -74,8 +94,12 @@ for parameter in model.parameters():
     parameter.requires_grad_(False)
 model.eval()
 model.to(torch.float32)
+# The whole digest manifest, never one file's: two checkpoints with one config and different
+# weights would otherwise share an identity (Codex F2).
+IDENTITY = checkpoint_identity(report.get("sha256"))
 emit("loaded", dtype=str(next(model.parameters()).dtype),
-     checkpoint_sha256=report.get("sha256", {}).get("config.json"),
+     checkpoint_sha256=IDENTITY["checkpoint_sha256"], config_sha256=IDENTITY["config_sha256"],
+     weight_files=IDENTITY["weight_files"], source_commit=COMMIT,
      tf32=torch.backends.cuda.matmul.allow_tf32,
      float32_matmul_precision=torch.get_float32_matmul_precision())
 
@@ -165,10 +189,34 @@ for repo_layer in REPO_LAYERS:
     first, second = fit(repo_layer), fit(repo_layer)
     within = relative(first[repo_layer], second[repo_layer])
     against = relative(saved[repo_layer][repo_layer], first[repo_layer])
+    saved_path = SAVED / f"exact-maps-L{repo_layer}.npz"
     rows_out[repo_layer] = {
-        "within_process": within, "against_saved_map": against,
+        # Both comparisons gate. The first version's `passes` read only `against_saved_map`, so a
+        # nondeterministic second fit within one process would have appeared in the report while
+        # the gate passed — the verdict's scope again, one entry after the entry about it.
+        "within_process": within,
+        "against_saved_map": against,
+        "passes": (within["relative_frobenius_difference"] == 0.0
+                   and against["relative_frobenius_difference"] == 0.0),
         "seconds": round(time.monotonic() - t, 2),
-        "saved_map": str(SAVED / f"exact-maps-L{repo_layer}.npz"),
+        # What this row is a row *of*, so it can be re-run rather than only read.
+        "binding": {
+            "row_index": int(row["index"]),
+            "token_ids_sha256": hashlib.sha256(json.dumps(list(ids[0].tolist())).encode()).hexdigest(),
+            "token_ids_length": int(ids.shape[-1]),
+            "positions": [8, int(ids.shape[-1]) - 1],
+            "saved_map": str(saved_path),
+            "saved_map_sha256": hashlib.sha256(saved_path.read_bytes()).hexdigest(),
+            "fresh_map_sha256": hashlib.sha256(
+                first[repo_layer].astype(np.float32).tobytes()).hexdigest(),
+            "dtype": "float32", "forward_batch": WIDTH, "anchor_batch": WIDTH,
+            "tf32": torch.backends.cuda.matmul.allow_tf32,
+            "float32_matmul_precision": torch.get_float32_matmul_precision(),
+            "attn_implementation": report["attn_implementation"],
+            "determinism": device.describe()["determinism"],
+            "source_commit": COMMIT,
+            **IDENTITY,
+        },
         "boundary": boundary[repo_layer], "basis": "measured-here",
     }
     emit("repeat", repo_layer=repo_layer,
@@ -176,6 +224,7 @@ for repo_layer in REPO_LAYERS:
          within_process_bitwise=within["bitwise_identical"],
          against_saved_relative=against["relative_frobenius_difference"],
          against_saved_bitwise=against["bitwise_identical"],
+         passes=rows_out[repo_layer]["passes"],
          seconds=rows_out[repo_layer]["seconds"])
 
 verdict = {
@@ -184,8 +233,10 @@ verdict = {
     "note": "the first run passed reproduction=reference and so never executed this gate; both "
             "comparisons here are between independently produced maps",
     "float32_boundary_holds": all(v["bitwise_identical"] for v in boundary.values()),
-    "passes": all(r["against_saved_map"]["relative_frobenius_difference"] == 0.0
-                  for r in rows_out.values()),
+    "passes": all(r["passes"] for r in rows_out.values()),
+    "gated_on": "both comparisons at every layer: two fits in one process, and a fresh fit against "
+                "the saved map the report cites. Either alone leaves a way for the gate to pass "
+                "while the report shows a disagreement.",
     # The set the verdict was computed over, per method entry thirty-four. This gate covers the two
     # layers that have maps, not the model: "the exact estimator reproduces itself" is true here of
     # repo layers 1 and 33 on one row, and a reader who takes it for the estimator would be taking
