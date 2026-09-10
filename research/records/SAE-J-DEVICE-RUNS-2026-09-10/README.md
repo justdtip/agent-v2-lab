@@ -159,3 +159,39 @@ the gain of the readout on the unexplained part relative to its gain on the whol
 **What it does and does not say.** It does not say the features are meaningless, nor that the dictionary is wrong about the residual stream: in its own metric it is good. It says that the readout-relevant part of these activations, at these out-of-domain positions, lives mostly in the dictionary's error term, so a feature-level account of *what the model is about to read out* cannot be built from these dictionaries here. It also does not say the lens is at fault: the same amplification appears at layer 24, which the domain statement covers at the action position (W-5 agreement 0.99), and at layer 18, which it does not. Whether the ratio falls where the dictionary is in its own domain (prose, short contexts), whether a wider or lower-sparsity dictionary explains the readout-relevant directions, and whether the ratio is a property of these dictionaries' training objective (the residual metric) rather than of the model, are three measurements this record does not make and does not guess at. Under the two interpretation limits carried in every result: a contribution to a lens score is a contribution to that score at that layer under this averaging convention, not a probability and not a cause; and no description here is a published label.
 
 **The identity, now asserted in float64.** The float64 gap is at most 1.5 × 10⁻¹¹ across 1,200 cells, while the same terms summed in float32 miss by up to 9.8 × 10⁻³ — the rounding the first run refused. Both numbers are in every A2 row so a reader can see what the float32 path did.
+
+### 3.4 The 12B at repository layer 47 — inside the domain statement; A1 passed, A2 ranks 90 of 300 at the action position
+
+Dictionary `layer_46_width_16k_l0_small` of `google/gemma-scope-2-12b-it`, the merged float32 lens, the 12B pairings of §1, config [bridge/config-12b-l47.json](bridge/config-12b-l47.json), dry-run admitted on all eight checks, run 16:34Z–16:51Z: [bridge/result-12b-l47.json](bridge/result-12b-l47.json), [bridge/summary-12b-l47.json](bridge/summary-12b-l47.json). Layer 47 is the layer the 12B domain statement licenses at the action position without qualification (W-5 resolves every cell there, agreement 0.96–1.00 in every band); the note position stays outside measured validity and is reported as such.
+
+**A1:** raw arm 0.674 recorded first, gain arm 0.987 — both above the line, so the discriminator is uninformative here, as at 4B layer 24, and nothing is concluded from it; two products to 1.2 × 10⁻⁶; the layer-3 control shares nothing; 13,122 distinct top-1 tokens, the most common covering 0.2% of features; top-10 scores 0.15–6.2.
+
+| position | raw share, median [min, max] | lens-score share | ratio | active | ranked |
+|---|---:|---:|---:|---:|---:|
+| P_note (outside validity) | 0.200 [0.150, 0.262] | 0.64 [0.54, 0.73] | 3.2 [2.8, 3.8] | 32 | 0 of 300 |
+| P_act (inside validity) | 0.159 [0.126, 0.207] | 0.53 [0.44, 0.62] | 3.3 [2.7, 3.9] | 14 | 90 of 300 |
+
+The amplification is smaller at the 12B's last stored layer — about 3× rather than 5–11× — and at the action position the lens-score share falls below the declared 0.5 line in 90 cells, which are therefore ranked (their top features are in the result file; no labels exist for them, and none are given). The identity holds to 4 × 10⁻¹¹ in float64 against float32 gaps up to 3.1 × 10⁻².
+
+### 3.5 The in-domain control: the amplification belongs to the dictionaries and the readout, not to the positions
+
+The question §3.3 left open first: is the 5–11× amplification a property of the out-of-domain, agent-transcript positions, or of these dictionaries and this readout wherever they are applied? [indomain_control.py](indomain_control.py) answers it with the same dictionaries, the same admitted lens, the same error budget and the **same `decompose_position`** as the A2 runs, applied to residuals from the lens's *own* fit domain: the fit split's 201 prose prompts, 128 tokens, at five fixed positions (16, 44, 71, 99, 126), captured at width 1 in float32 with the capture tool's conventions (bf16 checkpoint cast to the coherent float32 model, eager attention, block output at repository layer L). 1,005 cells per layer; 17 minutes on the card, 16:35Z–16:52Z; [bridge/indomain-4b.json](bridge/indomain-4b.json). This is a control, not an admission run: these cells have no registered pairing (they *are* the fit domain), and the runner's capture-format admission does not apply to them.
+
+| layer, in domain | raw share, median [min, max] | lens-score share | ratio | active | ranked |
+|---|---:|---:|---:|---:|---:|
+| 18 | 0.092 [0.027, 0.521] | 0.62 [0.32, 2.17] | 6.6 [2.0, 16.4] | 19 | 155 of 1005 |
+| 24 | 0.148 [0.028, 0.266] | 0.65 [0.39, 1.14] | 4.4 [2.6, 22.3] | 17 | 63 of 1005 |
+
+By position (median ratio): | position | layer 18 | layer 24 |
+|---|---:|---:|
+| 16 | 6.7 | 4.3 |
+| 44 | 6.6 | 4.5 |
+| 71 | 6.6 | 4.4 |
+| 99 | 6.8 | 4.4 |
+| 126 | 6.3 | 4.5 |
+
+**Reading it against §3.3.** In the dictionaries' own domain the raw share is *higher* than on the agent transcripts (0.09 against 0.06–0.07 at layer 18; 0.15 against 0.12–0.14 at layer 24 — these dictionaries reconstruct the structured transcripts slightly better than prose), and the lens-score share is the same 0.6–0.65. The ratio is 6.6 at layer 18 and 4.4 at layer 24 in domain, against 8–11 and 5.4 out of domain: the same order, the same ranking of the two layers, at every one of the five positions. The amplification is therefore not the positions'. It is a property of the pair (dictionary, readout): whatever these dictionaries leave unexplained lies, disproportionately, along the directions the vocabulary readout amplifies, in prose at the fit length as much as in agent transcripts thirty times longer. About one in seven in-domain cells at layer 18 (155 of 1,005) and one in sixteen at layer 24 (63) fall under the 0.5 score-share line and would be ranked; on the agent transcripts none did at either layer, and at the 12B's last layer 90 of 300 did at the action position.
+
+**What licenses the reading, in one line of algebra.** With `L` the linear readout, the ratio `(‖L e‖/‖L h‖)/(‖e‖/‖h‖)` equals `(‖L e‖/‖e‖)/(‖L h‖/‖h‖)`: the readout's gain on the residual `e` divided by its gain on the activation `h`. A dictionary trained to make `‖e‖` small in the residual stream's own metric is not trained to make `‖L e‖` small; if the directions `L` amplifies carry little of the activation's variance, the dictionary has no reason to spend features on them, and its error lands there. That is consistent with the published observation that sparse-autoencoder reconstruction errors move the next-token distribution more than random perturbations of the same norm (Gurnee, 2024, "SAE reconstruction errors are (empirically) pathological"); this record measures it on the lens-readout metric at two layers of the 4B and one of the 12B and does not go further than that.
+
+**What remains not measured.** Whether a wider or denser dictionary (the suites ship `l0_medium` and 65k/262k widths) lowers the ratio; whether a dictionary trained on the readout metric would; and whether the 90 ranked 12B cells' top features say anything about the action — the last requires labels these dictionaries do not have, and the interpretation limits forbid inventing them.
