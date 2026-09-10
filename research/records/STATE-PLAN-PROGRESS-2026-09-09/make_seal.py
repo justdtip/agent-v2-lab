@@ -179,6 +179,15 @@ def build(directory: Path, baseline: str | None = None) -> tuple[dict, list[str]
     if dirty:
         refusals.append(f"the record directory has uncommitted changes; a seal fixes committed bytes:\n{dirty}")
 
+    if baseline:
+        # Resolve to the full object name, so the seal's own digest does not depend on how many
+        # characters of the commit someone typed on the command line.
+        resolved = subprocess.run(["git", "-C", str(directory), "rev-parse", "--verify", f"{baseline}^{{commit}}"],
+                                  capture_output=True, text=True)
+        if resolved.returncode != 0:
+            raise Refused(f"{baseline!r} does not name a commit in this repository")
+        baseline = resolved.stdout.strip()
+
     files = {name: sha256_of(directory / name) for name in SEALED_FILES}
     # The seal may be created at a later commit than the one whose text was reviewed, so long as no
     # sealed file has moved since. That is checked here rather than asserted.
