@@ -81,7 +81,8 @@ verdict = "admitted" if complete else "refused"
 per_arm = defaultdict(lambda: defaultdict(list)); trans = defaultdict(Counter); agree = defaultdict(lambda: [0, 0]); paired_random = defaultdict(list); ctrl_used = {}
 script_version = (man or run or {}).get("script_version")
 CONTROL_STATUS = ("v3.2 pool: positions 1..P_note-1 in no carrier span (task statement and format tokens), <bos> never; random_equal_count (all-carriers count, queries from P_note) pairs the carrier arms, random_equal_count_note (the note's prose count, queries from the fence) pairs the current-note arm"
-                  if script_version == "3.2" else
+                  + ("; all_carriers_matched (v3.3) is the carrier arm count-matched to random_equal_count in every row" if script_version == "3.3" else "; NOTE: in rows where the carriers outnumber the pool the control removed fewer keys than all_carriers (v3.2 has no matched carrier arm)")
+                  if script_version in ("3.2", "3.3") else
                   "v3.1 pool: the non-task tokens before P_note — the carrier spans plus the format tokens, so the draw was mostly the all-carriers mask itself (4B pass: three quarters of its keys carrier tokens, <bos> masked in 152 of 187 rows); DEGENERATE — paired_vs_random is not a control comparison in this output, and the current-note arm has no count-matched control")
 skipped = Counter(); arm_rows = Counter(); gates = defaultdict(list)
 for r in eligible:
@@ -127,6 +128,8 @@ def gate_summary(gs):
     return out
 out = {"basis": f"{a.w3b}; schema {schema}; queries masked from {(man or run or {}).get('queries_masked_from')}; control: {(man or run or {}).get('control')}; mass floor {FLOOR}; unit = decision",
        "verdict": verdict, "strict": not a.diagnostic, "script_version": script_version, "control_status": CONTROL_STATUS,
+       "carrier_control_short_rows": sum(1 for r in eligible if (rc := (r.get("random_control") or {}).get("random_equal_count")) and rc["picked"] < rc["requested"]),
+       "all_carriers_matched_subsampled_rows": sum(1 for r in eligible if ((r.get("random_control") or {}).get("all_carriers_matched") or {}).get("subsampled")),
        "admission": {"rows_on_disk": len(rows), "requested": (len(requested) if requested is not None else None), "eligible": len(eligible), "ineligible": len(problems), "set_problems": set_problems,
                      "ineligible_rows": {str(i): w for i, w in list(problems.items())[:50]}, "receipts_present_arms": receipts_present, "receipts_note": "receipts and the placement oracle exist from producer v3; rows without them are admitted on the schema-2 gates only and say so here",
                      "unique_episodes_eligible": len({r["task_id"] for r in eligible}), "manifest_present": man is not None, "run_json_present": run is not None},

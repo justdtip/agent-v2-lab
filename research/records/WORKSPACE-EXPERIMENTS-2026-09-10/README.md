@@ -287,9 +287,9 @@ capture (pid 46534) started 00:22:51Z; `fit_lens_f32.py` last modified 14:30Z on
 | file | sha256 (first 12) | role |
 |---|---|---|
 | `workspace_capture.py` | 958ccdcf0bae | v1, the first 4B capture (died at 03:22Z); kept on the card as `workspace_capture.py.v1-as-run-4b` |
-| `workspace_w3b.py` | 0a7869c0d8ed | W-3b v3.2 (the corrected random control and the note control; the 12B pass and the 4B repeat). v3.1, 23c09ec1fe36, is the 4B pass as recorded above — in this record's history through commit 896bd9e and on the card as `workspace_w3b.py.v3.1-as-run-4b`; the repaired v2, b2d674d3469e, on the card as `workspace_w3b.py.v2-repaired` |
-| `workspace_w3b_analyze.py` | 79791aa145ec | W-3b aggregate with admission and paired transitions; v3.2 names the control arm it pairs and labels a v3.1 output's control degenerate (v3.1, 30ffe6d01889, produced the 4B figures above; the two agree on every non-control figure) |
-| `w3b_v32_test.sh`, `chief_w3b_4b_v32_gated.sh` | 84404aa17188, b202280ca584 | the v3.2 regression; the gated driver of the 4B repeat (`GO-W3B-4B-V32`, digest-guarded, memory-guarded) |
+| `workspace_w3b.py` | 359ca54b1862 | W-3b v3.3 (v3.2's controls plus the count-matched carrier arm; the 12B pass and the 4B v3.3 repeat). v3.2, 0a7869c0d8ed, is the 4B repeat above, in this record's history through commit a9f4e19. v3.1, 23c09ec1fe36, is the 4B pass as recorded above — in this record's history through commit 896bd9e and on the card as `workspace_w3b.py.v3.1-as-run-4b`; the repaired v2, b2d674d3469e, on the card as `workspace_w3b.py.v2-repaired` |
+| `workspace_w3b_analyze.py` | d4f7f563d2f4 (v3.3; v3.2 79791aa145ec) | W-3b aggregate with admission and paired transitions; v3.2 names the control arm it pairs and labels a v3.1 output's control degenerate (v3.1, 30ffe6d01889, produced the 4B figures above; the two agree on every non-control figure) |
+| `w3b_v32_test.sh`, `chief_w3b_4b_v32_gated.sh`, `chief_w3b_4b_v33_gated.sh` | 84404aa17188, b202280ca584, bc01a10684fc | the v3.2 regression; the gated driver of the 4B repeat (`GO-W3B-4B-V32`, digest-guarded, memory-guarded) |
 | `workspace_analyze.py` | da680b6e5773 | W-1/W-3/W-4/W-5 with the prose–syntax split |
 | `workspace_w2.py` | 033ae371ef3e | W-2 and W-4 primary |
 | `fit_lens_f32.py` | 67fdf5559a1a | the float32 exact lens fit (4B full; 12B chunks) |
@@ -425,7 +425,10 @@ against 1. So the note reading stands and the carrier reading narrows: a real bu
 of these controls matches key position, contiguity or local-layer reach. v3.3 (script 359ca54b1862, analyzer
 d4f7f563d2f4) adds `all_carriers_matched` — the carrier keys subsampled to the pool's size where they outnumber
 it, else all of them — so the carrier arm is count-matched to its control in every row; the 12B pass runs it and
-the 4B is repeated behind `GO-W3B-4B-V33` when the card is next free, at Daniel's instruction.
+the 4B is repeated behind `GO-W3B-4B-V33` when the card is next free, at Daniel's instruction. v3.3's regression (CPU, 09:10Z): on six rows of the 4B capture including one whose 797 carrier keys
+outnumber a pool of 555, the matched arm subsampled 555 carrier keys (a subset of the carrier set, equal to the
+control's count), every receipt passed, the analyzer admitted the six rows and reported the one short row; on the
+v3.2 pass it reports 55 short rows. Promoted on the card at 09:12Z, before the 12B W-3b; v3.2 kept beside it.
 
 **W-2, the primary of W-4: linear decodability of the expert action at P_note and P_act (all 7,629
 decisions, 1,128 episodes; unit the episode, accuracies are episode means).** A PCA-r projection fitted

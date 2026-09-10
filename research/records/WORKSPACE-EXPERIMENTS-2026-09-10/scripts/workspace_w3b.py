@@ -114,10 +114,10 @@ for line in open(args.corpus):
     if k in seen: continue
     seen.add(k); rows_all.append(r)
 QUERIES = {"carrier_arms": "P_note (the decision position) through S-1", "current_note_arms": "q0 (the first token starting at or after the ```json fence) through S-1; S-1 is the supplied tool-name token, a query never read; P_act = S-2"}
-CONTROL = ("random_equal_count: the all-carriers count of tokens drawn without replacement from the positions 1..P_note-1 in no carrier span (the task statement and the format tokens; never position 0, the <bos> sink), masked from P_note; random_equal_count_note: the current note's prose count from the same pool, masked from q0 — the count-matched control for the current-note arm (v3.2; v3.1's pool, the non-task tokens before P_note, was mostly the carrier spans themselves — degenerate, see the 4B record); the same-kind arms (older vs previous note, older vs previous call) are the role- and contiguity-matched comparisons; "
+CONTROL = ("random_equal_count: the all-carriers count of tokens drawn without replacement from the positions 1..P_note-1 in no carrier span (the task statement and the format tokens; never position 0, the <bos> sink), masked from P_note; random_equal_count_note: the current note's prose count from the same pool, masked from q0 — the count-matched control for the current-note arm; all_carriers_matched: the carrier keys subsampled to the pool's size where the carriers outnumber it, else all of them — the carrier arm that is count-matched to random_equal_count in every row (v3.3; v3.2 added the pool and the note control; v3.1's pool, the non-task tokens before P_note, was mostly the carrier spans themselves — degenerate, see the 4B record); the same-kind arms (older vs previous note, older vs previous call) are the role- and contiguity-matched comparisons; "
            "survival under a mask shows non-necessity of the masked edges under this intervention and does not date the decision; for the carrier arms the two-hop relay through unmasked earlier positions is an open route; "
            "for the current-note arm no such relay exists (every position after the note is a masked query)")
-(OUT / "run.json").write_text(json.dumps({"schema_version": 3, "script_version": "3.2", "seat": "chief", "script_sha256": SCRIPT_SHA, "checkpoint": args.snapshot, "maps": args.maps, "maps_sha256": hashlib.sha256(Path(args.maps).read_bytes()).hexdigest(),
+(OUT / "run.json").write_text(json.dumps({"schema_version": 3, "script_version": "3.3", "seat": "chief", "script_sha256": SCRIPT_SHA, "checkpoint": args.snapshot, "maps": args.maps, "maps_sha256": hashlib.sha256(Path(args.maps).read_bytes()).hexdigest(),
     "capture": args.capture, "corpus": args.corpus, "corpus_sha256": corpus_sha, "sample": sample_ids, "requested": len(sample_ids), "kinds": KINDS, "queries_masked_from": QUERIES, "control": CONTROL, "device": args.device, "seed": args.seed,
     "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, indent=2) + "\n")
 
@@ -242,6 +242,16 @@ for n, i in enumerate(sample_ids):
         e = torch.zeros(1, 1, S, S, dtype=torch.bool); e[0, 0, q0:, pick2] = True; arms["random_equal_count_note"] = e
         expected["random_equal_count_note"] = edge_set(S, q0, pick2); cut_from["random_equal_count_note"] = q0; arm_keys["random_equal_count_note"] = pick2
         random_info["random_equal_count_note"] = {"requested": len(note_keys), "picked": len(pick2), "picked_kinds": kind_counts(pick2), "queries_from": "q0"}
+    # v3.3: a carrier arm that is count-matched to the control in every row. When the carriers outnumber the pool (55 of 187
+    # rows in the 4B v3.2 pass, long episodes), the control could remove only pool-many keys; this arm removes a random subset of
+    # the carrier keys of exactly that size, so all_carriers_matched vs random_equal_count is matched everywhere, and equals
+    # all_carriers where no subsampling was needed. Drawn after the two control draws so v3.2's picks are unchanged.
+    if "all_carriers" in arms and pool:
+        car_keys = list(arm_keys["all_carriers"]); short = n_all > len(pool)
+        sub = sorted(int(x) for x in rng.choice(car_keys, size=len(pool), replace=False)) if short else car_keys
+        e = torch.zeros(1, 1, S, S, dtype=torch.bool); e[0, 0, turn_start:, sub] = True; arms["all_carriers_matched"] = e
+        expected["all_carriers_matched"] = edge_set(S, turn_start, sub); cut_from["all_carriers_matched"] = turn_start; arm_keys["all_carriers_matched"] = sub
+        random_info["all_carriers_matched"] = {"carrier_keys": n_all, "picked": len(sub), "subsampled": short, "picked_kinds": kind_counts(sub), "queries_from": "P_note"}
     row = {"i": i, "task_id": m["task_id"], "step": m["step"], "family": m["family"], "tool": rec_row["tool"], "tool_idx": rec_row["tool_idx"],
            "S": S, "P_note": P_note, "P_act": P_act, "note_prose_chars": note_end, "note_prose_tokens": len(note_keys), "note_syntax_tokens": len(syntax_pos),
            "note_fence_straddle_tokens": straddle, "q0": q0, "placement_oracle": bool(oracle), "kind_token_counts": {k: kinds.count(k) for k in set(kinds)}, "skipped_arms": skipped, "random_control": random_info, "arms": {}}
@@ -287,7 +297,7 @@ for n, i in enumerate(sample_ids):
          blocked_at_P_act={k: v["gate"]["n_blocked_edges_at_P_act"] for k, v in row["arms"].items()}, receipts_pass=all(v.get("receipt", {}).get("passes", True) for v in row["arms"].values()))
 for h in handles: h.remove()
 results_fh.close()
-(OUT / "manifest.json").write_text(json.dumps({"schema_version": 3, "script_version": "3.2", "seat": "chief", "script_sha256": SCRIPT_SHA, "checkpoint": args.snapshot, "maps": args.maps, "capture": args.capture, "sample": sample_ids, "requested": len(sample_ids),
+(OUT / "manifest.json").write_text(json.dumps({"schema_version": 3, "script_version": "3.3", "seat": "chief", "script_sha256": SCRIPT_SHA, "checkpoint": args.snapshot, "maps": args.maps, "capture": args.capture, "sample": sample_ids, "requested": len(sample_ids),
     "kinds": KINDS, "queries_masked_from": QUERIES,
     "current_note": {"keys": "completion tokens whose character offset starts before the ```json fence (the prose note, trailing newline included, cut as the previous-note spans are cut)",
                      "queries": "every token from the fence onward through S-1 (the supplied tool-name token, never read), so no relay through the syntax between the note and the action is open",
