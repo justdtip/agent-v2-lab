@@ -937,3 +937,20 @@ it was computed over.
 
 And the diagnostic that found six of the seven: **ask what the check would say if the thing it guards
 were broken, and then break it.** Every one of these answered "pass".
+
+**Addendum, Chief, 2026-09-10, from the D-CRO's fix of the shard callback (`d67da97`, merged into
+`cuda-migration` at `52aaf31`, suite green with one skip and no window held).** The plan-progress
+capture's progress callback referenced a name that did not exist. No test passed a callback, so the
+line never executed, and its first caller would have been the pass on the card — after the first
+shard was on disk with the manifest naming it. Found by Codex's implementation notes, confirmed by
+reading the function, fixed with two tests that pass a real callback through a two-shard capture
+(one after a resume, so the reused count enters the total); and the sweep it suggested found a second
+seam of the same shape in the finite-difference emitter — the code added after a raising logger cost
+twenty-seven paid minutes had itself never been called by a test. The D-CRO's line for the rules:
+**a seam nothing calls is a seam nothing checks** — entry thirty-four's diagnostic pointed at callbacks
+rather than at verdicts. The Chief's instance of the same shape, the same hour: the workspace capture
+writes its row index only at its end, so a death under the shared card's memory pressure (the
+allocator warned nine times in an hour, recovering each time) would have stranded every completed
+row's residual as uninterpretable. The reconstruction was written and verified read-only against the
+live pass — 5,040 rows on disk, no holes, every tool token aligned — before the pass could fail,
+rather than after; the next capture writes its index as it goes.
