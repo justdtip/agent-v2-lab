@@ -1,6 +1,7 @@
 # Amendment 1 to the plan-progress pre-registration: E2's transport rule
 
-**D-CRO, 2026-09-10, on the Chief's ruling of 13:50Z. Draft, for Codex's file-only review.**
+**D-CRO, 2026-09-10, on the Chief's ruling of 13:50Z. Draft, revision 2, for Codex's file-only
+review. §5 carries an open question that is the Chief's and not mine.**
 Amends seal `998b3bcafa9d6aaffa21ebd43df3935b1634ba7b12fe187073837acd942ce521`, baseline `acc130a`.
 Nothing in it has been run. No corrective transition is scored under it until it is sealed.
 
@@ -23,17 +24,30 @@ seal itself, which this amendment extends rather than replaces.
 
 ## 2. The rule
 
-Let `x_k` be the residual at the read layer for decision *k*, as captured. The rule is a **rank-r
-supervised map fitted on ordinary transitions**, the instrument the Chief fixed for E1 generalised
-from a scalar target to a vector one — PLS2, the classical NIPALS construction, which reduces to E1's
-PLS1 when the target has one column.
+Let `x_k` be the residual at the read layer for decision *k*, as captured. The rule is the
+**identity plus a rank-r supervised correction**:
 
-**Fitting**, on the fitting folds' ordinary transitions only:
+    T_r(x) = x + Δ_r(x),
+
+where `Δ_r` is a rank-r supervised map fitted from the source residual to the **displacement**
+`x_{k+1} − x_k` on ordinary transitions — the instrument the Chief fixed for E1, PLS2, generalised
+from a scalar target to a vector one and reducing to E1's PLS1 when the target has one column.
+
+**Why the identity is outside the rank, which is this revision's substantive change.** A rank-r map
+straight from `x_k` to `x_{k+1}` must spend its rank representing the **identity**, which is full
+rank and carries nothing about the update. At r = 8 out of 2,560 it cannot, so the transported point
+lands near the training mean rather than near either the source or the successor, and the rank is
+consumed by the part of the answer that was never in question. The state at *k+1* is the state at *k*
+plus a change, and the rule's whole content is the change; the rank should be spent there. This also
+makes the withdrawn rule the **floor of the same ladder** rather than a different animal: a constant
+displacement is exactly `Δ` at rank zero, since `Δ_r`'s intercept is the mean displacement.
+
+**Fitting `Δ_r`**, on the fitting folds' ordinary transitions only:
 
 1. `X` is the matrix of source residuals, standardised by the fitting folds' per-coordinate mean and
    standard deviation, a coordinate whose scale is below 1e-8 held at 1.
-2. `Y` is the matrix of successor residuals, **centred only**, by the fitting folds' mean. It is not
-   scaled per coordinate.
+2. `Y` is the matrix of **displacements** `x_{k+1} − x_k`, **centred only**, by the fitting folds'
+   mean displacement. It is not scaled per coordinate.
 3. For components `a = 1 … 32`, greedily and with deflation:
    - `w_a` is the leading left singular vector of `Xᵀ Y`, obtained by power iteration on
      `v ← Xᵀ(Y(Yᵀ(X v)))` with `v` renormalised each step, started from `v₀ = Xᵀ(Y·1)` normalised —
@@ -46,8 +60,8 @@ PLS1 when the target has one column.
      ladder reports the ranks that exist rather than substituting.
 4. At rank `r`, `B_r = W_r (P_rᵀ W_r)^{-1} C_rᵀ`, with `W_r`, `P_r`, `C_r` the first `r` columns.
 
-**Applying.** `T_r(x) = ȳ + ((x − x̄) / s) B_r`, where `x̄`, `s`, `ȳ` are the fitting folds'
-statistics. The output is in the **untransformed residual space**: the standardisation is internal to
+**Applying.** `T_r(x) = x + ȳ + ((x − x̄) / s) B_r`, where `x̄`, `s` are the fitting folds' source
+statistics and `ȳ` their mean displacement. The output is in the **untransformed residual space**: the standardisation is internal to
 the rule's input and the centring is added back, so no normalisation of the rule touches the metric
 and §4.2's warning about a distance in a space the rule normalised and the candidates did not cannot
 arise. This is stated because it is the clause §4.2 asks a rule to answer.
@@ -84,9 +98,34 @@ scored only there.
 **Before any corrective stratum is scored, and on the fitting folds' own held-out ordinary
 transitions only, the rule must be shown capable of passing.**
 
-> **Gate.** For at least **50%** of out-of-fold ordinary transitions, at the headline depth, on
-> **both** models, the transported point `T_r^1(x_k)` must be strictly nearer to `x_{k+1}` than to
-> `x_k`. The fraction is reported whatever it is.
+> **Gate, form A — as drafted before measuring.** For at least **50%** of out-of-fold ordinary
+> transitions, at the **headline** depth and rank, on **both** models, `T_r(x_k)` must be strictly
+> nearer to `x_{k+1}` than to `x_k`.
+>
+> **Gate, form B — proposed after measuring, and the reason is below.** The same threshold and the
+> same comparison, but read at the **top of the ladder**, r = 32, because the gate's purpose is to
+> reject a rule form that cannot pass *by its geometry*, which is a property of the form and not of
+> one rank. The fraction at every rank is reported either way.
+
+**The measurement, and the open question, stated plainly because it is a threshold moved after seeing
+a number.** I wrote form A before running anything. Measured out of fold on the 4,122 ordinary
+**train** transitions, at the headline depth:
+
+| identity + correction at rank | 1 | 2 | 4 | 8 | 16 | 32 |
+|---|---:|---:|---:|---:|---:|---:|
+| 4B, layer 17 | 0.109 | 0.241 | 0.424 | **0.586** | 0.775 | 0.904 |
+| 12B, layer 24 | — | 0.158 | 0.321 | **0.493** | 0.732 | 0.901 |
+
+Form A **fails**, on the 12B, by seven thousandths. Form B passes on both at 0.90. I am not choosing
+between them: the argument for form B is one I can make on principle — the gate exists to reject a
+form whose geometry forbids a hit, my withdrawn rule scored 0.000 at the only rank it had, and this
+form reaches 0.90 — but I wrote form A first and the number is what prompted the rethink, so the
+choice is the Chief's. If form A stands, E2 stays unread at the pre-registered headline and the
+amendment is revised again.
+
+Whichever is chosen, the headline rank's fraction is **reported beside the headline result**, so that
+a low hit rate at r = 8 is read against the fact that the rule clears the source on 0.586 and 0.493 of
+ordinary transitions there. That reporting is not conditional on the gate's form.
 
 If the gate fails, no corrective stratum is scored, the amendment is revised, and the record says so.
 
