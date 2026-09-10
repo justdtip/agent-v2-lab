@@ -1295,19 +1295,47 @@ def decompose_position(
         return lens_scores(unembedding, lens_map, x, gain=gain)[0]
 
     lh, lb, le = score(h), score(dictionary.b_dec), score(e)
+    # The identity is asserted in float64 from the same float32 h and z. Summing 16,384 terms of
+    # order 1-40 in float32 leaves a gap of order 1e-3 whatever the orientation (measured on the
+    # device: median 1.2e-3, max 5.0e-3 at repository layer 18 of the 4B, against 1e-12 in float64),
+    # which is indistinguishable from a small net score; in float64 a right orientation gives a gap
+    # of order 1e-12 and a wrong one a gap of order the terms, so the check separates the two.
     # Row v of L is (W[v] * g) J, so the per-feature term z_i (L d_i)_v is z * (D (L[v])).
-    lv = unembedding.weight[emitted_token] * (unembedding.gain if gain else 1.0)
-    lv = lv if lens_map is None else lv @ lens_map
-    contributions = z * (dictionary.w_dec @ lv)
+    gain_vector = unembedding.gain.astype(np.float64) if gain else 1.0
+    map64 = None if lens_map is None else lens_map.astype(np.float64)
+    weight_row = unembedding.weight[emitted_token].astype(np.float64)
 
-    identity_gap = float(
-        abs(lh[emitted_token] - (lb[emitted_token] + contributions.sum() + le[emitted_token]))
+    def score_at(x: np.ndarray) -> float:
+        u = x.astype(np.float64) if map64 is None else x.astype(np.float64) @ map64.T
+        return float((u * gain_vector) @ weight_row)
+
+    lv = weight_row * gain_vector
+    lv = lv if map64 is None else lv @ map64
+    z64 = z.astype(np.float64)
+    e64 = h.astype(np.float64) - (z64 @ dictionary.w_dec.astype(np.float64)
+                                  + dictionary.b_dec.astype(np.float64))
+    contributions = z64 * (dictionary.w_dec.astype(np.float64) @ lv)
+    score_v, bias_v, residual_v = score_at(h), score_at(dictionary.b_dec), score_at(e64)
+    identity_gap = abs(score_v - (bias_v + contributions.sum() + residual_v))
+    identity_gap_float32 = float(
+        abs(lh[emitted_token] - (lb[emitted_token]
+                                 + float((z * (dictionary.w_dec @ lv.astype(np.float32))).sum())
+                                 + le[emitted_token]))
     )
-    scale = float(abs(lh[emitted_token])) + 1e-6
+    scale = abs(score_v) + 1e-6
     if identity_gap > tolerance * max(1.0, scale):
         raise ValueError(
             f"the score decomposition is not exact at token {emitted_token}: gap {identity_gap:.3e} "
-            f"against a score of {scale:.3e}; orientation or convention is wrong"
+            f"against a score of {scale:.3e} (float64; float32 gap {identity_gap_float32:.3e}); "
+            "orientation or convention is wrong"
+        )
+    # The float32 score path (norms, shares, top-k) must be the same map as the float64 identity.
+    path_gap = abs(score_v - float(lh[emitted_token]))
+    if path_gap > tolerance * max(1.0, scale):
+        raise ValueError(
+            f"the score decomposition is not exact at token {emitted_token}: the float32 score path "
+            f"differs from the float64 identity by {path_gap:.3e} against a score of {scale:.3e}; "
+            "orientation or convention is wrong"
         )
     raw_share = _error_share(e, h, error_budget)
     score_share = _error_share(le, lh, error_budget)
@@ -1319,11 +1347,14 @@ def decompose_position(
     active = int((z > 0).sum())
     out: dict[str, Any] = {
         "emitted_token": int(emitted_token),
-        "score": float(lh[emitted_token]),
-        "bias_term": float(lb[emitted_token]),
-        "residual_term": float(le[emitted_token]),
+        "score": score_v,
+        "score_float32": float(lh[emitted_token]),
+        "bias_term": bias_v,
+        "residual_term": residual_v,
         "feature_sum": float(contributions.sum()),
-        "identity_gap": identity_gap,
+        "identity_gap": float(identity_gap),
+        "identity_gap_float32": identity_gap_float32,
+        "identity_terms_abs_sum": float(np.abs(contributions).sum() + abs(bias_v) + abs(residual_v)),
         "raw_reconstruction_share": raw_share,
         "lens_score_error_share": score_share,
         "raw_admissible": raw_admissible,

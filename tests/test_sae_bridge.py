@@ -384,8 +384,26 @@ def test_a2_is_an_exact_identity_on_the_emitted_token(a2_parts) -> None:
         out = B.decompose_position(d, u, J, h.astype(np.float32), int(rng.integers(VOCAB)),
                                    error_budget=_error_budget())
         total = out["bias_term"] + out["feature_sum"] + out["residual_term"]
-        assert out["identity_gap"] < 1e-3 * max(1.0, abs(out["score"]))
-        assert abs(out["score"] - total) < 1e-3 * max(1.0, abs(out["score"]))
+        # float64: exact to rounding of the terms, not to a loose 1e-3
+        assert out["identity_gap"] < 1e-9 * max(1.0, out["identity_terms_abs_sum"])
+        assert abs(out["score"] - total) < 1e-9 * max(1.0, out["identity_terms_abs_sum"])
+        assert abs(out["score"] - out["score_float32"]) < 1e-3 * max(1.0, abs(out["score"]))
+        assert out["identity_gap_float32"] >= 0.0
+
+
+def test_a2_identity_is_asserted_in_float64_and_still_bites_on_a_wrong_orientation(a2_parts, monkeypatch) -> None:
+    """The device refusal of 2026-09-10: at 16,384 features the float32 sum missed the identity by
+    1e-3 on a score of 0.1 while float64 held it at 1e-12. The check now runs in float64, and a
+    mismatched orientation between the score path and the per-feature terms is still refused."""
+    d, u, lens = a2_parts
+    J = lens.maps[B.hook_alignment(d, lens)]
+    h = (50 * np.random.default_rng(6).normal(size=HIDDEN)).astype(np.float32)
+    out = B.decompose_position(d, u, J, h, 2, error_budget=_error_budget())
+    assert out["identity_gap"] < 1e-9 * max(1.0, out["identity_terms_abs_sum"])
+    # Break the score path's orientation only: the per-feature terms keep the right one.
+    monkeypatch.setattr(B, "_through_lens", lambda x, m: x if m is None else x @ m)
+    with pytest.raises(ValueError, match="not exact"):
+        B.decompose_position(d, u, J, h, 2, error_budget=_error_budget())
 
 
 def test_a2_ranks_when_the_dictionary_explains_the_activation(a2_parts) -> None:
