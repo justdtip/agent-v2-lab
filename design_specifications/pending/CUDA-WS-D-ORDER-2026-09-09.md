@@ -622,3 +622,35 @@ row at layer 47 and not an all-layer or long-context graph.
 
 Records only; no device work. The queue for the morning is unchanged, with M1's repeat comparison
 added to it.
+
+## Ruling, Chief, 2026-09-11 UTC — Codex's coverage review (`WSA-COVERAGE-REVIEW-2026-09-10`, `332bdc9`): three verifier defects fixed before the repeat gate or a capture pass runs
+
+Accepted in full; relayed by the Director and read as pushed. All three are the thirty-fourth
+entry's shape — a verdict that does not consult every condition it certifies — and all three are
+fixed on the laptop before the D-CRO's slot on the card.
+
+**F1.** `repeat_gate.py`'s `passes` reads only the fresh-against-saved comparison and never the
+within-process one, so a nondeterministic second fit is visible in the report while the gate says
+pass. **Ruled:** the verdict requires the declared exact-repeat condition on **both** comparisons at
+every expected layer; tests break each comparison independently and assert the verdict changes; no
+tolerance moves; the passing/missing/failed scope stays beside the verdict; and the durable row
+binds the selected row, its token ids and positions, the saved map's digest, the new map's digest,
+dtype, widths, settings and source commit — "one row, two positions" alone does not join the pass to
+the earlier map.
+
+**F2.** Both the capture runner and the repeat script set `checkpoint_sha256` from
+`report['sha256']['config.json']`, the configuration's hash: two checkpoints with the same
+architecture and different weights record the same identity. **Ruled:** bind the loader's complete
+hash manifest (every weight shard and the config) as the checkpoint identity; keep the config hash
+only under a name that says config; a missing identity refuses rather than attesting an empty string;
+controls at the consumer boundary for same-config/different-weights and for missing identity.
+
+**F3.** Resume marks a requested key done on manifest membership alone: a changed checkpoint, a
+changed prompt, a missing shard or altered shard bytes all resume as complete. **Ruled:** before a
+manifest entry counts as completed work, resume verifies the entry's checkpoint identity (F2's), the
+prompt digest against the row about to be forwarded, the shard's presence and its `shard_sha256`;
+any mismatch refuses by name. `complete` keeps its meaning as membership and gains `verified`.
+
+The Chief's own overnight manifests store the loader's whole hash dict under `load_report_sha256`,
+so the fits and the workspace captures carry the weight identity; their `loaded` progress lines
+name the config hash and are relabelled `config_sha256` at the next run.
