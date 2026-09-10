@@ -163,10 +163,10 @@ with torch.no_grad():
             # attention from both positions, every layer/head, onto every key position; spans by kind
             att = [a[0, :, [P_note, P_act], :].float().cpu().numpy() for a in out.attentions]  # per layer [heads, 2, seq]
             offs = enc_p.offset_mapping; tags = spans(prompt); kind = ["format"] * len(ids[0])
-            for k, (a, b) in enumerate(offs):
+            for kk, (a, b) in enumerate(offs):  # kk, not k: k is this loop's row and the progress line reads it after this block
                 for name, s0, s1 in tags:
-                    if a >= s0 and b <= s1: kind[k] = name
-            for k in range(len(p_ids), len(ids[0])): kind[k] = "note"
+                    if a >= s0 and b <= s1: kind[kk] = name
+            for kk in range(len(p_ids), len(ids[0])): kind[kk] = "note"
             note_traj = {str(rr): [] for rr in repo_layers}; note_mass = {str(rr): [] for rr in repo_layers}
             for pos in range(len(p_ids) - 1, len(p_ids) + t_idx):  # every note token's readout (position predicting the next token)
                 ro = readouts(acts, pos)

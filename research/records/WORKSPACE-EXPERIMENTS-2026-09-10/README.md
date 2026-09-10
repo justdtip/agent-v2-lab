@@ -113,6 +113,14 @@ timed jobs alone; (2) "timed jobs done" → the D-CRO's 4B pass beside the Chief
 (3) "4B pass ended" → the Chief's 4B W-3b beside the 12B capture; (4) "W-3b ended" → the D-CRO's 12B
 pass beside the 12B capture, on the rule that the two measured process-memory peaks leave 9 GiB.
 
+**A cosmetic bug in the re-run's progress line, found from its own output.** v2's outer loop variable
+is `k`, and the sample-row block reuses `k` for two inner loops, so after a sample row the progress line
+reports that row's sequence length as the count (row 909, a sample row of 501 tokens, printed as
+"n_done 501" between 901 and 1,001). The memmap writes and the index row are written before that block
+with the correct index, and the index is keyed by the global row number; verified on the live run (index
+contiguous, memmaps non-zero through the last row written). The inner variables are renamed in the copy
+the 12B run reads (d4651269f23c); the 4B run keeps its silly progress lines and its correct data.
+
 ## Codex's audit of the repair (63d0549, standing request 5): placement certified, admission and the retained metric corrected
 
 Codex found three things in the repaired script and its analysis, none a finding that the production
