@@ -104,6 +104,15 @@ later pass is compared with a full-logits one without knowing it. Scripts as re-
 `recover_4b_test.sh` (residuals and sample identical to v2; receipts and oracle pass; the analyzer
 admits).
 
+**Scheduling after the re-run.** The re-run ends about fifteen minutes after the 12B fit's last chunk,
+and the D-CRO's repeat gate and ladder must then run alone (both measure time), so the W-3b launch was
+taken off the running driver (the driver stopped, the capture untouched) and put behind a GO file of
+its own (`scripts/chief_w3b_4b_gated.sh`, e0ac7c3b0ba4); the 12B passes were already behind one. The four
+phases, each entered on a message and none on a clock: (1) "card clear" from the Chief → the D-CRO's
+timed jobs alone; (2) "timed jobs done" → the D-CRO's 4B pass beside the Chief's 12B capture;
+(3) "4B pass ended" → the Chief's 4B W-3b beside the 12B capture; (4) "W-3b ended" → the D-CRO's 12B
+pass beside the 12B capture, on the rule that the two measured process-memory peaks leave 9 GiB.
+
 ## Codex's audit of the repair (63d0549, standing request 5): placement certified, admission and the retained metric corrected
 
 Codex found three things in the repaired script and its analysis, none a finding that the production
