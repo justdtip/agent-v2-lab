@@ -76,6 +76,46 @@ so a second component cannot worsen the training fit; it can move held-out predi
 rounding boundaries, since the score is exact match on an integer. That is a hypothesis and not a
 measurement, and it is on the open list rather than in the text as an explanation.
 
+## 0.2 E2 is NOT read: the transport rule I chose cannot pass, and the form is not fixed by §4.2
+
+`read_e2.py` ran and returned a hit rate of **exactly 0.000 in every stratum on both models**. That is
+not a reading of E2. A score that cannot come out otherwise measures the instrument, not the corpus
+(`METHOD-2026-09-08`, entry 27), and this one cannot come out otherwise.
+
+**Why it cannot.** §4.2 fixes the candidate set as all *N* decisions of the episode **including the
+source**. My rule was the literal reading of "predicts +1 on an ordinary transition and the recovery
+cost at a corrective one": transport the read state by that many step-units,
+`T(x, m) = x + m·d`, with `d` the mean per-step displacement of the fitting folds' ordinary
+transitions. With the source among the candidates, such a rule can only win if it moves **more than
+halfway** to the successor. It does not come close. Measured on ordinary train transitions only, out
+of fold, at the headline depth:
+
+| | 4B | 12B |
+|---|---:|---:|
+| mean per-transition displacement, ‖x_{k+1} − x_k‖ | 1,548 | — |
+| ‖mean displacement‖, which is what `d` is | 313 | — |
+| coherent fraction, ‖mean‖ / mean‖·‖ | **0.202** | **0.290** |
+
+A fixed displacement moves the state about a fifth to under a third of the way, and the source sits
+at exactly that distance from the transported point while the successor sits at the full distance. The
+source therefore wins every time, by construction, in every stratum. Nothing about update closure
+follows from it.
+
+**The corpus is not the problem.** The same transitions, scored with the source excluded and no
+transport at all — is the true successor simply the nearest other decision of its episode? — give
+**0.430 on the 4B and 0.455 on the 12B against a chance level of 0.172**. The residual carries local
+order at about two and a half times chance. A rule that actually transports has something to find.
+
+**What this needs, and it is not mine to decide.** §4.2 fixes the candidate set, the tie rule, the
+metric and the strata — every choice that could otherwise be made after seeing a score — and does not
+fix the transport rule's **functional form**. I chose the form, it was the literal reading, and it
+cannot pass. Replacing it after seeing a null result is exactly the move a pre-registration exists to
+control, so the replacement is the Chief's ruling and not mine. It is put to them with the numbers
+above; until it is ruled, **E2 reads *not measured***, as §10's three states require.
+
+The diagnostic above was run on **ordinary training transitions only**. No corrective transition and
+no test episode was scored in it.
+
 ## 1. The hypothesis, stated as one
 
 The Director's, in his terms: **the 12B carries a richer representation of the task than the 4B,
