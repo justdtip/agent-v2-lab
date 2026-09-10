@@ -1,5 +1,25 @@
 # The exact commands for the slot, written before it, so none is composed at 06:50Z
 
+## The handshake, because two seats share one card and neither can see the other's queue
+
+Settled with the Chief at 03:45Z. Four phases, each entered on a message, not on a clock — their
+re-run 4B capture ends about fifteen minutes after c3, and my first two jobs need the card alone
+because they measure time.
+
+| # | starts on | what runs | roughly |
+|---|---|---|---|
+| 1 | **Chief messages "card clear"** (their capture's manifest exists) | my repeat gate, then my ladder — **alone**, both measure time | minutes |
+| 2 | **I message "timed jobs done"** | my 4B capture **and** their 12B capture together | 8 + ~60 GiB |
+| 3 | **I message that my 4B pass has ended** | their 4B W-3b beside their 12B capture | ~25 GiB, ~1 h |
+| 4 | **Chief messages that W-3b has ended** | my 12B capture beside their 12B capture, **on the rule** | sum ≤ 86 GiB |
+
+**The rule at phase 4** is measured process memory on both sides, not the allocator's high-water
+mark, and I report mine on the first shard. Their W-3b is gated on a GO file of their own so it
+cannot start into phase 1 or 2; my phases start only on their message, never on my own estimate of
+when their job ends. **A clock is not a signal here** — both of us have already had a job run long
+tonight, and the whole point of the handshake is that neither seat guesses.
+
+
 Four launches, in this order, each one a line to run rather than a line to assemble. Composing a
 command at the moment of running it is how a `cd` gets forgotten and a process ends up in the shared
 checkout, and how an environment variable that should be set is not.
@@ -95,7 +115,17 @@ $VENV -m local_llm_lab.runlock run --seat d-cro \
 ## 4. The 12B capture — **only if the headroom rule holds**
 
 The Chief's rule: their measured peak plus this pass's measured first-shard peak must leave at least
-9 GiB, so the sum must be ≤ 86 GiB. Both numbers are measured by then — theirs from their progress
+9 GiB, so the sum must be ≤ 86 GiB — **read as process memory, not as the allocator's high-water
+mark**. Their 4B capture died at 03:22Z on a 4.20 GiB allocation with 3.41 GiB free, and the numbers
+around it are the reason: c3 showed 62.25 GiB of process memory against 59.72 allocated, and their
+own capture 29.30 against 22.12 with 6.52 reserved and unhanded-out. A rule read on `allocated`
+plans with a figure 2.5 GiB smaller than the one that decides. The runner therefore reports
+`peak_allocated_gib`, `peak_reserved_gib` and the device's own `device_used_gib` / `device_free_gib`
+on every shard event; the last two need no proxy and are what the rule is evaluated on.
+
+*This pass has no logits allocation.* `HFLensModel.forward` calls the text module, not the causal LM,
+so the decoder stack runs and the vocabulary-sized head does not — there is no spike on a long row of
+the kind that ended the Chief's capture. Checked in the source rather than assumed. Both numbers are measured by then — theirs from their progress
 log every 100 rows, mine from the `shard` event, which carries the device high-water mark and by the
 first shard already includes a full forward at the longest row seen. If the sum exceeds 86, this
 waits for their capture to end or runs beside their 12B W-3b later.

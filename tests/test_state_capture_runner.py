@@ -28,16 +28,25 @@ def runner():
 
 
 class _StubCuda:
-    def __init__(self, peak_bytes: int) -> None:
+    def __init__(self, peak_bytes: int, reserved: int | None = None,
+                 free: int = 60 * 2**30, total: int = 96 * 2**30) -> None:
         self._peak = peak_bytes
+        self._reserved = peak_bytes if reserved is None else reserved
+        self._free, self._total = free, total
 
     def max_memory_allocated(self) -> int:
         return self._peak
 
+    def max_memory_reserved(self) -> int:
+        return self._reserved
+
+    def mem_get_info(self) -> tuple[int, int]:
+        return self._free, self._total
+
 
 class _StubTorch:
-    def __init__(self, peak_bytes: int) -> None:
-        self.cuda = _StubCuda(peak_bytes)
+    def __init__(self, peak_bytes: int, **kwargs) -> None:
+        self.cuda = _StubCuda(peak_bytes, **kwargs)
 
 
 def test_emit_shard_puts_the_device_peak_beside_the_writer_s_fields(runner) -> None:
@@ -59,7 +68,9 @@ def test_emit_shard_puts_the_device_peak_beside_the_writer_s_fields(runner) -> N
     assert len(seen) == 1
     event, fields = seen[0]
     assert event == "shard"
-    assert fields["peak_gib"] == 24.0
+    assert fields["peak_allocated_gib"] == 24.0
+    assert fields["peak_reserved_gib"] == 24.0
+    assert fields["device_used_gib"] == 36.0 and fields["device_free_gib"] == 60.0
     # The writer's own fields survive the adapter: it adds, it does not replace.
     assert fields["shard"] == 0 and fields["captured"] == 256 and fields["requested"] == 7629
     assert "event" not in fields, "the event name is the positional argument, never a keyword"
@@ -70,4 +81,16 @@ def test_emit_shard_defaults_the_event_name_rather_than_raising(runner) -> None:
     seen: list[tuple[str, dict]] = []
     runner.emit_shard(lambda event, /, **fields: seen.append((event, fields)),
                       _StubTorch(2**30))({"shard": 3})
-    assert seen == [("shard", {"peak_gib": 1.0, "shard": 3})]
+    assert seen[0][0] == "shard" and seen[0][1]["shard"] == 3
+
+
+def test_the_reported_cost_is_reserved_and_not_only_allocated(runner) -> None:
+    """The gap that decided an out-of-memory: reserved-unallocated is real memory the card cannot lend.
+
+    The Chief's capture held 22.12 GiB allocated and 29.30 of process memory, with 6.52 reserved and
+    unhanded-out; c3 showed 62.25 against 59.72. A headroom rule read on the allocator's high-water
+    mark plans with a number 2.5 GiB smaller than the one that matters.
+    """
+    report = runner.memory(_StubTorch(20 * 2**30, reserved=27 * 2**30))
+    assert report["peak_allocated_gib"] == 20.0
+    assert report["peak_reserved_gib"] == 27.0, "reserved is what the card cannot lend elsewhere"
