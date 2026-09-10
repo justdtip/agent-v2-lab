@@ -123,6 +123,51 @@ another untimed job. Both smoke tests ran on the CPU, so the re-run is the pilot
 its `peak_gib` field is `max_memory_allocated`, and process memory is read from nvidia-smi during the run
 for the shared-card rule.
 
-## Results
+## Results — the base 4B, 24 recipients, 07:25–07:58Z
 
-Not yet. The re-run is armed behind `GO-PILOT`.
+**Admission.** Manifest present, 24 rows written for 24 requested, the recipients exactly the requested
+set, 24 unique episodes, every layer of the sweep and every arm present in every row, every patch
+applied exactly once, the prefill's residuals at the patch site identical to the direct forward's in all
+24 rows (difference 0.0), the same-state arm token-for-token identical to the baseline at every (row,
+layer): no void cell; the reporter admits in strict mode (`results/pilot-4b-analysis.json`,
+`results/pilot-4b-manifest.json`; producer b3b676a0467c, reporter 7f646b820e82). All 24 baselines
+reproduce the expert's exact call, tool and path. 33.9 minutes on the shared card, 15.9 GiB peak
+allocated, about 17 GiB of process memory.
+
+**Outcomes.** Paired states from the model's own baseline call to the arm's call, all 24 pairs jointly
+complete at every layer and arm. Δ margin: the first generated token's logit for the named tool minus
+the best other tool, arm minus baseline, in logits, median over the 24 with the range in brackets.
+
+| layer | operation: tool → donor's `calculate` | operation: Δ margin of the expert tool | opposite_target, pending_file, unrelated_family: any path or tool change |
+|---|---|---|---|
+| 4 | 0 of 24 | +0.04 [−0.0, +0.1] | none (0 of 24 each) |
+| 8 | 0 of 24 | +0.08 [−0.4, +0.5] | none |
+| 12 | 0 of 24 | +0.55 [−0.0, +1.4] | none |
+| 16 | 0 of 24 | −4.70 [−11.7, −0.9] | none |
+| 20 | 24 of 24 | −35.9 [−39.8, −30.6] | none |
+| 24 | 24 of 24 | −44.6 [−49.5, −38.5] | none |
+| 28 | 24 of 24 | −44.4 [−49.4, −37.5] | none |
+| 32 | 24 of 24 | −42.1 [−46.0, −35.3] | none |
+
+Under the three path donors the Δ margin of the expert tool stays within a few logits at every layer
+(the widest median +2.2 for pending_file at layer 32, ranges within −10.6 to +7.5); no path switched to
+the donor's, no directory switched, no file switched within the directory, and the tool never changed,
+at any of the eight layers, in any of the 24 recipients. Under the operation donor the switched calls
+are well-formed `calculate` calls with freshly generated expressions (`"10 + 10"`, `"74 + 65 + 83"`);
+the donor record carries no expression, so nothing could be copied, and where the numbers come from was
+not determined.
+
+**Against the predictions.** The operation prediction held completely from layer 20: the tool switches
+to the donor's in every recipient, the expert tool's first-token margin falling by thirty to fifty
+logits, with a sub-threshold drop at layer 16 and nothing at 4–12. The two target predictions failed
+completely: neither the opposite directory nor the pending file moved the generated path at any layer.
+The rival failed too: the unrelated donor moved nothing, so "the next call is carried whole" is not
+what happened either. Reading, under the claim ceiling: at the action position a whole-residual swap at
+a single layer, from layer 20 on, carries the operation and does not carry the target file. One
+caveat bounds it. The operation is emitted at the very next token, read from the patched position; the
+path is emitted several tokens later, at decode steps the patch does not touch, from a context that
+still names the recipient's own file. So the dissociation may reflect *when* each piece is read — the
+next token from `P_act`, the path from the context afterwards — rather than what the residual at `P_act`
+holds. Distinguishing the two needs a patch that persists through the decode steps or a readout of the
+path from the residual itself; both are outside this pilot. Base model, not the tuned agent; 24
+recipients, one family, one donor per arm; a localisation test, not target identification.

@@ -1,0 +1,1817 @@
+{
+ "basis": "captures/pilot-4b; base 4B float32 eager greedy; whole-residual donor replacement at P_act at block L's output; the expert note teacher-forced; outcomes paired from the model's own baseline on jointly complete calls; unit = recipient decision, one per episode; counts, not bounds",
+ "verdict": "admitted",
+ "strict": true,
+ "admission": {
+  "rows": 24,
+  "requested": 24,
+  "eligible_rows": 24,
+  "problems": [],
+  "row_problems": {},
+  "void_row_layers": {
+   "4365": [],
+   "2171": [],
+   "4162": [],
+   "2489": [],
+   "2979": [],
+   "7196": [],
+   "1728": [],
+   "4584": [],
+   "6885": [],
+   "6138": [],
+   "5782": [],
+   "7266": [],
+   "6913": [],
+   "7285": [],
+   "7415": [],
+   "6879": [],
+   "391": [],
+   "7089": [],
+   "6749": [],
+   "6377": [],
+   "6430": [],
+   "5860": [],
+   "1716": [],
+   "5787": []
+  },
+  "unique_episodes": 24,
+  "manifest_present": true
+ },
+ "layers": [
+  "4",
+  "8",
+  "12",
+  "16",
+  "20",
+  "24",
+  "28",
+  "32"
+ ],
+ "baseline": {
+  "n": 24,
+  "valid_json": {
+   "share": 1.0,
+   "k": 24,
+   "n": 24
+  },
+  "expert_path_reproduced": {
+   "share": 1.0,
+   "k": 24,
+   "n": 24
+  },
+  "expert_tool_reproduced": {
+   "share": 1.0,
+   "k": 24,
+   "n": 24
+  }
+ },
+ "per_layer_arm": {
+  "4": {
+   "void_rows": 0,
+   "opposite_target": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -0.000835418701171875,
+     "min": -0.05806732177734375,
+     "max": 0.04989051818847656
+    }
+   },
+   "pending_file": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": 0.005282402038574219,
+     "min": -0.020738601684570312,
+     "max": 0.06207275390625
+    }
+   },
+   "operation": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": null,
+     "k": 0,
+     "n": 0
+    },
+    "file_switched_same_directory": {
+     "share": null,
+     "k": 0,
+     "n": 0
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": 0.037425994873046875,
+     "min": -0.019712448120117188,
+     "max": 0.09426116943359375
+    },
+    "delta_margin_donor_tool_vs_baseline": {
+     "n": 24,
+     "median": -0.037425994873046875,
+     "min": -0.1025238037109375,
+     "max": 0.019712448120117188
+    }
+   },
+   "unrelated_family": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -0.0757894515991211,
+     "min": -0.3273162841796875,
+     "max": 0.12034225463867188
+    }
+   }
+  },
+  "8": {
+   "void_rows": 0,
+   "opposite_target": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -0.0011720657348632812,
+     "min": -0.29714012145996094,
+     "max": 0.3073463439941406
+    }
+   },
+   "pending_file": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": 0.0855245590209961,
+     "min": -0.060821533203125,
+     "max": 0.39061737060546875
+    }
+   },
+   "operation": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": null,
+     "k": 0,
+     "n": 0
+    },
+    "file_switched_same_directory": {
+     "share": null,
+     "k": 0,
+     "n": 0
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": 0.07851505279541016,
+     "min": -0.3683967590332031,
+     "max": 0.4521141052246094
+    },
+    "delta_margin_donor_tool_vs_baseline": {
+     "n": 24,
+     "median": -0.07851505279541016,
+     "min": -0.3260154724121094,
+     "max": 0.3683967590332031
+    }
+   },
+   "unrelated_family": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": 0.04629802703857422,
+     "min": -0.8078632354736328,
+     "max": 0.9708480834960938
+    }
+   }
+  },
+  "12": {
+   "void_rows": 0,
+   "opposite_target": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": 0.08201789855957031,
+     "min": -0.8416423797607422,
+     "max": 1.0785179138183594
+    }
+   },
+   "pending_file": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": 0.2481403350830078,
+     "min": -0.1614971160888672,
+     "max": 0.9529380798339844
+    }
+   },
+   "operation": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": null,
+     "k": 0,
+     "n": 0
+    },
+    "file_switched_same_directory": {
+     "share": null,
+     "k": 0,
+     "n": 0
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": 0.5519933700561523,
+     "min": -0.042537689208984375,
+     "max": 1.3821563720703125
+    },
+    "delta_margin_donor_tool_vs_baseline": {
+     "n": 24,
+     "median": -0.5519933700561523,
+     "min": -1.2999744415283203,
+     "max": 0.042537689208984375
+    }
+   },
+   "unrelated_family": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": 0.7625045776367188,
+     "min": -2.6255550384521484,
+     "max": 3.9846153259277344
+    }
+   }
+  },
+  "16": {
+   "void_rows": 0,
+   "opposite_target": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -0.013567924499511719,
+     "min": -1.8876876831054688,
+     "max": 2.3409500122070312
+    }
+   },
+   "pending_file": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": 0.3775653839111328,
+     "min": -2.251893997192383,
+     "max": 2.0844345092773438
+    }
+   },
+   "operation": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": null,
+     "k": 0,
+     "n": 0
+    },
+    "file_switched_same_directory": {
+     "share": null,
+     "k": 0,
+     "n": 0
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -4.699073791503906,
+     "min": -11.685295104980469,
+     "max": -0.9426727294921875
+    },
+    "delta_margin_donor_tool_vs_baseline": {
+     "n": 24,
+     "median": 5.034662246704102,
+     "min": 0.9426727294921875,
+     "max": 11.685295104980469
+    }
+   },
+   "unrelated_family": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -0.19259166717529297,
+     "min": -2.6526050567626953,
+     "max": 4.172307968139648
+    }
+   }
+  },
+  "20": {
+   "void_rows": 0,
+   "opposite_target": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -0.17279911041259766,
+     "min": -4.537897109985352,
+     "max": 4.6740875244140625
+    }
+   },
+   "pending_file": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": 1.6730079650878906,
+     "min": -4.876394271850586,
+     "max": 3.087932586669922
+    }
+   },
+   "operation": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 0,
+     "switched_to_donor": 0,
+     "changed_to_other": 24
+    },
+    "tool_state": {
+     "unchanged": 0,
+     "switched_to_donor": 24,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": null,
+     "k": 0,
+     "n": 0
+    },
+    "file_switched_same_directory": {
+     "share": null,
+     "k": 0,
+     "n": 0
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -35.84724044799805,
+     "min": -39.75546455383301,
+     "max": -30.57120704650879
+    },
+    "delta_margin_donor_tool_vs_baseline": {
+     "n": 24,
+     "median": 35.8930549621582,
+     "min": 30.57120704650879,
+     "max": 40.05541801452637
+    }
+   },
+   "unrelated_family": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -0.08975791931152344,
+     "min": -4.440181732177734,
+     "max": 2.9532299041748047
+    }
+   }
+  },
+  "24": {
+   "void_rows": 0,
+   "opposite_target": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -0.5080881118774414,
+     "min": -5.389619827270508,
+     "max": 4.483041763305664
+    }
+   },
+   "pending_file": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": 0.8243722915649414,
+     "min": -9.121501922607422,
+     "max": 4.350435256958008
+    }
+   },
+   "operation": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 0,
+     "switched_to_donor": 0,
+     "changed_to_other": 24
+    },
+    "tool_state": {
+     "unchanged": 0,
+     "switched_to_donor": 24,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": null,
+     "k": 0,
+     "n": 0
+    },
+    "file_switched_same_directory": {
+     "share": null,
+     "k": 0,
+     "n": 0
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -44.54950428009033,
+     "min": -49.526954650878906,
+     "max": -38.52426528930664
+    },
+    "delta_margin_donor_tool_vs_baseline": {
+     "n": 24,
+     "median": 40.57540035247803,
+     "min": 32.939125061035156,
+     "max": 43.865543365478516
+    }
+   },
+   "unrelated_family": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -0.12189865112304688,
+     "min": -7.22071647644043,
+     "max": 5.89764404296875
+    }
+   }
+  },
+  "28": {
+   "void_rows": 0,
+   "opposite_target": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -0.4185361862182617,
+     "min": -6.706916809082031,
+     "max": 4.5840911865234375
+    }
+   },
+   "pending_file": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": 1.1856975555419922,
+     "min": -9.9964599609375,
+     "max": 5.039031982421875
+    }
+   },
+   "operation": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 0,
+     "switched_to_donor": 0,
+     "changed_to_other": 24
+    },
+    "tool_state": {
+     "unchanged": 0,
+     "switched_to_donor": 24,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": null,
+     "k": 0,
+     "n": 0
+    },
+    "file_switched_same_directory": {
+     "share": null,
+     "k": 0,
+     "n": 0
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -44.36445426940918,
+     "min": -49.44650077819824,
+     "max": -37.48923873901367
+    },
+    "delta_margin_donor_tool_vs_baseline": {
+     "n": 24,
+     "median": 39.99760341644287,
+     "min": 33.06722640991211,
+     "max": 44.62785530090332
+    }
+   },
+   "unrelated_family": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -1.136709213256836,
+     "min": -8.581056594848633,
+     "max": 6.364555358886719
+    }
+   }
+  },
+  "32": {
+   "void_rows": 0,
+   "opposite_target": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -0.3989896774291992,
+     "min": -6.689603805541992,
+     "max": 4.73992919921875
+    }
+   },
+   "pending_file": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": 2.208141326904297,
+     "min": -10.559240341186523,
+     "max": 5.130832672119141
+    }
+   },
+   "operation": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 0,
+     "switched_to_donor": 0,
+     "changed_to_other": 24
+    },
+    "tool_state": {
+     "unchanged": 0,
+     "switched_to_donor": 24,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": null,
+     "k": 0,
+     "n": 0
+    },
+    "file_switched_same_directory": {
+     "share": null,
+     "k": 0,
+     "n": 0
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -42.08949089050293,
+     "min": -45.9626350402832,
+     "max": -35.31026268005371
+    },
+    "delta_margin_donor_tool_vs_baseline": {
+     "n": 24,
+     "median": 40.25417900085449,
+     "min": 33.48513221740723,
+     "max": 44.33469581604004
+    }
+   },
+   "unrelated_family": {
+    "n": 24,
+    "jointly_valid": {
+     "share": 1.0,
+     "k": 24,
+     "n": 24
+    },
+    "invalid_baseline": 0,
+    "invalid_arm": 0,
+    "path_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "tool_state": {
+     "unchanged": 24,
+     "switched_to_donor": 0,
+     "changed_to_other": 0
+    },
+    "switched_to_donor_path_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "switched_to_donor_tool_share_of_jointly_valid": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "donor_path_agreement_descriptive": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "directory_switched_to_donor": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "file_switched_same_directory": {
+     "share": 0.0,
+     "k": 0,
+     "n": 24
+    },
+    "delta_margin_expert_tool_vs_baseline": {
+     "n": 24,
+     "median": -0.9363164901733398,
+     "min": -4.886348724365234,
+     "max": 7.517662048339844
+    }
+   }
+  }
+ },
+ "switch_counts_by_layer": {
+  "opposite_target": {
+   "4": 0,
+   "8": 0,
+   "12": 0,
+   "16": 0,
+   "20": 0,
+   "24": 0,
+   "28": 0,
+   "32": 0
+  },
+  "pending_file": {
+   "4": 0,
+   "8": 0,
+   "12": 0,
+   "16": 0,
+   "20": 0,
+   "24": 0,
+   "28": 0,
+   "32": 0
+  },
+  "operation": {
+   "4": 0,
+   "8": 0,
+   "12": 0,
+   "16": 0,
+   "20": 24,
+   "24": 24,
+   "28": 24,
+   "32": 24
+  },
+  "unrelated_family": {
+   "4": 0,
+   "8": 0,
+   "12": 0,
+   "16": 0,
+   "20": 0,
+   "24": 0,
+   "28": 0,
+   "32": 0
+  }
+ },
+ "switch_definition": "path: the arm's complete call names the donor's expert path and the baseline's complete call did not; tool (operation arm): the arm's complete call names the donor's tool and the baseline's did not"
+}
