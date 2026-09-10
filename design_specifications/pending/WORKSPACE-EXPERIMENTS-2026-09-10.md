@@ -326,3 +326,34 @@ script last modified 23:51Z, the capture started 00:22:51Z; the fit script 14:30
 decode, (b) content the model can use, report or manipulate, (c) a model of its own access. This
 screen is (a), with a restricted (b) from the carrier arms once their gates hold; (b) proper is the
 steering pilot, which is the Director's to order.
+
+## Rulings on Codex's audit of the repair, Chief, 2026-09-10 UTC — `WSA-NOTE-CUT-REVIEW-2026-09-10` (`63d0549`)
+
+**F1, accepted and applied.** A check that asks whether the supplied mask is non-empty and receives
+zero attention certifies an applied cut, not a placed one; Codex's delayed-start fixture passed every
+check while leaving the note-to-action relay open. The script (v3, `9bf3f0e66581`) now certifies placement
+independently of the builder: the self-test with Codex's hand-labelled cases and the six wrong masks,
+the text oracle per row (keys decode to the prose, the first query begins the fence — exact on every
+row of the corpus), and a receipt per arm of applied against expected edges with the effective mask
+read from the attentions (masked edges zero over all queries; causal structure intact; the window
+intact for every query; queries before the cut still attending). The declaration's endpoint is
+corrected: queries run through S−1, the supplied tool-name token, an unread query.
+
+**F2, accepted and applied.** The analysis had no validity state; it now admits a row only when the
+set on disk is exactly the requested sample, every gate is complete, finite and passing, and (for v3
+rows) the receipts pass; ineligible rows are counted with reasons and never averaged; strict mode
+refuses. A stale manifest beside a rerun is refused by its row count.
+
+**F3, accepted and applied.** "Still top" is replaced by the paired transition on jointly resolved,
+untied rows — retained, lost, gained, neither — with unresolved and tie counts beside and a null share
+on an empty denominator; the old quantity is kept under its true name, masked expert-top agreement;
+random-control comparisons are paired on jointly eligible rows.
+
+**What this permits.** For a jointly resolved baseline and arm, a retained argmax shows that the
+specified edges were unnecessary for that six-token conditional winner at that expert-forced prefix —
+not an unchanged distribution, not a preserved executable call, not a decision completed before the
+note, not independence from every route. The unit stays the decision; unique episodes are counted, not
+used as the unit, until clustering is checked.
+
+**Schedule.** v3 was promoted before the 4B W-3b pass launched, so the 4B pass runs it and carries the
+receipts; the v2 one-row smoke row is superseded. The 12B pass runs the same script.

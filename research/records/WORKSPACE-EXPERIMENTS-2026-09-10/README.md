@@ -77,6 +77,42 @@ now differ from their controls. One row, a test of the instrument; not a reading
 The earlier mismatch was found by the repaired script's own tool-token check, which refused the stale
 capture (`row 0: in-context tool token 236779 is not the standalone first token 1399 of read_file`).
 
+## Codex's audit of the repair (63d0549, standing request 5): placement certified, admission and the retained metric corrected
+
+Codex found three things in the repaired script and its analysis, none a finding that the production
+cut was wrong: a misplaced but non-empty cut passed every check, because the checks asked only whether
+the supplied mask was non-empty and received zero attention; the analysis aggregated rows without a
+validity state, so a failed gate, a duplicate id or a stale manifest would have entered the estimates;
+and "still top" counted a tool that became the winner under the mask as having remained it, with an
+empty denominator written as zero. All three are applied before any W-3b reading.
+
+`scripts/workspace_w3b.py` v3 (9bf3f0e66581), the script the 4B pass runs. Placement is certified three ways,
+each a hard stop: a self-test at start reproduces Codex's hand-labelled keys, `q0` and straddle on
+four synthetic tokenisations at four prompt offsets and rejects the six wrong masks (delayed start,
+wrong key, missing key, extra key, future-only key, empty) with an expected-edge oracle; a text oracle
+per row, independent of the builder, requires the note keys to decode to exactly the prose before the
+fence and the first query token to begin the fence (exact on all 7,629 rows of the corpus); and a
+receipt per arm compares the mask's applied edges with the expected set (no missing, no unexpected)
+and reads the effective mask from the returned attentions — zero on every masked edge over all
+queries, no mass above the diagonal, zero beyond the window for every query in the local layers, and
+the queries before the cut still attending to the masked keys. The hook must run on every layer and
+find the native mask. The declaration now says the true endpoint: queries through S−1, the supplied
+tool-name token, an unread query; `P_act` = S−2. `run.json` names the requested sample at start.
+One-row CPU test: self-test 16 cases and 6 rejections; every arm's receipt passes; effective checks
+all zero or positive as required (`scripts/w3b_v3_test.sh`).
+
+`scripts/workspace_w3b_analyze.py` (30ffe6d01889): admission before any estimate — the rows on disk must be
+exactly the requested sample, unique, the manifest's row count consistent, every arm's gate complete,
+finite and passing, the current-note arm's `P_note` identity true, and a v3 row's receipts and oracle
+passing; an ineligible row is counted with its reasons and never averaged; strict mode refuses (exit
+1), `--diagnostic` renders labelled. The retained metric is a paired transition on rows where the
+baseline and the arm are both resolved and untied — retained, lost, gained, neither — with unresolved
+and tie counts kept separately and a null share on an empty denominator; the old metric survives as
+`masked_expert_top_agreement`; the comparison with the random control is paired on jointly eligible
+rows. Tested (`scripts/analyzer_test.sh`): the clean output admitted; a copy with a nonzero masked
+attention, a duplicate row and a stale manifest refused with exit 1 and rendered only in diagnostic
+mode; a gained winner classified as gained with a null retained share.
+
 ## Deviations from the order in the capture as run (recorded, not repaired mid-run)
 
 1. On the 300-sample the capture saves six-tool readouts at every note token, not the full
@@ -137,8 +173,8 @@ capture (pid 46534) started 00:22:51Z; `fit_lens_f32.py` last modified 14:30Z on
 | file | sha256 (first 12) | role |
 |---|---|---|
 | `workspace_capture.py` | 958ccdcf0bae | the capture as running for the 4B (and queued for the 12B) |
-| `workspace_w3b.py` | b2d674d3469e | W-3b, repaired |
-| `workspace_w3b_analyze.py` | 85948cba4b7f | W-3b aggregate, schema 2 |
+| `workspace_w3b.py` | 9bf3f0e66581 | W-3b v3: placement certified (the repaired v2, b2d674d3469e, is kept on the card as `workspace_w3b.py.v2-repaired`) |
+| `workspace_w3b_analyze.py` | 30ffe6d01889 | W-3b aggregate with admission and paired transitions |
 | `workspace_analyze.py` | da680b6e5773 | W-1/W-3/W-4/W-5 with the prose–syntax split |
 | `workspace_w2.py` | 033ae371ef3e | W-2 and W-4 primary |
 | `fit_lens_f32.py` | 67fdf5559a1a | the float32 exact lens fit (4B full; 12B chunks) |
