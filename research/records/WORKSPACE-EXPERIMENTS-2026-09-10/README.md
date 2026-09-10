@@ -392,8 +392,28 @@ a generic look-around replaces the specific read. By family: conditional_update 
 search 8, synthesis 7, batch_update 7, pointer_chain 5, list 5, cross_reference 4, read 3,
 ledger_reconcile 2, aggregate_report 1, calculate 0. Prose lengths of lost and retained rows are alike
 (median 33 and 31 tokens). Carriers and note together: 55 of 179 lost. Survival shows non-necessity of
-the masked edges under this intervention and does not date the decision (the order's ruling); the
-count-matched comparisons wait for the v3.2 repeat.
+the masked edges under this intervention and does not date the decision (the order's ruling).
+
+**The v3.2 repeat (07:24–08:12Z, 47.8 minutes on the shared card; 300 rows, 2,186 arm receipts all
+passing, admitted 300 of 300; `captures/4b-w3b-v32`, analysis `captures/4b/analysis/w3b-v32.json`).**
+Every non-control arm reproduces the v3.1 pass's transition counts exactly (the table above holds for
+both passes). The corrected controls, drawn from the task statement and the format tokens (pool median
+479 positions, the draws 0.86 task tokens, the smallest drawn position 1 — never the sink):
+
+| control | matched to | rows | retained | lost | gained | neither | retained share | Δ margin median (p10, p90) |
+|---|---|---|---|---|---|---|---|---|
+| random_equal_count_note (the note's prose count, queries from the fence) | current_note | 300 | 287 | 1 | 1 | 11 | 0.997 | −0.12 (−1.9, +0.7) |
+| random_equal_count (the all-carriers count, queries from P_note) | the carrier arms | 187 | 169 | 9 | 1 | 7 | 0.949 | −3.0 (−10.7, +0.9) |
+
+Paired on the same rows, arm minus its control, Δ margin median (p10, p90): current_note −3.9 (−23.2,
++0.8) on 300; all_carriers +0.1 (−21.4, +9.3) on 187; all_carriers_and_current_note −4.3 (−24.3, +9.3);
+each single carrier span +2.8 to +7.2 (the single-span masks cost less than the control's). Reading:
+removing the current note's prose from the post-fence queries loses the winner in 63 of 288 decisions
+where removing the same number of arbitrary prompt tokens from the same queries loses it in 1 of 288 —
+the note's prose is what those 63 decisions read, not the count of edges removed. Removing all carrier
+spans loses the winner in 37 of 179 against 9 of 179 for the same count of task tokens: the control
+depresses the margin as much on the median but flips far fewer; the carrier spans' joint removal is
+what flips the 37. Each single carrier span costs less than the equal-count control.
 
 **W-2 (the primary of W-4: early versus late linear decodability of the expert action at P_note and
 P_act, rank ladder with the permutation and transfer nulls).** Running on the host CPU at this writing;
