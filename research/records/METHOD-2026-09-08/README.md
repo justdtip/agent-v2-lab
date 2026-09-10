@@ -950,5 +950,13 @@ record instead of from the world into the checker, and the record then agreed wi
 construction. That is not a scope defect but a **direction** one, and it is invisible to a fixture
 that supplies a conforming input, which is every fixture anyone writes first.
 
+**An eighth, found the next day, which sharpens why the family is invisible.** A helper named
+`paired_bootstrap_lower_bound` called the independent-arm bootstrap, so it drew a resampling index
+per arm and threw away the pairing it is named for. The name asserted a property the code did not
+have — and the interval it returns is **usually wider, so it does not read as an error**. That is the
+sentence to keep. A verifier that fails loudly gets fixed; a verifier that fails *conservatively*
+gets trusted, cited, and built on, because a wider interval looks like caution rather than a
+different comparison altogether.
+
 And the diagnostic that found six of the seven: **ask what the check would say if the thing it guards
 were broken, and then break it.** Every one of these answered "pass".

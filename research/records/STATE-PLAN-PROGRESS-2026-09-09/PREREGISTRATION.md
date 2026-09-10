@@ -18,6 +18,26 @@ model and no card:
 | `capture-set.jsonl` | the capture set itself, one line per decision, 7,629 lines |
 | `count_corpus.py` → `corpus-count.json` | the order §1 count, re-run and falsified per claim |
 
+## What this study can and cannot say, before anything else
+
+**E1 can support a claim that one model's decodability exceeds its null by more than about
+twenty-three points of accuracy. It can support nothing about a smaller gap.** That is the resolution
+this corpus affords at this number of pre-registered quantities, and it is a large weakening of what
+the first draft imagined — 0.06 — which came from counting decisions as independent observations when
+the design holds out by episode, and from bounding a paired difference as though it were a single
+[0, 1] mean. Neither was defensible; the twenty-three points are.
+
+If the eventual gap is smaller than that, the finding is **"below the pre-registered resolution"**,
+which is not the same as "no effect" and is reported in those words. And the epsilons are **declared
+resolutions, not coverage statements**: the episodes are not independent draws, the cross-fitted
+scores share training data, and §7 states which assumption is doing the work.
+
+The comparable numbers for the rest: 0.13 on E2's ordinary transitions, 0.15 on its corrective ones,
+0.23 on the contiguous subgroup and 0.20 on the across-a-gap subgroup, that last met by exactly the
+309 episodes it requires and no more.
+
+---
+
 Corpus on the card: `/workspace/rendered-corpus/agent_v2e-gemma3-4b/`, archive
 `7fe6e64b89749b997854638b260d7654316636da3d8eaa59924ad9ed62f99120`. Per-file digests are in
 `prereg-inputs.json` under `file_sha256`, and they match the corpus manifest's own `outputs` block,
@@ -439,11 +459,12 @@ claims a resolution its own range does not support, which is what the first draf
 | ε_ord | E2 ordinary transitions, train split | episodes | 840 | **0.13** | 731 | 109 |
 | ε_sub | E2 corrective transitions | episodes (one each) | 553 | **0.15** | 549 | 4 |
 
-*A note on the convention, because it is not the textbook one.* At range width 1 the helper returns
-`ln(2M/α)/ε²`, which is **twice** the textbook Hoeffding `w²ln(2M/α)/(2ε²)`; the repository's
-existing closed-form checks pin it and it is kept so that no published figure moves. At width 2 the
-two coincide exactly, so the paired figures above are the standard ones while any single-mean figure
-elsewhere in this programme stays conservative. Flagged for the Chief rather than silently resolved.
+*A note on the convention, because it is not the textbook one, and it is now ruled.* At range width
+1 the helper returns `ln(2M/α)/ε²`, which is **twice** the textbook Hoeffding `w²ln(2M/α)/(2ε²)`. At
+width 2 the two coincide exactly. The Chief has ruled that it stays: every quantity in this
+pre-registration is at width 2 and therefore standard, the closed-form checks and every earlier
+figure stand, and a future single-mean claim inherits a conservative resolution rather than a moved
+number. Which form is which is stated here so that a later reader is not left to rediscover it.
 
 *Superseded, kept for the comparison, and marked:* counting decisions gave n = 1,781 and
 ε_main = 0.06, transitions gave n = 4,122 and ε_ord = 0.04. **Coverage is not supported at those
@@ -694,19 +715,14 @@ the device copy and passing (§11).
    The screen exists; the gate's byte-identity half is implemented by nothing, and the document says
    so rather than implying otherwise. The re-read diagnostic does not depend on it and is orderable.
 2. **E3** (§4.4): not measured, not scheduled, waiting on WS-B's cache exchange.
-3. **The Hoeffding convention** (§7). At range width 1 the repository's helper is twice the textbook
-   bound; it is kept so no published figure moves, and at width 2 the two coincide, so the paired
-   figures here are standard while single-mean figures elsewhere stay conservative. Both facts are
-   in the text. Switching the helper to the textbook form throughout moves the closed-form checks and
-   every figure derived from them, and that is the Chief's call.
-4. **The seal**, which follows Codex's file-only review of this draft and precedes the first
+3. **The seal**, which follows Codex's file-only review of this draft and precedes the first
    *reading* of any capture. The capture pass itself does not wait for it: §16.18 permits captures to
    be made before the seal so long as none is read.
 
 **Mine, and flagged as mine.** E2's retrieval score in place of a derived tolerance (§4.2); the
-subgroup epsilons and the decision to declare the rounded-up value at every stratum (§7); the fixed
-headline rank and depth (§5); and the reading of the range-width convention in item 3. Any is the
-Chief's to overturn before the seal.
+subgroup epsilons and the decision to declare the rounded-up value at every stratum (§7); and the
+fixed headline rank and depth (§5). Any is the Chief's to overturn before the seal. The range-width
+convention was mine to flag and is now ruled, so it has left this list.
 
 **What this document is not.** Nothing in it has been run. Every figure is computed from the rendered
 corpus on the laptop, or measured on the card and cited to the record that measured it. The estimands
