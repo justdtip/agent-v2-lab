@@ -336,7 +336,37 @@ and 0.402, the carriers ≤ 0.07; mass beyond the window in the global layers p9
 **W-4's note trajectory (300-sample).** As on the 4B: the expert tool is first at the note's start in 2 of 300
 rows and at its end in 289; the crossing lies in the syntax in 249 rows, in the prose in 46, nowhere in 5.
 
-W-2 and W-3b for the 12B follow in this section when their passes end.
+**W-3b on the 12B (v3.4, 11:35–12:09Z, 34.0 minutes alone, ~71 GiB process memory; 300 rows, 2,373 arm
+receipts all passing, admitted 300 of 300; the corpus digest read from the capture-time event).** The same
+paired transition, the same rows as the 4B's sample:
+
+| arm | rows | retained | lost | gained | neither | retained share | Δ margin median (p10, p90) |
+|---|---|---|---|---|---|---|---|
+| current_note (queries from the fence) | 300 | 245 | 44 | 6 | 5 | 0.848 | −7.9 (−15.2, −2.4) |
+| its control (the note's count, same queries) | 300 | 286 | 3 | 3 | 8 | 0.990 | −0.15 (−1.5, +0.9) |
+| previous_note | 187 | 174 | 4 | 0 | 9 | 0.978 | −0.44 |
+| previous_call | 187 | 177 | 1 | 1 | 8 | 0.994 | −1.15 |
+| latest_result | 187 | 177 | 1 | 6 | 3 | 0.994 | −1.03 |
+| older_note / older_call / older_result | 131 | 129 / 128 / 127 | 0 / 1 / 2 | | | 1.000 / 0.992 / 0.984 | −0.16 / −0.04 / +0.02 |
+| hidden_result | 71 | 71 | 0 | 0 | 0 | 1.000 | +0.06 |
+| all_carriers | 187 | 163 | 15 | 3 | 6 | 0.916 | −5.0 (−18.7, −1.0) |
+| all_carriers_matched (v3.3: count-matched in every row) | 187 | 171 | 7 | 3 | 6 | 0.961 | −4.7 (−10.4, −0.4) |
+| its control (the carriers' count, from P_note) | 187 | 174 | 4 | 4 | 5 | 0.978 | −3.0 (−10.4, +0.6) |
+| all_carriers_and_current_note | 187 | 134 | 44 | 0 | 9 | 0.753 | −11.6 (−26.9, −3.7) |
+
+Reading. The note's prose is read on the 12B as on the 4B, with fewer outright losses and a larger margin cost:
+its removal loses the winner in 44 of 289 (0.152; the 4B 0.219) against 3 of 289 for the count-matched control,
+and moves the expert tool's margin by a median −7.9 logits against −0.15 (paired −7.7); the losses again fall on
+step 0 (28 of 113) more than later (16 of 187). The earlier turns matter less on the 12B than on the 4B: no
+single carrier span loses more than 4 of 178; all carriers together lose 15, but the count-matched carrier arm
+(the carrier keys subsampled to the pool's size in the 55 long rows, all of them elsewhere) loses 7 against 4
+for its control — on the 132 rows where no subsampling was needed the matched arm *is* the all-carriers arm
+and the two lose 3 apiece, identical to the control's 3; on the 55 long rows the full carrier mask loses 12, the
+matched one 4, the control 1. So the 12B's joint carrier effect sits mostly in the long episodes where the
+carrier set outnumbers everything else in the prompt, and count-matched it is a few rows above its control.
+Note and carriers together lose 44 of 178.
+
+W-2 for the 12B follows in this section when its pass ends.
 
 ## Results — 4B (07:20Z–08:20Z)
 
