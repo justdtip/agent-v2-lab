@@ -624,3 +624,53 @@ Gram spectrum does not match the signed overlap geometry — negating one atom k
 and the norms and changes the nonnegative cone. The control is a **seeded orthogonal rotation of
 the whole dictionary**, preserving the full signed Gram matrix and atom norms; everything else
 identical; the hypothesis stated; overcompleteness's own contribution measured under it.
+
+## Next instruction, Chief, 2026-09-10 (09:55Z) — make the device lenses admissible and build the runner: four file-only tasks for Codex
+
+From an audit of the bridge against the device artefacts (verified on the code before this instruction was
+written): the fit writer (`fit_lens_f32.py`) and the chunk merger (`merge_chunks.py`) store maps as `J{repository
+layer}` (1 … 33 on the 4B, 1 … 47 on the 12B) and write `nu.json` (the fitter) or promise it and do not write it
+(the merger); the bridge loader `LensMaps.load` reads `J{block}` and adds one (`layer = int(name[1:]) + 1`, valid
+only below `num_layers`), so a device archive loads shifted by one layer or refuses at its last map; the loader
+also requires an identity block inside the archive or a digest-bound sidecar, which the device archives lack;
+`hook_alignment` refuses a layer without a stored matrix although `LensMaps.apply` already treats the final layer
+as the identity; and the reconstruction-budget helper measures `‖e‖/‖h‖` while A2's guard measures `‖Le‖/‖Lh‖`,
+two different quantities under one name (a reproduction: 9.95% raw against 99.5% in score space). None of this
+touches the fitted matrices; all of it is engineering between the artefacts and the bridge.
+
+**T1 — an admission path for device lens archives.** A script `admit_device_lens.py` that takes a device fit
+directory (`exact-maps.npz`, `nu.json`, `manifest.json`) and writes, beside the untouched originals, a loader-
+form archive and its digest-bound identity sidecar: keys renumbered from repository layer to the loader's
+convention, the identity carrying the base model, `num_layers`, the fit declaration (corpus, positions 16–126,
+context 128, precision, forward and dimension batch, anchor batch, the chunk table for a merged archive) and
+the source archive's sha256. It refuses an archive whose map count or shapes disagree with the declaration, a
+sidecar naming a different file, and a declaration lacking the width fields. The merger gains the `nu.json` it
+promises: every chunk's declaration and archive digest, the merged population (70/70/61) and the weights.
+Tests: a fixture archive with three maps round-trips with the right layer assignment; the shifted-by-one and
+wrong-identity fixtures refuse; loading the admitted 4B fixture through the real `LensMaps.load` and reading a
+known residual through layer k gives the fit's matrix at repository layer k, not k+1.
+
+**T2 — the final-layer identity endpoint.** `hook_alignment` accepts the final layer when the lens identity
+declares its endpoint as the identity map, and still refuses any non-final layer without a stored matrix.
+Tests: the 34th (48th) dictionary aligns; a missing interior map refuses by name.
+
+**T3 — two reconstruction errors, two names.** `raw_reconstruction_share` (`‖e‖/‖h‖`) and
+`lens_score_error_share` (`‖Le‖/‖Lh‖`) reported separately everywhere the budget appears; the budget gate
+renamed for what it measures and never used as A2's admission mask; thresholds and the near-zero-denominator
+rule declared in the config before any interpretation; the 9.95%/99.5% reproduction is a fixture that must
+show "rankable by the raw share, refused by the score share". No default threshold may admit.
+
+**T4 — a general device A1/A2 runner.** Explicit inputs only (model snapshot, dictionary directory, admitted
+lens archive, capture directory, positions, output directory); before any numeric helper runs it checks the
+checkpoint's hash manifest, the lens identity and archive sha256, the dictionary's digest receipts, the
+capture manifest and the pairing registration, and refuses by name on any mismatch; a `--dry-run` that
+performs every check on fixtures and stops; no hardcoded path. Its output carries the provenance block and the
+interpretation limits of the second amendment verbatim.
+
+Laptop only; tests on the CPU; no device job, download or model load; commit on each test's own exit code;
+report by commit with the checked set named beside each verdict. **What stays with the lens owner (the Chief):**
+the pairing registrations (4B fitted at dimension batch 32 and read at width 1; 12B at 16/16/8 and read at 1) with
+their measured terms, and the domain-of-validity statement for readings beyond position 126; the shipped-token
+example files for the chosen dictionaries, fetched to the card; and the runs (A1 through the new lenses with a
+corrupted-layer control, A2 on the 4B captures, then the 12B). Stage B remains conditional on real A2 evidence
+under the sealed rotation control above.
