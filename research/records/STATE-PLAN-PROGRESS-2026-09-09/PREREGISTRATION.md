@@ -2,8 +2,10 @@
 
 **UNSEALED DRAFT. D-CRO, 2026-09-09.** Owner: D-CRO, under
 `design_specifications/pending/STATE-PLAN-PROGRESS-ORDER-2026-09-10.md` (R7 and the Chief's
-amendment). It is **not sealed** and must not be: sealing waits on the golden-test control design
-and on a scheduled capture pass. The two streams share the machinery but not the clock.
+amendment). It is **not sealed**: sealing follows Codex's file-only review of this draft and
+precedes the first *reading* of any capture. The golden-test control design has landed and is no
+longer a blocker; the capture pass does not wait for the seal, because §16.18 permits captures to be
+made before it so long as none is read.
 
 Nothing here has been read from a capture, because none exists. Every number in §§1–2 and §§7–9 is
 computed by the two scripts in this directory from the rendered corpus alone, on the laptop, with no
@@ -15,6 +17,26 @@ model and no card:
 | `capture_budget.py` → `capture-budget.json` | what capturing the pre-registered set costs |
 | `capture-set.jsonl` | the capture set itself, one line per decision, 7,629 lines |
 | `count_corpus.py` → `corpus-count.json` | the order §1 count, re-run and falsified per claim |
+
+## What this study can and cannot say, before anything else
+
+**E1 can support a claim that one model's decodability exceeds its null by more than about
+twenty-three points of accuracy. It can support nothing about a smaller gap.** That is the resolution
+this corpus affords at this number of pre-registered quantities, and it is a large weakening of what
+the first draft imagined — 0.06 — which came from counting decisions as independent observations when
+the design holds out by episode, and from bounding a paired difference as though it were a single
+[0, 1] mean. Neither was defensible; the twenty-three points are.
+
+If the eventual gap is smaller than that, the finding is **"below the pre-registered resolution"**,
+which is not the same as "no effect" and is reported in those words. And the epsilons are **declared
+resolutions, not coverage statements**: the episodes are not independent draws, the cross-fitted
+scores share training data, and §7 states which assumption is doing the work.
+
+The comparable numbers for the rest: 0.13 on E2's ordinary transitions, 0.15 on its corrective ones,
+0.23 on the contiguous subgroup and 0.20 on the across-a-gap subgroup, that last met by exactly the
+309 episodes it requires and no more.
+
+---
 
 Corpus on the card: `/workspace/rendered-corpus/agent_v2e-gemma3-4b/`, archive
 `7fe6e64b89749b997854638b260d7654316636da3d8eaa59924ad9ed62f99120`. Per-file digests are in
@@ -232,8 +254,14 @@ set after looking, and no pilot is needed to set one.
   the source would make it `1/(N−1)` and the two must not be mixed.
 - **Strict nearest target: a tie is a miss.** Named because the alternative — splitting credit — is
   defensible and gives a different number, and because ties are not rare in a bounded space.
-- **The transport distance is reported descriptively beside the hit rate**, in the metric the rule is
-  fitted under, aggregated as the mean within an episode and then the mean across episodes. Never
+- **The metric is named in the space it is computed in.** The retrieval and the distance are both in
+  the **residual space at the read layer**, on vectors as captured — native bf16 promoted to float32
+  for the arithmetic and not otherwise transformed — under the Euclidean norm. If the transport rule
+  is fitted with any normalisation of its own (a whitening, a per-layer scale), that normalisation is
+  part of the metric and is declared with the rule and applied identically to the candidate set; a
+  distance in a space the rule normalised and the candidates did not is not a distance between them.
+- **The transport distance is reported descriptively beside the hit rate**, in that metric,
+  aggregated as the mean within an episode and then the mean across episodes. Never
   pooled across decisions, which would weight long episodes more heavily and is the same mistake as
   counting decisions instead of episodes in §7. It is descriptive: it adds no confirmatory estimand
   and enters no bound.
@@ -372,6 +400,12 @@ confound a number rather than a caveat.
   12B. The full profile is reported. **The headline is read at the 0.5 fraction and at r = 8, fixed
   here in advance**, so no layer and no rank is selected after the fact.
 - **Splits**: held out by episode, stratified by family, never by position.
+- **Training eligibility, stated rather than implied.** The 240 **clean test episodes** are never in
+  any fit: not the probe's, not the null's, not the transport rule's, and not any fold's training
+  part. §7.1's cross-fitting partitions the *train* split; the test split is evaluation only. This is
+  written down because "held out by episode" describes the mechanism and not the population, and a
+  fold assignment that happened to place a test episode in a training part would satisfy the
+  mechanism while destroying the claim.
 - **A figure without its rank and its null is refused.**
 
 ---
@@ -425,11 +459,12 @@ claims a resolution its own range does not support, which is what the first draf
 | ε_ord | E2 ordinary transitions, train split | episodes | 840 | **0.13** | 731 | 109 |
 | ε_sub | E2 corrective transitions | episodes (one each) | 553 | **0.15** | 549 | 4 |
 
-*A note on the convention, because it is not the textbook one.* At range width 1 the helper returns
-`ln(2M/α)/ε²`, which is **twice** the textbook Hoeffding `w²ln(2M/α)/(2ε²)`; the repository's
-existing closed-form checks pin it and it is kept so that no published figure moves. At width 2 the
-two coincide exactly, so the paired figures above are the standard ones while any single-mean figure
-elsewhere in this programme stays conservative. Flagged for the Chief rather than silently resolved.
+*A note on the convention, because it is not the textbook one, and it is now ruled.* At range width
+1 the helper returns `ln(2M/α)/ε²`, which is **twice** the textbook Hoeffding `w²ln(2M/α)/(2ε²)`. At
+width 2 the two coincide exactly. The Chief has ruled that it stays: every quantity in this
+pre-registration is at width 2 and therefore standard, the closed-form checks and every earlier
+figure stand, and a future single-mean claim inherits a conservative resolution rather than a moved
+number. Which form is which is stated here so that a later reader is not left to rediscover it.
 
 *Superseded, kept for the comparison, and marked:* counting decisions gave n = 1,781 and
 ε_main = 0.06, transitions gave n = 4,122 and ε_ord = 0.04. **Coverage is not supported at those
@@ -602,11 +637,18 @@ The figure is re-computed from the measured token counts on the card before the 
 Three states, as the first state variable's: **measured**, **untestable**, **not measured**, with the
 reason attached to each. Fixed here:
 
-- E1 in its original predictive-sufficiency form: **untestable**, by Facts 2 and 3.
-- E1 as decodability at matched rank: **measured**, with rank, depth and null on every figure.
-- E2: **measured**, with ε_ord and ε_sub named separately.
+- E1 in its original predictive-sufficiency form: **untestable**, by Facts 2 and 3. This one is
+  fixed now, because it is a property of the corpus and not of a run.
+- E1 as decodability at matched rank: **not measured**. It becomes *measured* when it has been
+  executed, and not before. A pre-registration that records its own estimands as measured is
+  describing an intention; the state is a fact about the run and this document has had none.
+- E2: **not measured**, on the same reasoning.
 - E3: **not measured**, pending the cache-exchange port.
 - H3 and the fine-tuning arm: **not measured**, not ordered.
+
+When E1 and E2 are executed their state changes with the figures beside it — rank, depth and null for
+E1, and ε_ord, ε_sub and the two subgroup epsilons for E2 — and the reason for any that stay *not
+measured* is written in the same line.
 
 After the capacity rule and the controls, an E1 advantage is still not "a richer representation of
 the task". On canonical plans under teacher forcing it is "encodes (family, step) more linearly", and
@@ -654,32 +696,34 @@ controls run, a measurement of the 12B being bigger.**
 
 ## 13. Where this stands, and what is open before sealing
 
-**Settled, and settled by measurement rather than by choice.** The corpus facts and their basis
-(§1); the correction that the repeated step indices are oversampled copies and not retries (§1.1);
-the capture unit, key and contract, including `forward_batch: 1` and the token index (§2); E1's
-relabelling as decodability at matched rank with its two nulls and the `pointer_chain` negative
-control (§4.1); E2's frozen retrieval — candidate set, tie policy, distance and aggregation (§4.2);
-the rank ladder, the fixed headline depth and rank, and the refusal of any figure without them (§5);
-the tolerances on the episode unit with their subgroups and the assumption they rest on (§7); the
-cross-fitting folds, computed and digested (§7.1); the storage table on the corrected unit (§8); the
-twelve exploratory episodes by rule (§9); the three-state reporting (§10); and precondition 1,
-checked on the device copy and passing (§11).
+**Settled by measurement rather than by choice.** The corpus facts and their basis (§1); the
+correction that the repeated step indices are oversampled copies and not retries (§1.1); the capture
+unit, key and contract, with its three digests, the checkpoint identity over the whole manifest, and
+the seam attesting while the writer checks (§2); E1's relabelling with its two nulls and the
+`pointer_chain` negative control (§4.1); E2's frozen retrieval, its metric named in its space, and
+the training eligibility mask (§4.2, §5); the rank ladder and fixed headline depth (§5); the
+tolerances at the paired range width, with their subgroups, their assumptions and the n each needs
+beside the n it has (§7); the cross-fitting folds, computed and digested (§7.1); the storage table on
+the corrected unit (§8); the twelve exploratory episodes by rule (§9); the three-state reporting,
+with E1 and E2 reading *not measured* until they are executed (§10); and precondition 1, checked on
+the device copy and passing (§11).
 
-**Open, and each is open for a stated reason rather than for want of a decision.**
+**Open, each for a stated reason.**
 
 1. **The carrier-ablation arm's removal rule** (§4.3). Measured not to exist for eleven of twelve
-   families, and possibly not constructible at all where the clause naming the next action is the
-   progress. The acceptance criterion and the harness are fixed; the rules are not written. The
-   re-read diagnostic does not depend on this and is orderable now.
-2. **E3** (§4.4) is not measured and not scheduled: it waits on WS-B's cache exchange, and its
-   absence is a stated gap rather than a silence.
-3. **§1.1's correction changes two rulings** — A1's retry clause has nothing to predict and A3's
-   occurrence index addresses byte-identical copies. Both are accepted by the Chief; they are listed
-   here because the order they amend is the document a later reader will find first.
-4. **The seal itself.** It follows Codex's file-only review of this draft and precedes the first
-   *reading* of any capture. It does not gate the capture pass, which runs on the card's schedule.
+   families, and possibly not constructible where the clause naming the next action is the progress.
+   The screen exists; the gate's byte-identity half is implemented by nothing, and the document says
+   so rather than implying otherwise. The re-read diagnostic does not depend on it and is orderable.
+2. **E3** (§4.4): not measured, not scheduled, waiting on WS-B's cache exchange.
+3. **The seal**, which follows Codex's file-only review of this draft and precedes the first
+   *reading* of any capture. The capture pass itself does not wait for it: §16.18 permits captures to
+   be made before the seal so long as none is read.
 
-**Mine, and flagged as mine rather than presented as settled:** E2's retrieval score in place of a
-derived tolerance (§4.2), the loosened ε_sub and its subgroups (§7), the choice to declare the
-rounded-up ε at three places where the honest-looking value is the unmet one (§7), and the fixed
-headline rank and depth (§5). Any of them is the Chief's to overturn before the seal.
+**Mine, and flagged as mine.** E2's retrieval score in place of a derived tolerance (§4.2); the
+subgroup epsilons and the decision to declare the rounded-up value at every stratum (§7); and the
+fixed headline rank and depth (§5). Any is the Chief's to overturn before the seal. The range-width
+convention was mine to flag and is now ruled, so it has left this list.
+
+**What this document is not.** Nothing in it has been run. Every figure is computed from the rendered
+corpus on the laptop, or measured on the card and cited to the record that measured it. The estimands
+read *not measured* because they are.
