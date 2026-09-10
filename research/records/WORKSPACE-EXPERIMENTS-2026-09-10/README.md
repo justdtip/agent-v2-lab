@@ -441,7 +441,7 @@ otherwise — a path is not an identity — with a three-case self-test in the r
 `run.json`; the capture script writes the digest into its manifest from v2.2 (c1dc5e93fea7) for every future
 capture. Regression 10:32–10:35Z: self-test 3 of 3; the one-row pass admitted; on the real 4B and 12B captures'
 metadata the guard reads the capture-time event and the true digest, and a capture without either is refused.
-Promoted on the card at 10:40Z, before the 12B W-3b, which therefore runs v3.4; the 4B repeat is re-armed behind
+Promoted on the card at 10:36Z, before the 12B W-3b, which therefore runs v3.4; the 4B repeat is re-armed behind
 `GO-W3B-4B-V34` (driver digest-guarded on v3.4).
 
 **W-2, the primary of W-4: linear decodability of the expert action at P_note and P_act (all 7,629
