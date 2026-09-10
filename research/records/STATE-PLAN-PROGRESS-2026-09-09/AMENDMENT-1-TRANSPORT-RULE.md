@@ -239,9 +239,13 @@ component restarts from the current cross-product, as §2 always specified — a
 
 **E1 is unaffected, shown rather than argued.** The defect lived only in the vector-target fitter,
 written after E1 was read. E1's fitter has a scalar target, so its direction is `Xᵀy` in closed form
-with no iteration and no restart; `read_e1.py` never imports the defective module; and E1 re-run on
-the fixed tree reproduces its readings **byte for byte**, digest
-`ba841d7c0601b6326c621c68701852140e92e931ced570cb2ca2dd03d36f303f`. E1 stands as recorded.
+with no iteration and no restart; `read_e1.py` never imports the defective module; and E1 re-run
+reproduces its readings **byte for byte**, digest
+`ba841d7c0601b6326c621c68701852140e92e931ced570cb2ca2dd03d36f303f`, with its four headline figures
+unchanged at 0.646, 0.073, 0.611 and 0.030. That re-run was repeated on the tree carrying the **SVD**
+fitter of revision 5 and gives the same digest again, so E1 is independent of both the defect and its
+fix. The seal was re-verified on the same tree: thirteen files matching, the baseline re-derived
+against `acc130a`, the document still passing its own checker. E1 stands as recorded.
 
 **Codex's review of revision 4 (657a08a, WSA-TRANSPORT-AMENDMENT-REVIEW-2026-09-10), applied by the
 Chief on 2026-09-10 as revision 5.** Four findings, all correct, all applied:
