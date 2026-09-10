@@ -51,7 +51,7 @@ an estimate with a bound.
 
 ## Scripts
 
-`scripts/steer_pilot.py` (948c91086e45), `scripts/chief_pilot_gated.sh` (5192a4b80905; starts on the W-3b
+`scripts/steer_pilot.py` (b3b676a0467c), `scripts/chief_pilot_gated.sh` (5192a4b80905; starts on the W-3b
 pass's start line, seat chief-pilot, expandable segments, from `/workspace/chief`), `scripts/pilot_test.sh`
 (the one-recipient CPU smoke test). Output `captures/pilot-4b/`:
 `run.json` (identity, pairs, seed), `pilot.jsonl` per recipient, `manifest.json` at the end.
@@ -64,6 +64,42 @@ file name, so no path was classified (the run uses 48 tokens, enough for the lon
 observation, on one row: at layer 20 the operation donor produced a well-formed `calculate` call
 (`{"expression": "10 + 10"}`) where every other arm kept `read_file`; at layer 8 nothing switched. The
 base model's own baseline began the expert's directory (`lab/train1/0227`).
+
+## Codex's review of the pilot before its run (59e6b11, local to Codex's worktree), applied
+
+Five findings, all reproduced by Codex with model-free fixtures and all correct. **F1**, a crash: an
+operation donor (a `calculate` step) has no path, and where the model kept a complete `read_file` call
+the classifier split `None`; the 20-token smoke test truncated every path and never reached the branch,
+and the run would have died at its first recipient. **F2**: the same-state invalidation the design
+promised was recorded, not applied. **F3**: a "switch" was donor agreement, not a change from the
+model's own baseline. **F4**: truncated calls carrying a donor path counted. **F5**: the selector did
+not enforce one recipient per episode, and the reporter admitted missing, duplicate or unfinished stores.
+
+Applied in the producer: path outcomes are inapplicable (None) for a pathless donor, never a crash;
+every outcome is a paired state from the model's own baseline call to the arm's call on jointly
+complete calls (unchanged / switched_to_donor / changed_to_other, for the path and for the tool),
+donor agreement kept as a descriptive label; the same-state arm is a hard stop; the selector admits one
+decision per episode; the baseline's prefill residuals at the patch site are compared with the direct
+forward's capture (a hard stop beyond 1e-4, the figure recorded); the manifest names the requested
+recipients. In the reporter: admission (manifest, exact requested set, unique episodes, every layer and
+prescribed arm present, patch applied once, prefill check) before any count; a (row, layer) whose
+same-state failed is void and excluded; switches require jointly complete calls and a change from the
+baseline; the full cohort stays the denominator with the invalid pairs counted; an empty or incomplete
+store is refused. `scripts/pilot_classify_fixtures.py` runs Codex's cases (and three more) on the
+script's own source: eight pass. The smoke test re-ran with the full 48-token budget and two recipients
+so that the crash branch is exercised (result below).
+
+**Second smoke test (CPU, two recipients from two episodes, layers 8 and 20, 48 tokens).** Both
+baselines reproduce the expert's exact call (tool and path); the generate prefill's residuals at the
+patch site equal the direct forward's to the bit (difference 0.0 at both layers); same-state identical
+everywhere; every patch applied once; the reporter admits with no void cell. On these two rows the
+operation donor at layer 20 produced a well-formed `calculate` call in both (`10 + 10`, `24 + 60`), at
+layer 8 nothing moved, and no path arm switched at either layer. Two rows: a mechanism check, not a
+reading. The reporter's refusal fixtures (`scripts/pilot_reporter_fixtures.sh`) on corrupted copies of
+that output: a duplicated row refused; a failed same-state at one (row, layer) admitted with that cell
+void and the operation switch count at that layer falling from two to one; a missing manifest refused;
+an empty store refused; a patch applied zero times refused. Digests as armed on the card:
+`steer_pilot.py` b3b676a0467c, `steer_pilot_analyze.py` 7f646b820e82.
 
 ## Results
 

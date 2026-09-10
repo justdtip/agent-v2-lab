@@ -75,11 +75,14 @@ for i in cands:
 # balanced over steps 2, 3, 4
 per_step = {s: [p for p in pairs if INFO[p["recipient"]]["step"] == s] for s in (2, 3, 4)}
 for s in (2, 3, 4): rng.shuffle(per_step[s])
-chosen, k = [], 0
-while len(chosen) < args.n_recipients and any(per_step[s] for s in (2, 3, 4)):  # round-robin over steps, balanced for any N
+chosen, k, used_bases = [], 0, set()
+while len(chosen) < args.n_recipients and any(per_step[s] for s in (2, 3, 4)):  # round-robin over steps, one recipient per episode (Codex 59e6b11 F5)
     st = (2, 3, 4)[k % 3]; k += 1
-    if per_step[st]: chosen.append(per_step[st].pop())
-emit("pairs", candidates=len(cands), pairs_available=len(pairs), chosen=len(chosen), per_step={s: sum(1 for p in chosen if INFO[p["recipient"]]["step"] == s) for s in (2, 3, 4)},
+    while per_step[st]:
+        cand = per_step[st].pop()
+        if INFO[cand["recipient"]]["base"] not in used_bases: used_bases.add(INFO[cand["recipient"]]["base"]); chosen.append(cand); break
+assert len({INFO[p["recipient"]]["base"] for p in chosen}) == len(chosen), "a recipient episode repeats"
+emit("pairs", candidates=len(cands), pairs_available=len(pairs), chosen=len(chosen), unique_episodes=len({INFO[p["recipient"]]["base"] for p in chosen}), per_step={s: sum(1 for p in chosen if INFO[p["recipient"]]["step"] == s) for s in (2, 3, 4)},
      with_operation_donor=sum(1 for p in chosen if p["operation"] is not None), corpus_sha256=corpus_sha)
 
 # ---- the model
@@ -132,11 +135,11 @@ def residuals_at(i):
     assert set(store) == set(LAYERS), f"recorded {sorted(store)} of {LAYERS}"
     return store, pos
 
-def generate(ids, pos, vecs):
-    STATE["record"] = None; STATE["patch"] = (pos, vecs) if vecs else None; STATE["patch_applied"] = 0
+def generate(ids, pos, vecs, record_store=None):
+    STATE["record"] = (pos, record_store) if record_store is not None else None; STATE["patch"] = (pos, vecs) if vecs else None; STATE["patch_applied"] = 0
     with torch.no_grad():
         out = model.generate(input_ids=ids, max_new_tokens=args.max_new_tokens, do_sample=False, num_beams=1, use_cache=True, output_scores=True, return_dict_in_generate=True, pad_token_id=tok.pad_token_id)
-    STATE["patch"] = None
+    STATE["patch"] = None; STATE["record"] = None
     new = out.sequences[0, ids.shape[1]:].tolist(); text = tok.decode(new)
     first = out.scores[0][0].float(); t = first[tool_ids]; top_tool = TOOLS[int(torch.argmax(t))]
     return {"ids": new, "text": text, "first_top_tool": top_tool, "first_tool_logits": {TOOLS[j]: float(t[j]) for j in range(6)}, "patch_applied": STATE.get("patch_applied", 0)}
@@ -153,12 +156,26 @@ def parse(text, expert_tool_prefix=True):
         valid = False
     return {"tool": tool, "path": path, "valid_json": valid}
 
-def classify(parsed, rec, donor, baseline_path):
-    p = parsed["path"]
-    cls = "recipient" if p is not None and p == rec["path"] else "donor" if (donor is not None and p is not None and p == donor["path"]) else "none" if p is None else "other"
-    return {"path_class": cls, "path_equals_baseline": (p == baseline_path) if p is not None else None, "tool_preserved": parsed["tool"] == rec["tool"], "tool_equals_donor": (donor is not None and parsed["tool"] == donor["tool"]),
-            "directory_switched": (p is not None and donor is not None and p.rsplit("/", 1)[0] == donor["path"].rsplit("/", 1)[0] and p.rsplit("/", 1)[0] != rec["path"].rsplit("/", 1)[0]),
-            "file_switched_same_directory": (p is not None and donor is not None and p.rsplit("/", 1)[0] == rec["path"].rsplit("/", 1)[0] and p.rsplit("/", 1)[1] == donor["path"].rsplit("/", 1)[1] and p != rec["path"])}
+def classify(parsed, rec, donor, base_p):
+    """Outcomes are paired changes from the model's own baseline call (base_p), on complete calls; donor agreement is kept
+    as a descriptive label; a donor without a path makes every path outcome inapplicable (None), never a crash."""
+    p, t, ok = parsed["path"], parsed["tool"], parsed["valid_json"]
+    bp, bt, bok = base_p["path"], base_p["tool"], base_p["valid_json"]
+    dp = donor["path"] if donor else None; dt = donor["tool"] if donor else None
+    path_class = "recipient" if (p is not None and p == rec["path"]) else "donor" if (dp is not None and p is not None and p == dp) else "none" if p is None else "other"
+    jointly_valid = bool(ok and bok)
+    path_state = (None if not jointly_valid else "unchanged" if p == bp else "switched_to_donor" if (dp is not None and p == dp) else "changed_to_other")
+    tool_state = (None if not jointly_valid else "unchanged" if t == bt else "switched_to_donor" if (dt is not None and t == dt) else "changed_to_other")
+    def split(x): return x.rsplit("/", 1) if (x is not None and "/" in x) else (None, x)
+    out = {"path_class": path_class, "tool_equals_expert": t == rec["tool"], "tool_equals_donor": (dt is not None and t == dt), "tool_equals_baseline": t == bt,
+           "path_equals_baseline": (p == bp) if (p is not None and bp is not None) else None, "jointly_valid": jointly_valid, "path_state": path_state, "tool_state": tool_state,
+           "switched_to_donor_path": bool(path_state == "switched_to_donor"), "switched_to_donor_tool": bool(tool_state == "switched_to_donor")}
+    if dp is not None and p is not None and bp is not None:
+        pd, pf = split(p); dd, df = split(dp); bd, bf = split(bp)
+        out["directory_switched_to_donor"] = bool(pd == dd and pd != bd); out["file_switched_same_directory"] = bool(pd == bd and pf == df and p != bp)
+    else:
+        out["directory_switched_to_donor"] = None; out["file_switched_same_directory"] = None
+    return out
 
 results_fh = (OUT / "pilot.jsonl").open("w"); n_rows = 0
 (OUT / "run.json").write_text(json.dumps({"schema_version": 1, "seat": "chief", "script_sha256": SCRIPT_SHA, "checkpoint": args.snapshot, "load_report_sha256": report.get("sha256"), "corpus": args.corpus, "corpus_sha256": corpus_sha,
@@ -167,31 +184,38 @@ results_fh = (OUT / "pilot.jsonl").open("w"); n_rows = 0
 for n, pair in enumerate(chosen):
     ri = pair["recipient"]; rec = INFO[ri]; ids, pos = prefix_ids(ri)
     own, own_pos = residuals_at(ri); assert own_pos == pos
-    donors = {}
+    donors, donor_pos = {}, {}
     for arm in ("opposite_target", "pending_file", "operation", "unrelated_family"):
         j = pair.get(arm)
         if j is None: continue
-        vecs, _ = residuals_at(j); donors[arm] = (j, vecs)
-    base = generate(ids, pos, None); base_p = parse(base["text"]); baseline_path = base_p["path"]
-    row = {"n": n, "recipient": rec, "P_act": pos, "S": int(ids.shape[1]), "donors": {arm: INFO[j] for arm, (j, _) in donors.items()},
-           "baseline": {**base, **base_p, **classify(base_p, rec, None, baseline_path), "expert_path_reproduced": base_p["path"] == rec["path"], "expert_tool_reproduced": base_p["tool"] == rec["tool"]}, "layers": {}}
+        vecs, dpos = residuals_at(j); donors[arm] = (j, vecs); donor_pos[arm] = dpos
+    prefill = {}
+    base = generate(ids, pos, None, record_store=prefill); base_p = parse(base["text"])
+    # the generate prefill's residuals at the patch site must equal the direct forward's (the donor/own captures): recorded, a hard stop beyond 1e-4
+    pdiff = {L: float((prefill[L] - own[L]).abs().max()) for L in LAYERS}
+    assert max(pdiff.values()) <= 1e-4, f"recipient {ri}: generate prefill residuals differ from the direct forward by {pdiff}"
+    baseline = {**base, **base_p, **classify(base_p, rec, None, base_p), "expert_path_reproduced": base_p["path"] == rec["path"], "expert_tool_reproduced": base_p["tool"] == rec["tool"]}
+    row = {"n": n, "recipient": rec, "P_act": pos, "S": int(ids.shape[1]), "donors": {arm: {**INFO[j], "P_act": donor_pos[arm]} for arm, (j, _) in donors.items()},
+           "prefill_vs_direct_residual_max_abs_diff": pdiff, "baseline": baseline, "layers": {}}
     for L in LAYERS:
         lay = {}
         ss = generate(ids, pos, {L: own[L]}); ss_p = parse(ss["text"])
-        lay["same_state"] = {**ss, **ss_p, **classify(ss_p, rec, None, baseline_path), "identical_to_baseline": ss["ids"] == base["ids"]}
+        lay["same_state"] = {**ss, **ss_p, **classify(ss_p, rec, None, base_p), "identical_to_baseline": ss["ids"] == base["ids"]}
         assert ss["patch_applied"] == 1, f"same-state patch applied {ss['patch_applied']} times at layer {L}"
+        assert lay["same_state"]["identical_to_baseline"], f"recipient {ri}, layer {L}: the same-state arm did not reproduce the baseline (instrument failure, not a result)"
         for arm, (j, vecs) in donors.items():
-            g = generate(ids, pos, {L: vecs[L]}); gp = parse(g["text"]); lay[arm] = {**g, **gp, **classify(gp, rec, INFO[j], baseline_path)}
+            g = generate(ids, pos, {L: vecs[L]}); gp = parse(g["text"]); lay[arm] = {**g, **gp, **classify(gp, rec, INFO[j], base_p)}
             assert g["patch_applied"] == 1, f"{arm} patch applied {g['patch_applied']} times at layer {L}"
         row["layers"][str(L)] = lay
     results_fh.write(json.dumps(row, default=str) + "\n"); results_fh.flush(); n_rows += 1
-    emit("recipient", n_done=n + 1, of=len(chosen), task=rec["task_id"], step=rec["step"], baseline_path_class=row["baseline"]["path_class"], baseline_tool=base_p["tool"],
-         same_state_identical_all_layers=all(row["layers"][str(L)]["same_state"]["identical_to_baseline"] for L in LAYERS),
-         switches={arm: [L for L in LAYERS if row["layers"][str(L)].get(arm, {}).get("path_class") == "donor" or (arm == "operation" and row["layers"][str(L)].get(arm, {}).get("tool_equals_donor"))] for arm in donors},
+    emit("recipient", n_done=n + 1, of=len(chosen), task=rec["task_id"], step=rec["step"], baseline_valid=base_p["valid_json"], baseline_tool=base_p["tool"], baseline_path=base_p["path"],
+         prefill_residual_max_abs_diff=max(pdiff.values()),
+         switches={arm: [L for L in LAYERS if row["layers"][str(L)][arm]["switched_to_donor_path"] or row["layers"][str(L)][arm]["switched_to_donor_tool"]] for arm in donors},
          peak_gib=round(torch.cuda.max_memory_allocated() / 2**30, 2) if args.device.startswith("cuda") else None)
 for h in handles: h.remove()
 results_fh.close()
 (OUT / "manifest.json").write_text(json.dumps({"schema_version": 1, "rows_written": n_rows, "script_sha256": SCRIPT_SHA, "layers": LAYERS, "recipients": len(chosen),
     "claim_ceiling": "a whole-residual swap is a localisation test: a donor-consistent switch is a counterfactual effect on the generated call at that layer, not identification of a target component, not task success; the expert's note is teacher-forced; the base model's own baseline call is scored beside the expert's",
-    "same_state_control": "the recipient's own residual re-injected at the same layer must reproduce the baseline token for token", "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, indent=2) + "\n")
+    "same_state_control": "the recipient's own residual re-injected at the same layer must reproduce the baseline token for token (a hard stop in this producer; the reporter voids a layer regardless)",
+    "outcomes": "paired changes from the model's own baseline call on jointly complete calls; donor agreement descriptive; path outcomes inapplicable for a pathless donor", "requested_recipients": [p["recipient"] for p in chosen], "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, indent=2) + "\n")
 emit("done", recipients=n_rows, minutes=round((time.monotonic() - T0) / 60, 1))
