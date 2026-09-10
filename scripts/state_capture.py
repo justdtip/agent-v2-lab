@@ -85,6 +85,16 @@ def main(argv: list[str] | None = None) -> int:
          bos_token_id=bos)
 
     def forward(row: dict) -> dict:
+        """Run the pass and **attest to the pass that ran**, not to the pass that was intended.
+
+        Every field returned here is read back from the objects that did the work — the tensor's own
+        leading dimension, the residual's own dtype, the digest of the bytes handed to the tokenizer
+        and of the ids it returned. The writer compares these to the contract and refuses on a gap.
+        It used to stamp the contract's constants into the cell itself, which meant a seam that
+        expanded a batch or promoted its arithmetic was recorded as width 1, native (Codex C1).
+        """
+        import hashlib
+
         ids = tokenizer(row["prompt"], add_special_tokens=False)["input_ids"]
         if bos is not None and len(ids) > 1 and ids[0] == bos and ids[1] == bos:
             raise SystemExit(
@@ -101,10 +111,24 @@ def main(argv: list[str] | None = None) -> int:
             residuals = torch.stack(
                 [recorder.activations[i][0, position].detach().clone() for i in every]
             )
+        moved = residuals.cpu()
         return {
-            "residuals": residuals.cpu(), "seq_len": int(tensor.shape[-1]),
-            "token_index": int(position), "layers": n_layers, "d_model": d_model,
-            "device": str(residuals.device), "dtype": str(residuals.dtype),
+            "residuals": moved,
+            "seq_len": int(tensor.shape[-1]),
+            "token_index": int(position),
+            "layers": n_layers,
+            "d_model": d_model,
+            "device": str(residuals.device),
+            "dtype": str(moved.dtype),
+            # Observed, never declared: the batch this forward actually ran at is the tensor's own
+            # leading dimension, and the arithmetic path is native exactly when the residual came
+            # back in the model's own dtype rather than a promoted one.
+            "forward_batch": int(tensor.shape[0]),
+            "anchor_batch": int(tensor.shape[0]),
+            "capture_dtype": "native" if str(moved.dtype) == observed else "promoted-float32",
+            "rendered_prompt_sha256": hashlib.sha256(row["prompt"].encode()).hexdigest(),
+            "token_ids_sha256": hashlib.sha256(json.dumps(list(ids)).encode()).hexdigest(),
+            "token_ids_length": len(ids),
         }
 
     decisions = [json.loads(line) for line in args.capture_set.read_text().splitlines() if line.strip()]

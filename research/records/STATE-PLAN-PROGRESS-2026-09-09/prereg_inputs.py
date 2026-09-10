@@ -67,10 +67,12 @@ def main(argv: list[str] | None = None) -> int:
                     "split": split,
                     "ordinal": ordinal,
                     "meta": meta,
-                    # The prompt the model is given at this decision, and the whole row beside it.
-                    # A3 wants the prompt digest in the manifest; the row digest is what settles
-                    # whether a repeated key is a second decision or the same one written twice.
-                    "prompt_sha256": sha(row.get("messages", [])[:-1]),
+                    # The **messages** the model is given at this decision, and the whole row
+                    # beside it. This is canonical JSON over the semantic record and not the bytes
+                    # the model reads, so it is named for what it is: two rows with one message
+                    # record and different rendered prompts share it. The capture binds the
+                    # rendered prompt's byte digest and the ids consumed separately, at the seam.
+                    "messages_sha256": sha(row.get("messages", [])[:-1]),
                     "row_sha256": sha(row),
                 }
             )
@@ -97,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
                 "difficulty": int(meta.get("difficulty", -1)),
                 "recovery": bool(meta.get("recovery")),
                 "rendered_rows": len(items),
-                "prompt_sha256": first["prompt_sha256"],
+                "messages_sha256": first["messages_sha256"],
                 "row_ordinals": sorted(item["ordinal"] for item in items),
             }
         )
@@ -193,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
             "rendered_rows_per_decision": dict(sorted(oversampled.items())),
             "extra_rows_from_oversampling": sum(len(v) - 1 for v in groups.values()),
             "repeated_keys_that_are_not_identical_rows": inconsistent,
-            "capture_set_sha256": sha([[d["task_id"], d["step"], d["prompt_sha256"]] for d in decisions]),
+            "capture_set_sha256": sha([[d["task_id"], d["step"], d["messages_sha256"]] for d in decisions]),
         },
         "tasks": {
             "total": len(steps),

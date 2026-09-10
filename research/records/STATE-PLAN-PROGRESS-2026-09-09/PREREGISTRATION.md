@@ -27,10 +27,12 @@ labelled:
 | | digest | what it fixes |
 |---|---|---|
 | the set | `1a7cfbdd4e21fc203eafbcc3ec50b96afcb214c169f21c7ba968ca83dfc9709a` | the logical triples `(task_id, step, prompt_sha256)`, in order — what is to be captured |
-| the file | `98c78f1674902575ba87135edcfec409d3e82c6331e155a3ab7da6d22b731a4d` | the bytes of `capture-set.jsonl` — what was shipped |
+| the file | `8bbc8062249ce1cc0e15050a866cd726a2c205a969f3eeab3840fcb5520cee3e` | the bytes of `capture-set.jsonl` — what was shipped |
 
 The first is the one that must survive a re-run on another machine, since it is invariant to
-formatting; the second is the one that says the file on the card is the file written here.
+formatting; the second is the one that says the file on the card is the file written here. Renaming
+`prompt_sha256` to `messages_sha256` moved the second and left the first untouched, which is what
+that distinction is for.
 
 ---
 
@@ -128,9 +130,27 @@ the position whose readout produces the first token of the model's turn.
 
 **Key.** `(task_id, step)`. The manifest carries, per captured cell: `task_id`, `step`, `split`,
 `family`, `variant`, `difficulty`, `recovery`, `rendered_rows` (the oversampling multiplicity),
-`prompt_sha256`, the row ordinals the decision was rendered at, the checkpoint digest, the layer,
-the decoding mode, `capture_dtype: native`, the device reading, and the `basis` field per cell. The
-ground truth is stored beside the cell and comes from the task, never from the model.
+`row_ordinals`, the checkpoint identity, the layer count and width, the decoding mode, the device
+reading, and the `basis` field. The ground truth is stored beside the cell and comes from the task,
+never from the model.
+
+**Three digests, because they are three different claims.** `messages_sha256` is canonical JSON over
+`messages[:-1]` — the semantic record the capture set was enumerated under, and **not** the model's
+input; two rows with one message record and different rendered prompts share it. It was called
+`prompt_sha256`, which reads as the model's input and is neither. `rendered_prompt_sha256` is the
+byte digest of the string that was tokenized. `token_ids_sha256`, with `token_ids_length`, is the ids
+actually consumed. The capture boundary checks the second against the row it is about to forward, and
+the resume check verifies both, because a semantic digest cannot see a change in the bytes.
+
+**The checkpoint identity is a digest over the loader's complete manifest**, every weight shard and
+the config, with the config's own digest recorded separately as `config_sha256`. The config digest
+alone is not an identity: two checkpoints with one config and different weights would share it.
+
+**The seam attests; the writer checks.** The batch width, the anchor width, the arithmetic path, the
+position, the dtype and the shape are recorded from what the forward pass reports about itself, and
+the writer refuses any that disagree with this contract. It does not write the contract's constants
+into the cell — a writer that supplies the answers checks only itself, and a pass that ran at another
+width or on a promoted path would be recorded as conforming.
 
 **Two fields the first draft did not carry, both required.**
 
