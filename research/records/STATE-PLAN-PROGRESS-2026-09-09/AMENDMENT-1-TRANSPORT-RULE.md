@@ -103,11 +103,10 @@ transitions only, the rule form must be shown capable of passing.**
 > rank, on **both** models, `T_r(x_k)` must be strictly nearer to `x_{k+1}` than to `x_k`. If it
 > fails, no corrective stratum is scored, the amendment is revised, and the record says so.
 
-**Measured, out of fold, on the 4,122 ordinary train transitions at the headline depth**, with the
-fitter's restart defect fixed (§10). **Provisional**: these figures were produced by the
-power-iteration fitter that §10 records as defective in two further ways (Codex F1). They are
-re-measured with the SVD fitter of §2 before the seal and replaced here; the gate is read on the
-re-measured figures, and the record says whether they moved.
+**Measured with the SVD fitter of §2**, out of fold on the sealed assignment, on the 4,122 ordinary
+train transitions at the headline depth. Produced by `measure_gate.py`, which is in the record beside
+this table so the measurement can be replayed rather than trusted; its output is `gate-table.json`.
+Every fold yielded a full 32 components on both models.
 
 | rank | 1 | 2 | 4 | 8 | 16 | 32 |
 |---|---:|---:|---:|---:|---:|---:|
@@ -115,6 +114,14 @@ re-measured figures, and the record says whether they moved.
 | 12B, layer 24 | 0.552 | 0.588 | 0.671 | **0.751** | 0.892 | 0.954 |
 
 The gate passes on both models at the headline rank.
+
+**Nothing moved.** The provisional table, measured with the power-iteration fitter §10 records as
+defective, is reproduced here to every quoted digit. The largest difference between the two fitters
+at any cell is **0.00049**, which is inside the rounding of the three-decimal figures themselves, so
+the two agree to at least three decimals on this population. That is a fact about this population and
+not a defence of the old fitter: F1's defect was real — a start vector that certifies a direction it
+did not verify is leading — and it simply did not bite here. The SVD fitter is the one the seal
+carries.
 
 **The headline rank's fraction is also a mandatory capability report.** E2's hit rate at r = 8 is
 printed beside the table's headline-rank figures unconditionally, at every depth and in the record,
@@ -263,7 +270,12 @@ Chief on 2026-09-10 as revision 5.** Four findings, all correct, all applied:
   on the same rows, depth, rank, transition cost and averaging weights. §5 now states the bound's
   exact scope and calls the figure a capability reference everywhere else.
 
-**Consequence for §5.** Its gate table was measured with the fitter F1 describes. It is labelled
-provisional and is re-measured with the SVD fitter before the seal; the gate is read on the
-re-measured figures.
+**Consequence for §5, now discharged.** Its gate table had been measured with the fitter F1
+describes. It was re-measured with the SVD fitter on 2026-09-10, out of fold on the same 4,122
+ordinary train transitions, the same sealed assignment and the same depth, by `measure_gate.py`,
+which is in the record so the measurement can be replayed. **No figure moved at the quoted
+precision** — the largest difference at any cell is 0.00049, inside the rounding of three decimals —
+and every fold yielded a full 32 components on both models. §5 now carries the re-measured table and
+the gate is read on it. That the two fitters agree here is a fact about this population, not a
+defence of the old one.
 
