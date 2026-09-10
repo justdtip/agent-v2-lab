@@ -309,10 +309,14 @@ from the queue's remaining length and from the pending list — five carriers in
 after 3 of 6", "loads so far: …; highest so far: …; Reading service 3 of 5"). Removing the counter
 alone removes a label.
 
-**So a removal rule is accepted only against a measurement, and `carrier_ablation.py` is it.** For
-each episode it strips a candidate clause from every note and reports the mean share of steps still
-told apart by what is left: 1.0 means the rule removed a label and left the carrier, and the floor of
-1/n means the notes have become indistinguishable and the step is no longer readable from them.
+**So a removal rule is accepted only against a measurement, and `carrier_ablation.py` is the
+*screen* for it — not the gate.** For each episode it strips a candidate clause from every note and
+reports the mean share of steps whose note remains a **distinct string**: 1.0 means the rule
+certainly did not remove the carrier. A low share is a screen passed and not the gate met, because
+distinctness is a property of strings — a step can be recoverable from text that repeats, or
+unrecoverable from text differing in an irrelevant token. **The two-part gate below is not
+implemented**: the byte-identity half is checked by nothing today, and no figure from this script
+should be read as the gate having been applied.
 
 | candidate rule | families moved off 1.0 |
 |---|---|
@@ -408,11 +412,24 @@ own order counted episodes for the same reason. So each episode contributes one 
 its own mean, and n is the number of held-out episodes. Both computations are below, because the
 correction is the interesting part and hiding the first one would hide it.
 
-| | evaluation set | unit | n | ε declared | needs n ≥ |
-|---|---|---|---:|---:|---:|
-| ε_main | E1 on the test split | episodes | 240 | **0.17** | 214 |
-| ε_ord | E2 ordinary transitions, train split | episodes | 840 | **0.09** | 763 |
-| ε_sub | E2 corrective transitions | episodes (one each) | 553 | **0.11** | 511 |
+**Every one of the M = 12 quantities is a paired contrast, and the bound must say so.** Each is a
+score and its null computed on the *same* held-out episodes, so the observation is a difference
+spanning [−1, 1] and not a mean spanning [0, 1]. The helper's `ln(2M/α)/ε²` is the single-mean form;
+a paired difference of accuracies needs `2 ln(2M/α)/ε²`, and `required_n` now takes the range width
+rather than carrying a second formula. Bounding a contrast as though it were a single [0, 1] mean
+claims a resolution its own range does not support, which is what the first draft did.
+
+| | evaluation set | unit | n | ε declared | needs n ≥ | spare |
+|---|---|---|---:|---:|---:|---:|
+| ε_main | E1 on the test split | episodes | 240 | **0.23** | 234 | 6 |
+| ε_ord | E2 ordinary transitions, train split | episodes | 840 | **0.13** | 731 | 109 |
+| ε_sub | E2 corrective transitions | episodes (one each) | 553 | **0.15** | 549 | 4 |
+
+*A note on the convention, because it is not the textbook one.* At range width 1 the helper returns
+`ln(2M/α)/ε²`, which is **twice** the textbook Hoeffding `w²ln(2M/α)/(2ε²)`; the repository's
+existing closed-form checks pin it and it is kept so that no published figure moves. At width 2 the
+two coincide exactly, so the paired figures above are the standard ones while any single-mean figure
+elsewhere in this programme stays conservative. Flagged for the Chief rather than silently resolved.
 
 *Superseded, kept for the comparison, and marked:* counting decisions gave n = 1,781 and
 ε_main = 0.06, transitions gave n = 4,122 and ε_ord = 0.04. **Coverage is not supported at those
@@ -424,16 +441,16 @@ stratum is two populations that differ structurally (§4.2): the contiguous tran
 decision before the correction is itself observed, and those spanning a step with no rendered row.
 Reporting either against the pooled 0.11 would claim a resolution its own n does not support.
 
-| stratum | episodes | exact ε | **declared** | needs n ≥ |
-|---|---:|---:|---:|---:|
-| corrective, pooled | 553 | 0.1057 | **0.11** | 511 |
-| contiguous (`transient`) | 244 | 0.1591 | **0.16** | 242 |
-| across a gap | 309 | 0.1414 | **0.15** | 275 |
+| stratum | episodes | exact ε | **declared** | needs n ≥ | spare |
+|---|---:|---:|---:|---:|---:|
+| corrective, pooled | 553 | 0.1494 | **0.15** | 549 | 4 |
+| contiguous (`transient`) | 244 | 0.2250 | **0.23** | 234 | 10 |
+| across a gap | 309 | 0.1999 | **0.20** | 309 | **0** |
 
-**The across-a-gap subgroup declares 0.15 and not 0.14**, for the same reason ε_main is 0.17 and not
-0.16: 0.14 requires 315 episodes and there are 309. Six short. That is the second time in this
-section that the honest-looking rounding is the unmet one, which is why every row above carries the
-n it needs beside the n it has.
+**The across-a-gap subgroup is met exactly and with nothing to spare**: 0.20 requires 309 episodes
+and there are 309. Every row here carries the n it needs beside the n it has, because at the previous
+range width two of these declarations were rounded to a value the corpus did not support, and a row
+that shows only the declared ε cannot be checked by a reader at all.
 
 **Independence between episodes is an assumption, and it is stated rather than relied on silently.**
 The bound treats each episode's mean as one independent bounded observation. Episodes within a family
@@ -442,15 +459,21 @@ independent draws from an arbitrary distribution; what the bound covers is infer
 episodes of the same task distribution**, which is the target this document claims and not a broader
 one. A family-level effect would not be detected by it.
 
-**An episode-level bootstrap is declared beside the Hoeffding form, for the drop rule.** Hoeffding
-assumes only boundedness and ignores the observed variance, so it is the distribution-free floor and
-will be conservative. The drop rule reads a bootstrap over episodes — resampling episodes, not
-decisions — at the same α, and the Hoeffding numbers stay beside it as the floor. Both are reported
-for every quantity; where they disagree the wider one governs the claim.
+**An episode-level bootstrap is declared beside the Hoeffding form, for the drop rule, and it is
+paired.** The drop rule reads a bootstrap over episodes — resampling episodes, not decisions — at the
+same α. Because every quantity is a score and its null on the same episodes, the resampling index is
+drawn **once and applied to both arms**: `paired_bootstrap_bounds`, which requires equal lengths and
+refuses otherwise. The production helper named `paired_bootstrap_lower_bound` previously called the
+independent-arm version, so the name asserted a property the code did not have; it is fixed, and the
+independent-arm function keeps its own name for the case it is right for. Frozen here: the pairing,
+the scope (episodes), the seed (20260910), that the folds are refitted within each resample, and the
+stratification by `(split, family, variant)`.
+
+Both are reported for every quantity, and where they disagree the wider one governs the claim.
 
 **ε_main is 0.17 and not 0.16.** The bound at 240 episodes is 0.1604, so 0.16 would be the honest
 figure to a reader — but declaring 0.16 requires n ≥ 242, and there are 240 test episodes. Two short.
-The declared value rounds **up** or the guarantee is not met, and a threshold that misses by two is
+The declared value rounds **up** or the condition is not met, and a threshold that misses by two is
 exactly the kind that gets rounded into existence after the fact.
 
 **ε_sub stands at 0.11 and is still a loosening**, now for a plainer reason than before: there are
@@ -459,15 +482,17 @@ reaches n at ε_main. The alternative to loosening is not reporting the primary 
 stratum at all. This is the existing budget rule's shape — loosen ε_sub, write both numbers and the
 reason, before the run — applied to a population limit rather than a device-time one.
 
-**What the run can claim, given these.** At ε_main = 0.17, E1 can support a claim that one model's
-decodability exceeds a null by more than about seventeen points of accuracy, and cannot support a
-claim about a smaller gap. That is a real weakening against the draft's 0.06 and it is the true
-resolution of this corpus at this M. If the eventual gap is smaller than that, the finding is
-"below the pre-registered resolution", not "no effect" — and it is reported in those words.
+**What the run can claim, given these.** At ε_main = 0.23, E1 can support a claim that one model's
+decodability exceeds a null by more than about twenty-three points of accuracy, and cannot support a
+claim about a smaller gap. That is a substantial weakening against the draft's 0.06, and it is the
+resolution **declared** for this corpus at this M — not a coverage statement, because the assumptions
+below do not hold exactly. If the eventual gap is smaller, the finding is "below the pre-registered
+resolution", not "no effect", and it is reported in those words.
 
-*An episode-level bootstrap would be tighter than Hoeffding here, since Hoeffding assumes only
-boundedness and ignores the observed variance. If the Chief prefers one, these Hoeffding numbers stay
-beside it as the distribution-free floor; the seal can carry both. Flagged, not chosen.*
+*An episode-level bootstrap is usually tighter than Hoeffding, which assumes only boundedness and
+ignores the observed variance. Both are carried, and neither is a guarantee here: see the assumptions
+below and §7.1 — the episodes are not independent draws and the cross-fitted scores share training
+data, so **every ε in this section is a declared resolution and not a coverage statement**.*
 
 **The drop rule is inherited unchanged**: a quantity whose bootstrap bound on its contrast does not
 exceed zero is dropped with its reason, and nothing is added to M after the pilot.
@@ -495,13 +520,22 @@ folds cannot move afterwards.
 | 3 | 224 | 112 | 48 | 34 | 12 | 12 | 6 |
 | 4 | 226 | 109 | 49 | 38 | 12 | 12 | 6 |
 
-**And the limitation the bound inherits from cross-fitting, stated here.** The K models share
-training episodes with one another, so the out-of-fold predictions are not independent across folds
-even though each is out-of-sample for its own episode. The concentration bound is applied to the
-episode-level scores as if they were independent, which the sharing makes an approximation rather
-than a guarantee. It is the same approximation the first state variable's design makes, it is why the
-bootstrap in §7 resamples episodes, and naming it is the difference between a stated limitation and
-an unnoticed one.
+**And the limitation the bound inherits from cross-fitting, which is why §7's epsilons are declared
+resolutions and not coverage.** The K models share training episodes with one another, so the
+out-of-fold scores are **not** independent across folds even though each is out-of-sample for its own
+episode. Codex's parity example makes the size of it concrete: five held-out errors that are
+identical to one another have variance 0.25 where independence would give 0.05. The concentration
+bound is applied to the episode-level scores as if they were independent, and the sharing makes that
+an **approximate, assumption-dependent summary** rather than a guarantee — the word "guarantee" does
+not appear about it anywhere in this document, and neither does "distribution-free floor", because
+neither is true of what is computed here.
+
+Three assumptions are therefore stated rather than relied on: that episodes are independent draws
+from the task distribution, which families sharing a generator template make approximate; that the
+out-of-fold scores are independent, which the shared training episodes make false and which the
+paired bootstrap does not repair either; and that the scores are bounded, which alone is exact. What
+the numbers support is a comparison at a declared resolution, and the reader is told which of the
+three is doing the work.
 
 ---
 

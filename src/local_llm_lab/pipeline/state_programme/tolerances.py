@@ -53,10 +53,41 @@ def bootstrap_bounds(
     return float(np.quantile(diffs, alpha)), float(np.quantile(diffs, 1 - alpha))
 
 
+def paired_bootstrap_bounds(
+    e: np.ndarray, a: np.ndarray, *, resamples: int = RESAMPLES, seed: int, alpha: float = ALPHA
+) -> tuple[float, float]:
+    """One-sided bounds on the **paired** contrast: one resampling index applied to both arrays.
+
+    The pairing is the whole content of the word. `bootstrap_bounds` draws an index per arm, which
+    is right when the arms are separate populations and wrong when the two numbers come from the
+    same unit scored two ways — there the paired differences are the observations, and resampling
+    the arms independently throws away the pairing and reports an interval for a comparison nobody
+    made. It is usually wider, so it does not look like an error.
+
+    `paired_bootstrap_lower_bound` used to call `bootstrap_bounds`, so the name asserted a property
+    the code did not have (Codex R1). Equal lengths are required rather than assumed, because two
+    arrays that cannot be paired elementwise are not a paired contrast whatever they are called.
+    """
+    e = np.asarray(e, dtype=np.float64)
+    a = np.asarray(a, dtype=np.float64)
+    if e.shape != a.shape:
+        raise ValueError(
+            f"a paired contrast needs one observation per unit in each arm; got {e.shape} and "
+            f"{a.shape}. Use bootstrap_bounds for two independent populations."
+        )
+    if e.size == 0:
+        raise ValueError("a bootstrap needs at least one paired observation")
+    rng = np.random.default_rng(seed)
+    index = rng.integers(0, e.size, size=(resamples, e.size))   # one index, both arms
+    diffs = (e - a)[index].mean(axis=1)
+    return float(np.quantile(diffs, alpha)), float(np.quantile(diffs, 1 - alpha))
+
+
 def paired_bootstrap_lower_bound(
     e: np.ndarray, a: np.ndarray, *, resamples: int = RESAMPLES, seed: int, alpha: float = ALPHA
 ) -> float:
-    return bootstrap_bounds(e, a, resamples=resamples, seed=seed, alpha=alpha)[0]
+    """The one-sided lower bound on the paired contrast. Paired, as the name says."""
+    return paired_bootstrap_bounds(e, a, resamples=resamples, seed=seed, alpha=alpha)[0]
 
 
 def contrasts(
@@ -120,10 +151,24 @@ def magnitude_bound(row: Contrast) -> float:
     return row.lower_bound if row.difference >= 0 else -row.upper_bound
 
 
-def required_n(m: int, epsilon: float, *, alpha: float = ALPHA) -> int:
-    if m < 1 or epsilon <= 0 or not (0 < alpha < 1):
-        raise ValueError("need M ≥ 1, ε > 0, 0 < α < 1")
-    return math.ceil(math.log(2 * m / alpha) / epsilon**2)
+def required_n(m: int, epsilon: float, *, alpha: float = ALPHA, range_width: float = 1.0) -> int:
+    """The n this programme requires, for a quantity whose observations span `range_width`.
+
+    `range_width = 1` is a single mean of a [0, 1] score and is this repository's existing
+    convention, `ln(2M/α)/ε²`, which the two closed-form checks pin. **It is conservative**: the
+    textbook Hoeffding bound for a mean of observations spanning w is `w²ln(2M/α)/(2ε²)`, which at
+    w = 1 is half of this. The convention is kept rather than tightened so that no number already
+    published moves, and it is named here rather than left for a reader to rediscover.
+
+    `range_width = 2` is a **paired accuracy difference**, whose observations span [−1, 1]. It needs
+    `2ln(2M/α)/ε²` — and at that width this scaling and the textbook bound coincide exactly, so the
+    paired figures are the standard ones while the single-mean figures stay conservative. Declaring
+    the width per comparison is the point: a contrast bounded as though it were a single [0, 1] mean
+    is bounded at a resolution its own range does not support (Codex R2).
+    """
+    if m < 1 or epsilon <= 0 or not (0 < alpha < 1) or range_width <= 0:
+        raise ValueError("need M ≥ 1, ε > 0, 0 < α < 1, range_width > 0")
+    return math.ceil(range_width * math.log(2 * m / alpha) / epsilon**2)
 
 
 #: The two closed-form checks the order fixes: at M = 10, ε = 0.05 → 2,397 and ε = 0.075 → 1,066.
