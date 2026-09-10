@@ -1,5 +1,25 @@
 # The exact commands for the slot, written before it, so none is composed at 06:50Z
 
+## The handshake, because two seats share one card and neither can see the other's queue
+
+Settled with the Chief at 03:45Z. Four phases, each entered on a message, not on a clock — their
+re-run 4B capture ends about fifteen minutes after c3, and my first two jobs need the card alone
+because they measure time.
+
+| # | starts on | what runs | roughly |
+|---|---|---|---|
+| 1 | **Chief messages "card clear"** (their capture's manifest exists) | my repeat gate, then my ladder — **alone**, both measure time | minutes |
+| 2 | **I message "timed jobs done"** | my 4B capture **and** their 12B capture together | 8 + ~60 GiB |
+| 3 | **I message that my 4B pass has ended** | their 4B W-3b beside their 12B capture | ~25 GiB, ~1 h |
+| 4 | **Chief messages that W-3b has ended** | my 12B capture beside their 12B capture, **on the rule** | sum ≤ 86 GiB |
+
+**The rule at phase 4** is measured process memory on both sides, not the allocator's high-water
+mark, and I report mine on the first shard. Their W-3b is gated on a GO file of their own so it
+cannot start into phase 1 or 2; my phases start only on their message, never on my own estimate of
+when their job ends. **A clock is not a signal here** — both of us have already had a job run long
+tonight, and the whole point of the handshake is that neither seat guesses.
+
+
 Four launches, in this order, each one a line to run rather than a line to assemble. Composing a
 command at the moment of running it is how a `cd` gets forgotten and a process ends up in the shared
 checkout, and how an environment variable that should be set is not.
