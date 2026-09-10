@@ -162,7 +162,8 @@ After this amendment is sealed: the gate; then, if it passes, the four strata of
 train, all 553 corrective, and the contiguous and across-a-gap subgroups — scored **once**, at every
 depth, with the headline at 0.5 and r = 8, each against its own tolerance from §7's operative table,
 each contrast paired per episode against its chance level, with the transport distance reported
-descriptively as §4.2 requires.
+descriptively as §4.2 requires, and with §5's capability report — 0.586 and 0.493 at the headline
+rank — printed beside every headline figure.
 
 ## 8. Why the 553 corrective transitions are not spent, verified rather than asserted
 

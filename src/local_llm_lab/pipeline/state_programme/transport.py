@@ -90,12 +90,16 @@ def fit(sources: np.ndarray, targets: np.ndarray, max_rank: int) -> Transport:
     target_loadings = np.zeros((features, max_rank))
     iterations: list[int] = []
 
-    start = cross @ np.ones(y.shape[1])
-    if np.linalg.norm(start) < DEFLATION_FLOOR:
-        start = cross[:, 0].copy()
+    ones = np.ones(y.shape[1])
     for component in range(max_rank):
         if np.linalg.norm(cross) < DEFLATION_FLOOR:
             break
+        # The start is recomputed from the CURRENT cross-product each component. Restarting from
+        # the previous component's direction stalls: after deflation that direction lies in the
+        # part just removed, so the iteration can return a vector with no projection on the data.
+        start = cross @ ones
+        if np.linalg.norm(start) < DEFLATION_FLOOR:
+            start = cross[:, 0].copy()
         w, used = _leading_direction(cross, start)
         t = x @ w
         tt = float(t @ t)
@@ -111,7 +115,6 @@ def fit(sources: np.ndarray, targets: np.ndarray, max_rank: int) -> Transport:
         cross = cross - np.outer(xt, c) - np.outer(p, ty) + tt * np.outer(p, c)
         x -= np.outer(t, p)
         y -= np.outer(t, c)
-        start = w
     kept = len(iterations)
     return Transport(mean, scale, target_mean, weights[:, :kept], loadings[:, :kept],
                      target_loadings[:, :kept], tuple(iterations))
