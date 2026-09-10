@@ -506,6 +506,17 @@ metadata the guard reads the capture-time event and the true digest, and a captu
 Promoted on the card at 10:36Z, before the 12B W-3b, which therefore runs v3.4; the 4B repeat is re-armed behind
 `GO-W3B-4B-V34` (driver digest-guarded on v3.4).
 
+**The 4B repeat with v3.4 (12:10–12:28Z, 17.4 minutes alone; 300 rows, 2,373 receipts, admitted 300 of 300;
+`captures/4b-w3b-v34`).** Every non-control arm reproduces v3.2's transitions exactly, a third time. The
+count-matched carrier arm loses the winner in 20 of 179 against 13 of 179 for its control (this pass's draw;
+v3.2's draw of the same control lost 9 — two draws of one design, which is the control's own noise). On the 55
+long rows the full carrier mask loses 24, the matched arm 7, the control 4; on the 132 rows needing no
+subsampling the matched arm is the carrier mask and loses 13 against 9. The note control lost 2 of 288 in this
+draw (1 in v3.2's). So on the 4B, count-matched, the carriers' joint removal costs about seven rows in 179
+beyond an equal count of arbitrary tokens — a real but small joint effect, as on the 12B (7 against 4) — where
+the note's prose costs sixty-one beyond its control. The record's headline for the carriers is this matched
+figure; the every-row 37 of 179 is the unmatched mask and is reported only beside it.
+
 **W-2, the primary of W-4: linear decodability of the expert action at P_note and P_act (all 7,629
 decisions, 1,128 episodes; unit the episode, accuracies are episode means).** A PCA-r projection fitted
 on the training fold with a ridge one-hot readout, five folds by episode stratified by family ("within";
