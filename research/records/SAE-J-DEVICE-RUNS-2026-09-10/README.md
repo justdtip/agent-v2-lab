@@ -72,4 +72,36 @@ Two configs, written by [bridge_configs.py](bridge_configs.py) on the card from 
 
 ## 3. The runs
 
-*Filled in as they end: 4B at repository layer 18 (A1 + A2), 12B at repository layer 24 (A1), 4B at repository layer 24 (A1 + A2).*
+### 3.1 The 12B A1 at repository layer 24 — complete ([bridge/result-12b-a1.json](bridge/result-12b-a1.json))
+
+The first A1 through a 12B lens (the admitted float32 merge of the three chunk fits, `49001ae6…`), dictionary `layer_23_width_16k_l0_small` of `google/gemma-scope-2-12b-it`, 16,384 features × top-10, CPU, 13:28Z–13:35Z.
+
+- **Convention, raw arm recorded first:** overlap@10 with the shipped `top_tokens` **0.134** without the gain, **0.981** with it. The discriminator's verdict: the shipped file applies the final gain; convention settled. The 12B suite's file was made the same way as the 4B's (laptop: 0.245 / 0.995), and the raw arm was written down before the gain arm was looked at, as the rule requires.
+- **Two products, float32:** the eight named features through the composed path and by a direct product each: top-10 sets identical, worst absolute score gap **1.9 × 10⁻⁶** against the 1e-3 line.
+- **Negative control:** the same eight features read through the layer-3 map share **0.000** of their top-10 with the layer-24 reading (max 0.0), below the 0.5 line; the control distinguishes.
+- **The readout's shape:** top-10 scores from 0.57 to 39.9 (median 4.0); 10,635 distinct top-1 tokens across 16,384 features, the most common top-1 covering 0.35% of features — no single token dominates. No labels (no published source maps to `resid_post_all`), and these are gain-only linear scores, not logits.
+
+### 3.2 The 4B at repository layer 18 — A1 passed, A2 refused by the identity check, and what the refusal was
+
+The run (13:22Z–13:28Z, dictionary `layer_17…`) passed A1 and stopped in A2 on the first cell: "the score decomposition is not exact at token 30423: gap 3.418e-03 against a score of 1.177e-01". The runner asserts, before it ranks anything, the identity
+
+    L h = L b + Σ_i z_i (L d_i) + L e ,   with e = h − b − Σ_i z_i d_i ,
+
+on the emitted token, and refuses when the gap exceeds `1e-3 × max(1, |L h|)`; the identity is exact in exact arithmetic for *any* linear `L`, so a gap can only come from an inconsistency between the two ways the code forms the terms (an orientation or convention error) or from rounding. The refusal cannot say which, so a diagnostic ([diag_identity.py](diag_identity.py), output [bridge/diag-4b-l18.json](bridge/diag-4b-l18.json)) recomputed every term for all 600 cells twice from the same float32 `h` and `z`: once along the runner's float32 path and once in float64.
+
+| | median | max |
+|---|---:|---:|
+| gap, float32 (the runner's path) | 1.2 × 10⁻³ | 5.0 × 10⁻³ |
+| gap, float64, same inputs | 1.8 × 10⁻¹² | 9.1 × 10⁻¹² |
+| Σ\|terms\| (16,384 summands + bias + residual) | 4,300 | 7,829 |
+| float32 gap / Σ\|terms\| | 2.5 × 10⁻⁷ | 1.5 × 10⁻⁶ |
+
+**Rounding, not orientation.** In float64 the identity holds to one part in 10¹²; in float32 the same terms miss it by a few parts in 10⁷ of their absolute sum — the expected size of accumulated rounding (unit roundoff 6 × 10⁻⁸) in a sum of 16,384 terms of order 1–40 whose net is order 1. The declared tolerance compared that rounding to the *net* score, which at this cell happened to be 0.12, and so refused. Only one of the 600 cells crosses the line under the runner's rule (the others have larger net scores), which is why the run stopped where it did rather than everywhere. The orientation is right.
+
+**The fix, on main at `468756c` (Chief; file-only review requested from Codex in the bridge order).** `decompose_position` now asserts the identity in float64 from the same float32 `h` and `z`, reports the float32 gap and Σ|terms| beside it, and adds a second guard that the float32 score path (which still produces the norms, the shares and the top-k) agrees with the float64 identity at the emitted token — so a mismatched orientation between the two paths is still refused (a test breaks the score path's orientation and sees the refusal; 104 tests in the three bridge suites pass). The fixed runs at layers 18 and 24 run from a fresh checkout of `468756c` on the card, never from the checkout a running process is using.
+
+**What the diagnostic also showed, ahead of the A2 result.** On these 600 out-of-domain cells at layer 18 the dictionary reconstructs the residual well in the raw sense — raw share `‖e‖/‖h‖` median **0.066**, max 0.087, inside the 0.5 line — but the *lens-score* error share `‖L e‖/‖L h‖` is median **0.63**, max 0.82, outside it: the 6.6% of the residual the dictionary leaves unexplained carries most of the readout-relevant direction at this layer. That is exactly the "rankable by the raw share, refused by the score share" case T3 was built to name, and it says that at layer 18 an A2 ranking would describe the dictionary's failure at these positions, not the position. Median active features 20. The A2 result files will carry this per cell.
+
+### 3.3 The 4B at repository layers 18 and 24 with the fixed identity — pending
+
+*Filled in when the runs end.*
