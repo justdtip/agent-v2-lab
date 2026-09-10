@@ -52,8 +52,9 @@ an estimate with a bound.
 ## Scripts
 
 `scripts/steer_pilot.py` (b3b676a0467c), `scripts/chief_pilot_gated.sh` (5192a4b80905; starts on the W-3b
-pass's start line, seat chief-pilot, expandable segments, from `/workspace/chief`), `scripts/pilot_test.sh`
-(the one-recipient CPU smoke test). Output `captures/pilot-4b/`:
+pass's start line, seat chief-pilot, expandable segments, from `/workspace/chief`; the first attempt's driver,
+see below), `scripts/chief_pilot_gated2.sh` (5d8ec3d3b0dd; the re-run's driver, gated on a GO file and on the
+card's free memory), `scripts/pilot_test.sh` (the one-recipient CPU smoke test). Output `captures/pilot-4b/`:
 `run.json` (identity, pairs, seed), `pilot.jsonl` per recipient, `manifest.json` at the end.
 
 ## Smoke test (CPU, one recipient, layers 8 and 20, 20 new tokens; a mechanism check, not a reading)
@@ -101,6 +102,27 @@ void and the operation switch count at that layer falling from two to one; a mis
 an empty store refused; a patch applied zero times refused. Digests as armed on the card:
 `steer_pilot.py` b3b676a0467c, `steer_pilot_analyze.py` 7f646b820e82.
 
+## The first attempt died at model load (06:28Z), before any recipient
+
+The driver started the pilot 60 s after the 4B W-3b pass's start line, as designed — "beside W-3b on an
+otherwise empty card". The card was not otherwise empty. The 12B fit's last chunk (c3) was still running:
+the re-run 4B capture finished at 06:27Z, twelve minutes *before* c3 ended at 06:39Z, the reverse of the
+order the driver assumed. At 06:28:45Z the card held c3 (62.25 GiB of process memory) and W-3b (23.01 GiB),
+and the pilot's `model.to(float32)` failed on a 2.50 GiB allocation with 1.82 GiB free. The process had
+written its pair selection (111 candidates, 104 pairs available, 24 chosen from 24 episodes, 8 per step,
+all with an operation donor; corpus sha256 790cefff…) and nothing else. Cause: a driver gated on another
+job's start rather than on the card's free memory — the Chief's planning error, not the pilot's. The
+attempt is kept on the card at `captures/pilot-4b.crashed-0628Z/` and `steer-pilot-4b.crashed-0628Z.log`.
+
+The re-run driver `scripts/chief_pilot_gated2.sh` (5d8ec3d3b0dd) waits for `/workspace/chief/GO-PILOT`,
+a file the Chief touches on the D-CRO's message ("timed jobs done"; the card's phases are entered on
+messages, never on a clock), then refuses to launch until nvidia-smi shows at least 30 GiB free,
+checking every 30 s; seat chief-pilot, lease 240 min, the same command line as the first attempt (24
+recipients, layers 4 to 32 by 4, 48 new tokens). The pilot is untimed and may share the card with
+another untimed job. Both smoke tests ran on the CPU, so the re-run is the pilot's first pass on CUDA;
+its `peak_gib` field is `max_memory_allocated`, and process memory is read from nvidia-smi during the run
+for the shared-card rule.
+
 ## Results
 
-Not yet. The run is armed to start beside the 4B W-3b pass.
+Not yet. The re-run is armed behind `GO-PILOT`.
