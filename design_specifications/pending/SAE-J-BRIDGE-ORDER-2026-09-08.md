@@ -743,3 +743,5 @@ give zero; every refusal exercised; the written table validates through `_suppli
 its cells through the runner's `_cell_pairing`. Laptop only; commit on the tests' own exit code; report by commit
 with the checked set named. The Chief runs it on the card for the 300-decision population at both positions
 after the day's masking passes, registers the result, and states the domain of validity beside it.
+
+*2026-09-10 UTC, ~12:05Z (card clock):* **the shipped-token example files are on the card**, fetched at the Director's authorisation through his own login by `lab-device fetch-dictionary --all-layers --examples` (the credential never handled): 34 files for the 4B suite and 48 for the 12B, every-layer `resid_post_all` 16k `l0_small`, each verified against the hub's declared sha256 for its exact path and recorded in the folder's `DIGEST.json` beside `config.json` and `params.safetensors` — 82 receipts, 82 carrying the examples file; ~67 GB, 127 GB left on the card. Item 8 of the audit is closed; the raw-first convention discriminator runs when A1 runs.
