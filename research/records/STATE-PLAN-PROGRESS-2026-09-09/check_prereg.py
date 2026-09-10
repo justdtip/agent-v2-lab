@@ -108,6 +108,12 @@ CLAIMS: tuple[tuple[str, str, str, object, str], ...] = (
      r"\*\*identical at 7,629 of 7,629 decisions\*\*"),
     ("identical read position", "both", "identical_read_position", 7629,
      r"read position is identical at"),
+    ("terminal chain decisions", "chain", "terminal_with_marker", 94,
+     r"all \*\*94\*\* terminal `pointer_chain` decisions"),
+    ("terminal chain in test", "chain", "terminal_in_test", 20,
+     r"\(20 of them in E1's test split\)"),
+    ("non-terminal without the marker", "chain", "non_terminal_decisions", 575,
+     r"\*\*0 of\s*$|0 of\n?\s*575\*\* non-terminal ones do|575\*\* non-terminal ones do"),
     ("12B peak reserved", "both", "peak_reserved_gib_12b", 26.453,
      r"\| 12B \| 2\.674 GiB \| \*\*2\.7 GB\*\* \| 42\.2 min \| 331\.6 \(shared\) \| 26\.45"),
     # The cross-fitting folds. The digest is what the seal fixes, so it is pinned to the line that
@@ -169,6 +175,7 @@ def artefacts() -> dict[str, object]:
         "folds": json.loads((HERE / "folds.json").read_text()),
         "capture": json.loads((HERE / "capture-4b-measured.json").read_text()),
         "both": json.loads((HERE / "capture-12b-measured.json").read_text()),
+        "chain": json.loads((HERE / "pointer-chain-terminal.json").read_text()),
         "file": {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
                  for path in sorted(HERE.iterdir()) if path.is_file()},
     }
@@ -203,9 +210,63 @@ def check(document: str, *, verbose: bool = True) -> list[str]:
     return failures
 
 
+#: The one operative value of each tolerance. Any other value asserted for the same name, on a line
+#: this check does not recognise as superseded, is a contradiction rather than a stale sentence.
+OPERATIVE_TOLERANCES = {"ε_main": "0.23", "ε_ord": "0.13", "ε_sub": "0.15"}
+
+#: The subgroup tolerances, which are their own operative values and not competitors to the pooled
+#: one. They are named separately because "ε_sub, across a gap = 0.20" beside "ε_sub = 0.15" is a
+#: legitimate pair and "ε_sub = 0.11" is not.
+OPERATIVE_SUBGROUPS = {"contiguous": "0.23", "across a gap": "0.20"}
+
+#: A **paragraph** is exempt when it says it is not operative. Marking by line was the first attempt
+#: and it was too narrow: a paragraph headed SUPERSEDED still has its numbers three lines further
+#: down, and the check flagged them. The unit of "this text is not operative" is the paragraph a
+#: reader takes it from, not the line it happens to sit on.
+SUPERSEDED_MARKERS = ("SUPERSEDED", "superseded", "not operative", "Coverage is not supported",
+                      "kept for the comparison", "kept for the reasoning")
+
+
+def competing_tolerances(document: str) -> list[str]:
+    """Find a second operative value for a tolerance the document has already declared.
+
+    Recomputing §7 at the paired range width left a whole second table behind, unmarked, declaring
+    ε_main 0.17 and ε_sub 0.11 — values that under the new rule are not merely stale but unattainable
+    (0.17 needs 428 episodes against 240). The claim checks above passed both tables, because each
+    pinned figure was individually present and correct; nothing asked whether the document
+    *contradicted itself*. A checker that verifies every claim and cannot see a contradiction between
+    two of them is checking the sentences and not the document (Codex S1).
+    """
+    problems = []
+    offset = 1
+    for block in document.split("\n\n"):
+        lines = block.count("\n") + 1
+        exempt = any(marker in block for marker in SUPERSEDED_MARKERS)
+        for number, line in enumerate(block.splitlines(), offset):
+            if exempt:
+                continue
+            allowed = {v for k, v in OPERATIVE_SUBGROUPS.items() if k in line}
+            for name, operative in OPERATIVE_TOLERANCES.items():
+                if name not in line:
+                    continue
+                for found in re.findall(r"\b0\.\d+\b", line):
+                    # A row of the operative table also carries its exact ε and its needed n; only a
+                    # value *declared for the name* competes, so require name and value to be close.
+                    if found in {operative, *allowed}:
+                        continue
+                    if re.search(rf"{re.escape(name)}[^.\n]{{0,60}}\b{re.escape(found)}\b", line):
+                        problems.append(f"line {number}: {name} = {found}, operative is {operative}")
+        offset += lines + 1
+    return problems
+
+
 def main() -> int:
     document = (HERE / "PREREGISTRATION.md").read_text()
     failures = check(document)
+    competing = competing_tolerances(document)
+    for problem in competing:
+        print(f"{'competing tolerance':32s} {'':42s} {problem}")
+    failures = failures + [f"competing tolerance ({p})" for p in competing]
     print()
     if failures:
         print(f"{len(failures)} claim(s) do not check out: {', '.join(failures)}")

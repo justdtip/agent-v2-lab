@@ -240,8 +240,32 @@ representational richness, and every figure carries that label.
   permuted within family. The **step-0 null**: the same probe read from the residual at the first
   decision of the same task, which carries what the task prompt alone tells — family, difficulty —
   and nothing of the progress.
-- **Negative control**: `pointer_chain` steps-remaining must sit at the permutation null on both
-  models. A probe that decodes it is reading a leak, and the finding is the leak.
+- **The unknown-horizon control, restated. The version that stood here was wrong at the last step.**
+  It said `pointer_chain` steps-remaining must sit at the permutation null on both models and that
+  any decoding above it is a leak. That is false at the terminal decision: the chain's end is
+  **visible in the prompt**. Measured on the corpus — all **94** terminal `pointer_chain` decisions
+  (20 of them in E1's test split) contain `Node: final` in the text the model is given, and **0 of
+  575** non-terminal ones do. Recognising that a chain has ended is reading the input, not leaking
+  the label, and the old veto would have condemned a probe for doing the obvious right thing.
+
+  **Eligible positions are pre-specified by a rule on the visible text, never on the label.** A
+  `pointer_chain` decision is ineligible for this control exactly when its rendered prompt contains
+  the terminal marker. That rule is applied to the prompt, so it can be evaluated without knowing
+  the horizon; using `step == max(step)` would be the label wearing a rule's clothes, and would also
+  be circular — the label is what the control exists to protect.
+
+  **The null is conditional on what stays visible**, not permutation. Each conditioning variable is
+  named with why it is legitimately available: the **chain length so far**, which the model can
+  count from the transcript; **survival** — that the chain has not ended, which is the absence of the
+  marker above; the **family and difficulty**, both in the task prompt; and the **visible progress
+  note**, which the protocol writes at every step. A probe may know all of that without knowing the
+  horizon.
+
+  **The veto is success above *that* null**, on eligible positions. What remains unknowable to the
+  model at a non-terminal `pointer_chain` decision is how many nodes are still ahead, because the
+  chain length is not in the task prompt and the corpus samples it; a probe that decodes it there,
+  above a null already given everything visible, is reading something the transcript does not carry.
+  That is the leak, and the finding is the leak.
 - **Evaluation set**: the test split's 1,781 decisions, 240 episodes, clean variants only. Held out
   by episode by construction, never by position.
 
@@ -463,11 +487,23 @@ a paired difference of accuracies needs `2 ln(2M/α)/ε²`, and `required_n` now
 rather than carrying a second formula. Bounding a contrast as though it were a single [0, 1] mean
 claims a resolution its own range does not support, which is what the first draft did.
 
+### THE OPERATIVE TOLERANCE TABLE — the only one, and every other value in this document is superseded
+
 | | evaluation set | unit | n | ε declared | needs n ≥ | spare |
 |---|---|---|---:|---:|---:|---:|
 | ε_main | E1 on the test split | episodes | 240 | **0.23** | 234 | 6 |
 | ε_ord | E2 ordinary transitions, train split | episodes | 840 | **0.13** | 731 | 109 |
 | ε_sub | E2 corrective transitions | episodes (one each) | 553 | **0.15** | 549 | 4 |
+| ε_sub, contiguous (`transient`) | subgroup | episodes | 244 | **0.23** | 234 | 10 |
+| ε_sub, across a gap | subgroup | episodes | 309 | **0.20** | 309 | 0 |
+
+*A second table of ε_main = 0.17 and ε_sub = 0.11 survived below when §7 was recomputed at the paired
+range width, unmarked, and Codex found it. Under this document's own rule those values are not merely
+stale but **unmet**: 0.17 needs 428 episodes against 240, and 0.11 needs 1,021 against 553. A reader
+taking the wrong table would have claimed a resolution the corpus does not support, and the two
+tables could flip a verdict between them. Every superseded value below is now marked in place rather
+than deleted, and `check_prereg.py` refuses a document that declares two operative values for one
+tolerance.*
 
 *A note on the convention, because it is not the textbook one, and it is now ruled.* At range width
 1 the helper returns `ln(2M/α)/ε²`, which is **twice** the textbook Hoeffding `w²ln(2M/α)/(2ε²)`. At
@@ -484,7 +520,8 @@ of them was an artefact of counting dependent observations as independent.
 **Subgroups carry their own ε; the pooled one attaches to the pooled set only.** E2's corrective
 stratum is two populations that differ structurally (§4.2): the contiguous transitions, where the
 decision before the correction is itself observed, and those spanning a step with no rendered row.
-Reporting either against the pooled 0.11 would claim a resolution its own n does not support.
+Reporting either against the **pooled 0.15** would claim a resolution its own n does not support.
+*(This sentence read "the pooled 0.11" — a superseded single-mean value — until Codex found it.)*
 
 | stratum | episodes | exact ε | **declared** | needs n ≥ | spare |
 |---|---:|---:|---:|---:|---:|
@@ -516,16 +553,21 @@ stratification by `(split, family, variant)`.
 
 Both are reported for every quantity, and where they disagree the wider one governs the claim.
 
-**ε_main is 0.17 and not 0.16.** The bound at 240 episodes is 0.1604, so 0.16 would be the honest
-figure to a reader — but declaring 0.16 requires n ≥ 242, and there are 240 test episodes. Two short.
-The declared value rounds **up** or the condition is not met, and a threshold that misses by two is
-exactly the kind that gets rounded into existence after the fact.
+**SUPERSEDED — single-mean values, kept for the reasoning only.** The two paragraphs that stood here
+declared ε_main 0.17 and ε_sub 0.11. Both were computed at range width 1 and neither is operative;
+under the paired width they are not even attainable (0.17 needs 428 episodes against 240; 0.11 needs
+1,021 against 553). The operative values are 0.23 and 0.15 in the table above.
 
-**ε_sub stands at 0.11 and is still a loosening**, now for a plainer reason than before: there are
-553 corrective transitions in the whole corpus, one per recovery episode, and no split of them
-reaches n at ε_main. The alternative to loosening is not reporting the primary estimand's informative
-stratum at all. This is the existing budget rule's shape — loosen ε_sub, write both numbers and the
-reason, before the run — applied to a population limit rather than a device-time one.
+What survives is the rule they were written to state, which applies unchanged at the new width: **the
+declared value rounds up or the condition is not met**. At width 1 that turned 0.16 into 0.17 because
+0.16 needed 242 episodes against 240 — two short. At the paired width it is why the across-a-gap
+subgroup is 0.20 and met by exactly its 309, and why every row above carries the n it needs beside
+the n it has. A threshold that misses by two is exactly the kind that gets rounded into existence
+after the fact.
+
+And the loosening's reason survives too: there are 553 corrective transitions in the whole corpus,
+one per recovery episode, so ε_sub is loosened against a **population** limit rather than a
+device-time one — the budget rule's shape, both numbers and the reason written before the run.
 
 **What the run can claim, given these.** At ε_main = 0.23, E1 can support a claim that one model's
 decodability exceeds a null by more than about twenty-three points of accuracy, and cannot support a
