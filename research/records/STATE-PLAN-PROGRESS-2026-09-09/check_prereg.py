@@ -197,6 +197,29 @@ CONTRADICTION_COUNTEREXAMPLES = {
         "\nFor contiguous cases, the operative ε_ord = 0.23.\n",
     "an ordinary standalone declaration":
         "\nThe bound is tight: ε_main = 0.01 throughout.\n",
+    "a duplicated table row without emphasis (Codex R1)":
+        "\n| ε_sub | E2 corrective transitions | episodes (one each) | 553 | 0.11 | 549 | 4 |\n",
+}
+
+#: Edits that replace text rather than append it; each must be rejected with a "veto form" failure.
+VETO_COUNTEREXAMPLES = {
+    "the old unconditional veto restored in §12 (Codex R1)": (
+        "**The unknown-horizon control of §4.1 is a\n  diagnostic, not a falsifier.**",
+        "The instrument is falsified by any decoding of `pointer_chain` steps-remaining above the\n"
+        "  permutation null.",
+    ),
+    "the old veto in its original wording (Codex S2 paraphrase)": (
+        "**The unknown-horizon control of §4.1 is a\n  diagnostic, not a falsifier.**",
+        "Any above-permutation decoding of pointer-chain remaining steps identifies a leak and\n"
+        "  invalidates the instrument.",
+    ),
+    "the old veto added elsewhere while the new text stays (a contradiction, not a replacement)": (
+        "read *not measured* because they are.",
+        "read *not measured* because they are.\n\nThe instrument is falsified by any decoding of\n"
+        "`pointer_chain` steps-remaining above the permutation null.",
+    ),
+    "the §4.1 deferral removed": ("**Status: DEFERRED, its veto disabled", "**Status: ARMED"),
+    "the §10 state changed": ("**deferred, not measured**, its **veto disabled**", "**measured**"),
 }
 
 
@@ -214,6 +237,7 @@ def check(document: str, *, verbose: bool = True) -> list[str]:
     # Paragraph text with newlines collapsed, so a claim the markdown wrapped is still one claim.
     paragraphs = [" ".join(block.split()) for block in document.split("\n\n")]
     failures = [f"competing tolerance ({p})" for p in competing_tolerances(document)]
+    failures += [f"veto form ({p})" for p in veto_form(document)]
     for claim, source, path, expected, pattern in CLAIMS:
         try:
             got = at(sources[source], path)
@@ -285,19 +309,37 @@ def _declarations(document: str) -> list[tuple[int, str, str, str]]:
     harmless.
     """
     found: list[tuple[int, str, str, str]] = []
-    for number, line in enumerate(document.splitlines(), 1):
-        if line.lstrip().startswith("|") and line.count("|") >= 4:
-            fields = [f.strip() for f in line.strip().strip("|").split("|")]
-            names = [n for n in OPERATIVE_TOLERANCES if n in fields[0]]
-            if not names:
-                continue
-            name = max(names, key=len).split("/")[0]
-            for field in fields[1:]:
-                for value in re.findall(r"\b0\.\d+\b", field.replace("**", "")):
-                    # A row carries its exact ε beside its declared one; the declared value is the
-                    # emphasised field, so only bolded numbers are read as declarations.
-                    if "**" in field:
-                        found.append((number, _population(fields[0], name), value, line))
+    all_lines = document.splitlines()
+    declared_column: int | None = None  # of the table the scan is inside, by its header
+    for number, line in enumerate(all_lines, 1):
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            declared_column = None
+            continue
+        # Emphasis stripped: asterisks and backticks only — the tolerance names carry underscores.
+        fields = [re.sub(r"[*`]", "", f).strip() for f in stripped.strip("|").split("|")]
+        following = all_lines[number] if number < len(all_lines) else ""
+        if re.fullmatch(r"\|?(\s*:?-+:?\s*\|)+\s*", following.strip() + "|") and "---" in following:
+            # A header row: the declared-ε column is the one whose header says so. Emphasis is
+            # formatting, not semantics (Codex R1): a value is a declaration by its column, never
+            # by whether it is bold.
+            hits = [i for i, f in enumerate(fields) if "declared" in f.lower()]
+            declared_column = hits[0] if len(hits) == 1 else None
+            continue
+        if "---" in stripped and set(stripped) <= set("|-: "):
+            continue
+        names = [n for n in OPERATIVE_TOLERANCES if n in fields[0]]
+        if not names:
+            continue
+        name = max(names, key=len).split("/")[0]
+        if declared_column is not None and declared_column < len(fields):
+            values = re.findall(r"\b0\.\d+\b", fields[declared_column])
+        else:
+            # No declared column to read: every ε-shaped number in the row counts, so an ambiguous
+            # tolerance row fails closed rather than passing by omission.
+            values = [v for f in fields[1:] for v in re.findall(r"\b0\.\d+\b", f)]
+        for value in values:
+            found.append((number, _population(fields[0], name), value, line))
     # Prose, on sentences with the newlines collapsed.
     joined, index = [], 1
     for raw in document.split("\n\n"):
@@ -315,6 +357,37 @@ def _declarations(document: str) -> list[tuple[int, str, str, str]]:
                     found.append((start_line, _population(sentence, name), match.group(2),
                                   sentence))
     return found
+
+
+#: The single statement of the unknown-horizon control's consequence, pinned in both places it is
+#: referenced, and the form that must not come back. Codex R1/R2: restoring the old unconditional
+#: veto passed both entry points, and §12 said "falsified" where §4.1 said "investigate".
+VETO_PINS = (
+    ("§4.1 status", "**Status: DEFERRED, its veto disabled"),
+    ("§10 state", "**deferred, not measured**, its **veto disabled**"),
+    ("§12 consequence", "is a\n  diagnostic, not a falsifier.**"),
+)
+#: A sentence that says decoding above the permutation null falsifies or invalidates the
+#: instrument, unless it is the negation ("does not", "not by itself").
+_NULL = r"(above[- ](the )?(unconditional )?permutation( null)?|(exceed\w*|beat\w*) the (unconditional )?permutation null)"
+_VERDICT = r"(falsif\w*|invalidat\w*|identif\w* a leak|is a leak)"
+FORBIDDEN_VETO = re.compile(rf"{_VERDICT}[^.]{{0,160}}?{_NULL}|{_NULL}[^.]{{0,160}}?{_VERDICT}", re.IGNORECASE)
+_NEGATED = re.compile(r"\b(does|do|did) not\b|\bnot by itself\b|\bnever\b|\bnot\s+(a|an|the)?\s*(leak|falsif|invalid)", re.IGNORECASE)
+
+
+def veto_form(document: str) -> list[str]:
+    """One veto, deferred and disabled, stated as a diagnostic in every place it is named."""
+    problems = []
+    for name, text in VETO_PINS:
+        if text not in document:
+            problems.append(f"veto pin missing: {name}")
+    for block in document.split("\n\n"):
+        text = " ".join(block.split())
+        for sentence in re.split(r"(?<=[.;])\s+", re.sub(r"[*`]", "", text)):
+            match = FORBIDDEN_VETO.search(sentence)
+            if match and not _NEGATED.search(sentence):
+                problems.append(f"veto restored in unconditional form: {sentence[:90]!r}")
+    return sorted(set(problems))
 
 
 def competing_tolerances(document: str) -> list[str]:
@@ -407,6 +480,13 @@ def self_test() -> int:
         exercised += 1
         if not any(f.startswith("competing tolerance") for f in check(document + edit, verbose=False)):
             survived.append(f"contradiction: {name}")
+    for name, (old, new) in VETO_COUNTEREXAMPLES.items():
+        exercised += 1
+        if old not in document:
+            survived.append(f"veto: {name} (anchor text absent)")
+            continue
+        if not any(f.startswith("veto form") for f in check(document.replace(old, new), verbose=False)):
+            survived.append(f"veto: {name}")
     for claim, _source, _path, expected, pattern in CLAIMS:
         hits = [(i, re.search(pattern, line)) for i, line in enumerate(lines)]
         hits = [(i, match) for i, match in hits if match]
