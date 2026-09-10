@@ -371,7 +371,7 @@ def test_merger_script_emits_promised_nu(tmp_path):
     cp = snapshot(tmp_path)
     a, _ = fit(tmp_path, cp, name="a", rows=(0,))
     b, _ = fit(tmp_path, cp, name="b", rows=(1,))
-    target = ROOT / "research/records/WORKSPACE-EXPERIMENTS-2026-09-10/scripts/merge_chunks.py"
+    target = ROOT / "scripts/merge_device_lens_chunks.py"
     result = spawn.run(
         [sys.executable, str(target), str(tmp_path / "out"), str(a), str(b)],
         capture_output=True,

@@ -76,7 +76,7 @@ originals; do not edit a digest sidecar to pretend it still identifies another f
 The merger now writes its promised `nu.json`:
 
 ```sh
-python research/records/WORKSPACE-EXPERIMENTS-2026-09-10/scripts/merge_chunks.py \
+python scripts/merge_device_lens_chunks.py \
   /absolute/new-merged-directory /absolute/chunk-1 /absolute/chunk-2 /absolute/chunk-3
 ```
 
@@ -283,3 +283,11 @@ CPU memory, and merged validation holds the chunk matrices as well. A real artif
 appropriate memory budget; this record establishes CPU fixture behavior only. The Chief still
 owns actual pairings, domain validity, shipped example acquisition and real A1/A2 runs. Stage B
 remains conditional on the real A2 evidence and sealed rotation control in the order.
+
+## F1 provenance correction — Chief review at `7527075`
+
+The reusable merger entry point now lives at `scripts/merge_device_lens_chunks.py`. The historical `research/records/WORKSPACE-EXPERIMENTS-2026-09-10/scripts/merge_chunks.py` belongs to the as-run record on main and must retain SHA-256 `5c39d626e129f77dfbfe02b0d0ae18cdebf3a79a9643a91a669da83de096026e` through integration. The shared admission/merge logic is unchanged. The CLI regression follows the new path.
+
+The Chief's review at `7527075` supplies real-artifact evidence beyond this record's laptop fixtures: every 4B layer loaded without a shift, and the successor merger reproduced the original 12B archive bit for bit, SHA-256 `e7942f1d6a73…`, before the re-merge admitted against the 12B checkpoint. Those review admissions are scratch outputs; canonical admissions and the positions, pairing registrations, domain statement, examples and card runs remain with the Chief.
+
+F1 verification: the existing merger CLI regression first failed at the new path with exit 1 (file absent), then the admission, runner, bridge, intervention and live-lens checked set passed **229 tests, 1 large-artifact test deselected**, exit 0, in 10.78s (`/private/tmp/saej-f1-green`, the same CPU environment as above). Scoped Ruff and diff checks passed. The historical script SHA-256 was checked directly before integration.
