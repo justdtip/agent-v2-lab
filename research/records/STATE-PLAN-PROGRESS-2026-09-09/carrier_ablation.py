@@ -1,13 +1,16 @@
-"""Can the plan's progress be removed from the note without removing the next action?
+"""A **screening diagnostic** for candidate removal rules: does the step survive as a distinct string?
 
-The carrier-ablation arm re-renders the transcript with the state-bearing fact removed from the
-note, so that a surviving effect must be carried by the model rather than re-read from the text. It
-only works if such a removal exists. This measures whether it does, per family, before the
-pre-registration promises one.
+This is a screen and not the gate. It answers one narrow question — after stripping a candidate
+clause, are the remaining notes still distinct strings within an episode? — and a rule that fails it
+has certainly not removed the carrier. **A rule that passes it has not been shown to have removed the
+carrier either**: distinctness is a property of strings, and a step can be recoverable from text that
+repeats, or unrecoverable from text that differs in an irrelevant token. The pre-registration's
+two-part acceptance gate (drive the share to the floor **and** leave the tool call and next-action
+clause byte-identical) is **not implemented here**; the second half is not checked at all, and no
+result from this script should be read as that gate having been applied.
 
 The test is mechanical and needs no model. Within one episode, strip a candidate clause from every
-note and ask whether the remaining text still differs from step to step. If it does, the step index
-is still recoverable from what is left and the ablation has removed a label rather than the carrier.
+note and count how many distinct strings remain.
 
     python research/records/STATE-PLAN-PROGRESS-2026-09-09/carrier_ablation.py --data DIR --out FILE
 
@@ -88,13 +91,19 @@ def main(argv: list[str] | None = None) -> int:
             per_family[family][name] = {
                 "episodes": len(shares),
                 "distinguishable_share": round(sum(shares) / len(shares), 4),
-                "fully_ablated_episodes": sum(1 for s in shares if s <= 0.5),
+                # Named for what it counts, not for what one might hope it means: episodes
+                # where at most half the steps remain distinct strings. It is not a count of
+                # episodes in which the carrier was removed, and it was called that.
+                "episodes_at_or_below_half_distinct": sum(1 for s in shares if s <= 0.5),
             }
 
     payload = {
         "basis": "measured-here",
-        "question": "after removing a candidate clause from every note in an episode, is the step "
-                    "index still exactly recoverable from the remaining text?",
+        "what_this_is": "a screening diagnostic, not the acceptance gate: the second half of "
+                        "the gate — that the tool call and next-action clause are byte-identical "
+                        "after the removal — is not implemented here",
+        "question": "after removing a candidate clause from every note in an episode, how many of "
+                    "the remaining texts are still distinct strings?",
         "reading": "distinguishable_share is the mean over episodes of (distinct remaining notes / "
                    "steps). 1.0 means every step is still told apart by what is left, so the rule "
                    "removed a label and not the carrier. The arm is constructible for a family "
@@ -113,8 +122,9 @@ def main(argv: list[str] | None = None) -> int:
             for n in order
         )
         print(f"{family:20s} {cells}")
-    print("\nmean share of steps still told apart by what the rule leaves behind; 1.0 = the rule "
-          "removed a label, not the carrier")
+    print("\nmean share of steps whose note remains a distinct string after the removal; 1.0 "
+          "means the rule certainly did not remove the carrier. A low share is a screen passed, "
+          "not the acceptance gate met: the byte-identity half of the gate is not implemented.")
     return 0
 
 

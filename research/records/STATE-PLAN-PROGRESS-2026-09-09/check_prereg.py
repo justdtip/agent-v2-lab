@@ -73,9 +73,9 @@ CLAIMS: tuple[tuple[str, str, str, object, str], ...] = (
      "8bbc8062249ce1cc0e15050a866cd726a2c205a969f3eeab3840fcb5520cee3e",
      r"\| the file \| `8bbc8062249ce1cc0e15050a866cd726a2c205a969f3eeab3840fcb5520cee3e`"),
     ("E1 evaluation episodes", "inputs", "tasks.per_split.test", 240,
-     r"E1 on the test split \| episodes \| 240 \| \*\*0\.17\*\* \| 214"),
+     r"E1 on the test split \| episodes \| 240 \| \*\*0\.23\*\* \| 234 \| 6"),
     ("E2 ordinary episodes", "inputs", "tasks.per_split.train", 840,
-     r"train split \| episodes \| 840 \| \*\*0\.09\*\* \| 763"),
+     r"train split \| episodes \| 840 \| \*\*0\.13\*\* \| 731 \| 109"),
     ("archive digest", "inputs", "corpus_archive_sha256",
      "7fe6e64b89749b997854638b260d7654316636da3d8eaa59924ad9ed62f99120",
      r"`7fe6e64b89749b997854638b260d7654316636da3d8eaa59924ad9ed62f99120`"),
@@ -116,14 +116,14 @@ CLAIMS: tuple[tuple[str, str, str, object, str], ...] = (
     ("episodes in the folds", "folds", "episodes", 1128, r"K = 5 folds"),
     # The tolerance rows. Each pins its n beside the n it needs, because that pairing is the whole
     # point of the table and the place two roundings were caught.
-    ("eps_main row", "inputs", "tasks.per_split.test", 240,
-     r"E1 on the test split \| episodes \| 240 \| \*\*0\.17\*\* \| 214"),
-    ("eps_ord row", "inputs", "tasks.per_split.train", 840,
-     r"train split \| episodes \| 840 \| \*\*0\.09\*\* \| 763"),
-    ("corrective pooled row", "inputs", "e2_transition_census.by_kind.into_recovery", 244,
-     r"contiguous \(`transient`\) \| 244 \| 0\.1591 \| \*\*0\.16\*\* \| 242"),
+    ("eps_sub row", "inputs", "e2_transition_census.total", 6501,
+     r"ε_sub \| E2 corrective transitions \| episodes \(one each\) \| 553 \| \*\*0\.15\*\* \| 549 \| 4"),
+    ("contiguous subgroup row", "inputs", "e2_transition_census.by_kind.into_recovery", 244,
+     r"contiguous \(`transient`\) \| 244 \| 0\.2250 \| \*\*0\.23\*\* \| 234 \| 10"),
     ("across a gap row", "inputs", "e2_transition_census.by_kind.into_recovery_across_a_gap", 309,
-     r"across a gap \| 309 \| 0\.1414 \| \*\*0\.15\*\* \| 275"),
+     r"across a gap \| 309 \| 0\.1999 \| \*\*0\.20\*\* \| 309 \| \*\*0\*\*"),
+    ("the paired range width is declared", "inputs", "decisions.total", 7629,
+     r"needs `2 ln\(2M/α\)/ε²`"),
 )
 
 
