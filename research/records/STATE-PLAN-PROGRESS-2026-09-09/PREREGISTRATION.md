@@ -261,11 +261,37 @@ representational richness, and every figure carries that label.
   note**, which the protocol writes at every step. A probe may know all of that without knowing the
   horizon.
 
-  **The veto is success above *that* null**, on eligible positions. What remains unknowable to the
-  model at a non-terminal `pointer_chain` decision is how many nodes are still ahead, because the
-  chain length is not in the task prompt and the corpus samples it; a probe that decodes it there,
-  above a null already given everything visible, is reading something the transcript does not carry.
-  That is the leak, and the finding is the leak.
+  **The null is a conditional randomization, specified here as a procedure.** Naming its inputs is
+  not enough to run it, and an unspecified null cannot govern a verdict.
+
+  1. **Strata.** Eligible decisions are grouped by `(difficulty, nodes visited so far)`. `family` is
+     constant by construction, `survival` is constant given eligibility, and the visible progress
+     note is a deterministic function of nodes visited — so it adds no stratum, and saying that is
+     part of the specification rather than an omission from it.
+  2. **Extraction.** `nodes visited so far` is read from the rendered prompt as the count of
+     `read_file` observations before the decision, never from the label or the step index.
+  3. **The randomization.** Within each stratum the steps-remaining labels are permuted across
+     decisions, **10,000 draws**, seeded from the seal. Permuting within the stratum is what makes
+     the null conditional: everything the conditioning variables carry is preserved exactly, and
+     only the association with the residual is destroyed.
+  4. **Unsupported strata.** A stratum with fewer than **10** eligible decisions is dropped, with its
+     size reported; strata are never merged to reach the threshold, because merging changes the
+     conditioning set after seeing it.
+  5. **The comparison.** The probe's accuracy on eligible decisions against the permutation
+     distribution of the same quantity, at the ε and α of §7's table. The veto fires when the probe
+     exceeds the null's `1 − α` quantile by more than ε.
+
+  **What firing supports, stated narrowly.** Exceeding this null is evidence that the residual
+  carries steps-remaining information **beyond what the four conditioning variables carry** — it is
+  not a proof of leakage in general, because the conditioning set may be incomplete and a null built
+  on an incomplete set can be beaten by a probe reading a legitimate cue nobody listed. The veto is
+  therefore an instruction to **investigate and name the cue**, and the instrument is called into
+  question only if no visible cue accounts for the excess. Codex's objection is right and this is the
+  narrower claim that answers it: naming several conditioning variables does not establish their
+  sufficiency.
+
+  **Until this procedure has been executed the control reads *not measured* and the veto cannot
+  fire** (§10). It is specified before any capture is read, which is the condition that matters.
 - **Evaluation set**: the test split's 1,781 decisions, 240 episodes, clean variants only. Held out
   by episode by construction, never by position.
 
@@ -497,9 +523,10 @@ claims a resolution its own range does not support, which is what the first draf
 | ε_sub, contiguous (`transient`) | subgroup | episodes | 244 | **0.23** | 234 | 10 |
 | ε_sub, across a gap | subgroup | episodes | 309 | **0.20** | 309 | 0 |
 
-*A second table of ε_main = 0.17 and ε_sub = 0.11 survived below when §7 was recomputed at the paired
-range width, unmarked, and Codex found it. Under this document's own rule those values are not merely
-stale but **unmet**: 0.17 needs 428 episodes against 240, and 0.11 needs 1,021 against 553. A reader
+*A second table survived below when §7 was recomputed at the paired range width, unmarked, and Codex
+found it: it declared, at range width 1 and now superseded, ε_main = 0.17 and ε_sub = 0.11. Under
+this document's own rule those superseded values are not merely stale but **unmet**: 0.17 needs 428
+episodes against 240, and 0.11 needs 1,021 against 553. A reader
 taking the wrong table would have claimed a resolution the corpus does not support, and the two
 tables could flip a verdict between them. Every superseded value below is now marked in place rather
 than deleted, and `check_prereg.py` refuses a document that declares two operative values for one
@@ -718,6 +745,9 @@ reason attached to each. Fixed here:
 
 - E1 in its original predictive-sufficiency form: **untestable**, by Facts 2 and 3. This one is
   fixed now, because it is a property of the corpus and not of a run.
+- The unknown-horizon control of §4.1: **not measured**, and **its veto cannot fire** until the
+  conditional randomization there has been executed. Its procedure is specified before any capture is
+  read, which is what the seal is for; its result is not.
 - E1 as decodability at matched rank: **not measured**. It becomes *measured* when it has been
   executed, and not before. A pre-registration that records its own estimands as measured is
   describing an intention; the state is a fact about the run and this document has had none.
@@ -768,7 +798,13 @@ Each fails closed and names itself.
 - **H2**, in its restated within-pass form, is falsified by the state at the decision position being
   recoverable from the sliding window alone at the same rank.
 - **The instrument** is falsified before either: by the step index failing to decode (Fact 1's
-  control), or by `pointer_chain` steps-remaining decoding above the permutation null.
+  control), or by the unknown-horizon veto of §4.1 firing. **That veto is stated once, in §4.1, and
+  in its conditional form only.** Beating the *unconditional* permutation null on `pointer_chain`
+  steps-remaining does **not** invalidate the instrument: the chain's end is visible in the text at
+  the terminal decision, so a probe that reads it is reading its input. This paragraph carried the
+  unconditional form until Codex found the contradiction with §4.1; the two said different things
+  and the checker certified the document anyway. E1's ordinary permutation nulls are unaffected —
+  they serve a different purpose and are not this veto.
 
 The programme's own record of this week is that the instrument fails before the model does. **A first
 result showing the 12B more predictive than the 4B is, until the capacity rule is applied and the

@@ -112,8 +112,10 @@ CLAIMS: tuple[tuple[str, str, str, object, str], ...] = (
      r"all \*\*94\*\* terminal `pointer_chain` decisions"),
     ("terminal chain in test", "chain", "terminal_in_test", 20,
      r"\(20 of them in E1's test split\)"),
+    # Numerator and denominator bound together, on the joined paragraph. The first version offered
+    # alternatives, so 575 → 999 and 0 → 1 each passed by satisfying the other half (Codex C1).
     ("non-terminal without the marker", "chain", "non_terminal_decisions", 575,
-     r"\*\*0 of\s*$|0 of\n?\s*575\*\* non-terminal ones do|575\*\* non-terminal ones do"),
+     r"\*\*0 of 575\*\* non-terminal ones do"),
     ("12B peak reserved", "both", "peak_reserved_gib_12b", 26.453,
      r"\| 12B \| 2\.674 GiB \| \*\*2\.7 GB\*\* \| 42\.2 min \| 331\.6 \(shared\) \| 26\.45"),
     # The cross-fitting folds. The digest is what the seal fixes, so it is pinned to the line that
@@ -181,18 +183,45 @@ def artefacts() -> dict[str, object]:
     }
 
 
+#: The contradictory edits Codex demonstrated, kept as permanent regressions. Each is appended to a
+#: clean document and **must** be rejected; the clean document must pass. They live here rather than
+#: in a review because the detector that missed them was written to catch exactly this class.
+CONTRADICTION_COUNTEREXAMPLES = {
+    "a duplicated table row with a changed epsilon":
+        "\n| ε_sub | E2 corrective transitions | episodes (one each) | 553 | **0.11** | 549 | 4 |\n",
+    "a declaration wrapped across two lines":
+        "\nThe operative ε_main =\n0.01.\n",
+    "a current declaration inside a paragraph that mentions supersession":
+        "\nThe earlier values are superseded. The operative ε_main = 0.01.\n",
+    "a subgroup word beside a different tolerance's name":
+        "\nFor contiguous cases, the operative ε_ord = 0.23.\n",
+    "an ordinary standalone declaration":
+        "\nThe bound is tight: ε_main = 0.01 throughout.\n",
+}
+
+
 def check(document: str, *, verbose: bool = True) -> list[str]:
-    """Return the names of the claims that do not check out. Empty means the document is consistent."""
+    """Every validation this checker performs, so both entry points run the same path.
+
+    `competing_tolerances` used to run only in `main`, so `--self-test` never exercised it: the 56
+    pinned-claim corruptions all rejected and gave no coverage at all to the newly added detector,
+    and a copy carrying the very defect the normal command rejects passed the self-test (Codex C1).
+    A verifier with two entry points that validate different things has one entry point nobody
+    tests.
+    """
     sources = artefacts()
     lines = document.splitlines()
-    failures = []
+    # Paragraph text with newlines collapsed, so a claim the markdown wrapped is still one claim.
+    paragraphs = [" ".join(block.split()) for block in document.split("\n\n")]
+    failures = [f"competing tolerance ({p})" for p in competing_tolerances(document)]
     for claim, source, path, expected, pattern in CLAIMS:
         try:
             got = at(sources[source], path)
         except (KeyError, IndexError, TypeError):
             got = "<absent>"
         in_json = got == expected
-        matched = any(re.search(pattern, line) for line in lines)
+        matched = (any(re.search(pattern, line) for line in lines)
+                   or any(re.search(pattern, block) for block in paragraphs))
         if not (in_json and matched):
             failures.append(claim)
         if verbose:
@@ -210,63 +239,108 @@ def check(document: str, *, verbose: bool = True) -> list[str]:
     return failures
 
 
-#: The one operative value of each tolerance. Any other value asserted for the same name, on a line
-#: this check does not recognise as superseded, is a contradiction rather than a stale sentence.
-OPERATIVE_TOLERANCES = {"ε_main": "0.23", "ε_ord": "0.13", "ε_sub": "0.15"}
+#: The operative value of each tolerance, keyed by **population** — the complete key, subgroup
+#: included. Keying by bare name was the first version's mistake: a subgroup word anywhere on a line
+#: added its number to the allowed set of *every* tolerance, so `the operative ε_ord = 0.23` passed
+#: because "contiguous" appeared in the sentence (Codex C1).
+OPERATIVE_TOLERANCES = {
+    "ε_main": "0.23",
+    "ε_ord": "0.13",
+    "ε_sub": "0.15",
+    "ε_sub/contiguous": "0.23",
+    "ε_sub/gap": "0.20",
+}
 
-#: The subgroup tolerances, which are their own operative values and not competitors to the pooled
-#: one. They are named separately because "ε_sub, across a gap = 0.20" beside "ε_sub = 0.15" is a
-#: legitimate pair and "ε_sub = 0.11" is not.
-OPERATIVE_SUBGROUPS = {"contiguous": "0.23", "across a gap": "0.20"}
+#: Words that make a **declaration** historical. Applied to the declaration's own sentence or table
+#: row, never to its paragraph: exempting a whole paragraph let an explicitly current declaration
+#: ride inside a paragraph that mentioned supersession, which is precisely the edit a careless
+#: author makes.
+HISTORICAL_MARKERS = (
+    "superseded", "SUPERSEDED", "not operative", "coverage is not supported",
+    "kept for the comparison", "kept for the reasoning", "stood here", "stood there",
+    "the first draft", "earlier table", "at range width 1", "needs 428", "needs 1,021",
+)
 
-#: A **paragraph** is exempt when it says it is not operative. Marking by line was the first attempt
-#: and it was too narrow: a paragraph headed SUPERSEDED still has its numbers three lines further
-#: down, and the check flagged them. The unit of "this text is not operative" is the paragraph a
-#: reader takes it from, not the line it happens to sit on.
-SUPERSEDED_MARKERS = ("SUPERSEDED", "superseded", "not operative", "Coverage is not supported",
-                      "kept for the comparison", "kept for the reasoning")
+#: Which subgroup a declaration belongs to, by the words that name it.
+SUBGROUP_WORDS = {"contiguous": "contiguous", "transient": "contiguous", "across a gap": "gap",
+                  "across-a-gap": "gap"}
+
+
+def _population(text: str, name: str) -> str:
+    """The complete key a declaration is about: the tolerance name, plus its subgroup if named."""
+    if name == "ε_sub":
+        for word, key in SUBGROUP_WORDS.items():
+            if word in text.lower():
+                return f"ε_sub/{key}"
+    return name
+
+
+def _declarations(document: str) -> list[tuple[int, str, str, str]]:
+    """Every tolerance declaration in the document, as (line, population, value, the text).
+
+    Two forms are parsed rather than pattern-matched at a distance. A **table row** is split on its
+    pipes and read positionally, so the format's own 61-character row can never slip past a
+    60-character window. A **prose declaration** is read from a sentence with the newlines collapsed,
+    so a declaration wrapped across two lines is one declaration and not two halves that each look
+    harmless.
+    """
+    found: list[tuple[int, str, str, str]] = []
+    for number, line in enumerate(document.splitlines(), 1):
+        if line.lstrip().startswith("|") and line.count("|") >= 4:
+            fields = [f.strip() for f in line.strip().strip("|").split("|")]
+            names = [n for n in OPERATIVE_TOLERANCES if n in fields[0]]
+            if not names:
+                continue
+            name = max(names, key=len).split("/")[0]
+            for field in fields[1:]:
+                for value in re.findall(r"\b0\.\d+\b", field.replace("**", "")):
+                    # A row carries its exact ε beside its declared one; the declared value is the
+                    # emphasised field, so only bolded numbers are read as declarations.
+                    if "**" in field:
+                        found.append((number, _population(fields[0], name), value, line))
+    # Prose, on sentences with the newlines collapsed.
+    joined, index = [], 1
+    for raw in document.split("\n\n"):
+        text = " ".join(raw.split())
+        joined.append((index, text))
+        index += raw.count("\n") + 2
+    for start_line, block in joined:
+        for sentence in re.split(r"(?<=[.;])\s+", block):
+            for name in ("ε_main", "ε_ord", "ε_sub"):
+                if name not in sentence:
+                    continue
+                for match in re.finditer(
+                    rf"{re.escape(name)}[^0-9\n]{{0,80}}?(\*\*)?\b(0\.\d+)\b", sentence
+                ):
+                    found.append((start_line, _population(sentence, name), match.group(2),
+                                  sentence))
+    return found
 
 
 def competing_tolerances(document: str) -> list[str]:
-    """Find a second operative value for a tolerance the document has already declared.
+    """Refuse a second operative value for one population.
 
     Recomputing §7 at the paired range width left a whole second table behind, unmarked, declaring
-    ε_main 0.17 and ε_sub 0.11 — values that under the new rule are not merely stale but unattainable
-    (0.17 needs 428 episodes against 240). The claim checks above passed both tables, because each
-    pinned figure was individually present and correct; nothing asked whether the document
-    *contradicted itself*. A checker that verifies every claim and cannot see a contradiction between
-    two of them is checking the sentences and not the document (Codex S1).
+    values that under the new rule are unattainable. Every individual claim passed, because each
+    pinned figure was present and correct; nothing asked whether the document contradicted itself.
+    A checker that verifies every claim and cannot see a contradiction between two of them is
+    checking the sentences and not the document.
     """
     problems = []
-    offset = 1
-    for block in document.split("\n\n"):
-        lines = block.count("\n") + 1
-        exempt = any(marker in block for marker in SUPERSEDED_MARKERS)
-        for number, line in enumerate(block.splitlines(), offset):
-            if exempt:
-                continue
-            allowed = {v for k, v in OPERATIVE_SUBGROUPS.items() if k in line}
-            for name, operative in OPERATIVE_TOLERANCES.items():
-                if name not in line:
-                    continue
-                for found in re.findall(r"\b0\.\d+\b", line):
-                    # A row of the operative table also carries its exact ε and its needed n; only a
-                    # value *declared for the name* competes, so require name and value to be close.
-                    if found in {operative, *allowed}:
-                        continue
-                    if re.search(rf"{re.escape(name)}[^.\n]{{0,60}}\b{re.escape(found)}\b", line):
-                        problems.append(f"line {number}: {name} = {found}, operative is {operative}")
-        offset += lines + 1
-    return problems
+    for number, population, value, text in _declarations(document):
+        if any(marker in text for marker in HISTORICAL_MARKERS):
+            continue
+        operative = OPERATIVE_TOLERANCES.get(population)
+        if operative is not None and value != operative:
+            problems.append(
+                f"line {number}: {population} declared {value}, operative is {operative}"
+            )
+    return sorted(set(problems))
 
 
 def main() -> int:
     document = (HERE / "PREREGISTRATION.md").read_text()
     failures = check(document)
-    competing = competing_tolerances(document)
-    for problem in competing:
-        print(f"{'competing tolerance':32s} {'':42s} {problem}")
-    failures = failures + [f"competing tolerance ({p})" for p in competing]
     print()
     if failures:
         print(f"{len(failures)} claim(s) do not check out: {', '.join(failures)}")
@@ -293,6 +367,29 @@ def corrupt(line: str, span: tuple[int, int]) -> str:
     return line[:start] + matched + line[end:]
 
 
+def _corrupt_wrapped(document: str, pattern: str, expected: object) -> str | None:
+    """Break a claim whose pattern only matches across a line wrap, by changing its own figure.
+
+    Line-level corruption cannot reach these: the pattern matches the paragraph with its newlines
+    collapsed and no single line satisfies it. Rather than loosen the pattern — which is what binds
+    the numerator to its denominator — the corruption targets the value the claim asserts, inside the
+    paragraph that asserts it.
+    """
+    rendered = {str(expected)}
+    if isinstance(expected, int):
+        rendered.add(f"{expected:,}")
+    offset = 0
+    for block in document.split("\n\n"):
+        if re.search(pattern, " ".join(block.split())):
+            for form in sorted(rendered, key=len, reverse=True):
+                if form in block:
+                    changed = block.replace(form, form[:-1] + ("8" if form[-1] != "8" else "7"), 1)
+                    return document[:offset] + changed + document[offset + len(block):]
+            return None
+        offset += len(block) + 2
+    return None
+
+
 def self_test() -> int:
     """Corrupt each pinned claim in turn and assert the check rejects the corrupted document.
 
@@ -305,11 +402,25 @@ def self_test() -> int:
         return 1
 
     survived, exercised = [], 0
-    for claim, _source, _path, _expected, pattern in CLAIMS:
+    # The contradiction detector, exercised by the same command that exercises the claims.
+    for name, edit in CONTRADICTION_COUNTEREXAMPLES.items():
+        exercised += 1
+        if not any(f.startswith("competing tolerance") for f in check(document + edit, verbose=False)):
+            survived.append(f"contradiction: {name}")
+    for claim, _source, _path, expected, pattern in CLAIMS:
         hits = [(i, re.search(pattern, line)) for i, line in enumerate(lines)]
         hits = [(i, match) for i, match in hits if match]
         if not hits:
-            survived.append(f"{claim} (pattern matches no line)")
+            # A claim the markdown wrapped matches only the joined paragraph, so there is no single
+            # line to corrupt. Corrupt the expected value where it sits in that paragraph instead:
+            # the point is to break the pinned figure, and the figure is what the claim asserts.
+            broken = _corrupt_wrapped(document, pattern, expected)
+            if broken is None:
+                survived.append(f"{claim} (pattern matches nothing to corrupt)")
+                continue
+            exercised += 1
+            if claim not in check(broken, verbose=False):
+                survived.append(claim)
             continue
         # Every matching line must be corrupted at once, or a claim that pins a figure appearing
         # twice would be caught by the copy rather than by the line under test.
