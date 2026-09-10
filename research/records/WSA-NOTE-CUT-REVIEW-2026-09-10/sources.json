@@ -1,0 +1,50 @@
+{
+  "review_target": "c63157777f88e8cfa1e18f467702061d2ed82cc3",
+  "current_main_read": "3e82317e2de05d4182f0ada1b1b082ba30929942",
+  "integration_read": "54248ec718d705335f61d62d1f309efa6ad9815b",
+  "dcro_read": "036e46c4650dbd02964673f3426ae6d72db6219a",
+  "files": [
+    {
+      "commit": "c63157777f88e8cfa1e18f467702061d2ed82cc3",
+      "path": "research/records/WORKSPACE-EXPERIMENTS-2026-09-10/scripts/workspace_w3b.py",
+      "frozen_as": "source/workspace_w3b.py",
+      "sha256": "b2d674d3469e25a56287743159322b406c0c96bc98a701d6c1c92bc580ea8fdf"
+    },
+    {
+      "commit": "c63157777f88e8cfa1e18f467702061d2ed82cc3",
+      "path": "research/records/WORKSPACE-EXPERIMENTS-2026-09-10/scripts/workspace_w3b_analyze.py",
+      "frozen_as": "source/workspace_w3b_analyze.py",
+      "sha256": "85948cba4b7fabde05a79fb35f0f45bcefc69ed8f58c5f487f5761dc2bc6b923"
+    },
+    {
+      "commit": "c63157777f88e8cfa1e18f467702061d2ed82cc3",
+      "path": "research/records/WORKSPACE-EXPERIMENTS-2026-09-10/scripts/workspace_capture.py",
+      "frozen_as": "source/workspace_capture.py",
+      "sha256": "958ccdcf0bae1611b920d847da76777c29c3485f930b0a2989bfa8d1f19f649f"
+    },
+    {
+      "commit": "712f78c4d0d0f3acdea55b1f49d8ae7a06124964",
+      "path": "research/records/WSA-RUN-CAPABILITIES-2026-09-10/source/workspace_w3b.py",
+      "frozen_as": "source/workspace_w3b_before.py",
+      "sha256": "f70eb66ad5ed56997aed8ffcfc4576ded2ac6772a68b279ef6f1c26e6a62edcc"
+    },
+    {
+      "commit": "3e82317e2de05d4182f0ada1b1b082ba30929942",
+      "path": "design_specifications/pending/WORKSPACE-EXPERIMENTS-2026-09-10.md",
+      "frozen_as": "source/order.md",
+      "sha256": "b91a184312b386549f1fac5e9083abdf37a6182a9c885cce6dbb5bf7c6f20712"
+    },
+    {
+      "commit": "3e82317e2de05d4182f0ada1b1b082ba30929942",
+      "path": "design_specifications/pending/CUDA-WS-A-CODEX-2026-09-09.md",
+      "frozen_as": "source/review-order.md",
+      "sha256": "b6a000b30d55f7162d16ee536ae0bbb74afc26ff7c2b9bb7cc8d25ce09e0f2ad"
+    },
+    {
+      "commit": "3e82317e2de05d4182f0ada1b1b082ba30929942",
+      "path": "research/records/WORKSPACE-EXPERIMENTS-2026-09-10/README.md",
+      "frozen_as": "source/producer-record.md",
+      "sha256": "f0e1af4368c65424415725b8082d52e35cdc0e58348082a596b84c2bb1cf349f"
+    }
+  ]
+}

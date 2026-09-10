@@ -1,0 +1,54 @@
+{
+  "basis": "file-only source-AST and synthetic analytic fixtures; no model findings",
+  "specification_verdict": "partial: original empty cut repaired in tested cases; placement and consumer validation gaps remain",
+  "native_execution": "unexecuted",
+  "scientific_results_reviewed": "none; producer-reported one-row instrument smoke summary read after source/fixture analysis",
+  "review_branch_parent": "712f78c4d0d0f3acdea55b1f49d8ae7a06124964",
+  "python": "3.13.1",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "checks": [
+    {
+      "command": "python3 -B research/records/WSA-NOTE-CUT-REVIEW-2026-09-10/check.py",
+      "exit_code": 0,
+      "scope": "builder AST, gate assertions with analytic attention sums, full reporter AST on virtual files; no torch tensor/pre-hook or real tokenizer execution",
+      "builder_cases": 16,
+      "placement_cases": 7,
+      "gate_negative_controls": 5,
+      "reporter_fixtures": 15,
+      "source_hashes_verified": 7
+    },
+    {
+      "command": "ruff check --no-cache --select F,E9 research/records/WSA-NOTE-CUT-REVIEW-2026-09-10/check.py research/records/WSA-NOTE-CUT-REVIEW-2026-09-10/reporter_checks.py",
+      "exit_code": 0,
+      "result": "All checks passed"
+    }
+  ],
+  "gate_ledger": {
+    "scope": "10 check families/obligations in this review only",
+    "demonstrated_limited_rejection": 5,
+    "not_certified": 3,
+    "unexecuted_or_unknown": 2
+  },
+  "forbidden_modules_checked_absent": [
+    "mlx",
+    "mlx_lm",
+    "numpy",
+    "torch",
+    "transformers"
+  ],
+  "independent_review": "Read-only source/fixture review confirmed that assertion inputs and analytic attention are synthetic, and that the relay proof does not establish a Gemma effect. Reporter cases were independently reviewed before reproduction.",
+  "files": {
+    "README.md": "973624c4f5054a03ef3e6ecbd2ae6f846e2b1c3d451f0bd7bb493b6ba34aa333",
+    "check.json": "d1069bf00adb10f89dcadd3f3a3f4ba07619e88b8398e87a953917a261db5412",
+    "check.py": "38e67f990a50349570856669b9107c2c53bdfe42b0d6ca1a3425e648e0010d47",
+    "reporter_checks.py": "9112e9bd601781d63c9f3f551f9d86fcaaf148b2fbf6373c9513495160e87cb1",
+    "source/order.md": "b91a184312b386549f1fac5e9083abdf37a6182a9c885cce6dbb5bf7c6f20712",
+    "source/producer-record.md": "f0e1af4368c65424415725b8082d52e35cdc0e58348082a596b84c2bb1cf349f",
+    "source/review-order.md": "b6a000b30d55f7162d16ee536ae0bbb74afc26ff7c2b9bb7cc8d25ce09e0f2ad",
+    "source/workspace_capture.py": "958ccdcf0bae1611b920d847da76777c29c3485f930b0a2989bfa8d1f19f649f",
+    "source/workspace_w3b.py": "b2d674d3469e25a56287743159322b406c0c96bc98a701d6c1c92bc580ea8fdf",
+    "source/workspace_w3b_analyze.py": "85948cba4b7fabde05a79fb35f0f45bcefc69ed8f58c5f487f5761dc2bc6b923",
+    "source/workspace_w3b_before.py": "f70eb66ad5ed56997aed8ffcfc4576ded2ac6772a68b279ef6f1c26e6a62edcc",
+    "sources.json": "2a79af4576736f27ea4890deea218b8a6ed5aa86060e907c4fb72766f68bb3a3"
+  }
+}

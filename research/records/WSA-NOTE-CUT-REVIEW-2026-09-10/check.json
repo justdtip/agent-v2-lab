@@ -1,0 +1,4295 @@
+{
+  "basis": "synthetic source-AST and analytic fixtures; no model findings",
+  "builder_fixtures": [
+    {
+      "P_act": 6,
+      "S": 8,
+      "case": "ordinary",
+      "fence_straddle_tokens": 0,
+      "note_keys": [
+        2,
+        3
+      ],
+      "offsets": [
+        [
+          0,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          4,
+          11
+        ],
+        [
+          11,
+          12
+        ],
+        [
+          12,
+          21
+        ],
+        [
+          21,
+          30
+        ]
+      ],
+      "prompt_tokens": 2,
+      "q0": 4,
+      "verdict": "exact_expected_edges"
+    },
+    {
+      "P_act": 51,
+      "S": 53,
+      "case": "ordinary",
+      "fence_straddle_tokens": 0,
+      "note_keys": [
+        47,
+        48
+      ],
+      "offsets": [
+        [
+          0,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          4,
+          11
+        ],
+        [
+          11,
+          12
+        ],
+        [
+          12,
+          21
+        ],
+        [
+          21,
+          30
+        ]
+      ],
+      "prompt_tokens": 47,
+      "q0": 49,
+      "verdict": "exact_expected_edges"
+    },
+    {
+      "P_act": 104,
+      "S": 106,
+      "case": "ordinary",
+      "fence_straddle_tokens": 0,
+      "note_keys": [
+        100,
+        101
+      ],
+      "offsets": [
+        [
+          0,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          4,
+          11
+        ],
+        [
+          11,
+          12
+        ],
+        [
+          12,
+          21
+        ],
+        [
+          21,
+          30
+        ]
+      ],
+      "prompt_tokens": 100,
+      "q0": 102,
+      "verdict": "exact_expected_edges"
+    },
+    {
+      "P_act": 1504,
+      "S": 1506,
+      "case": "ordinary",
+      "fence_straddle_tokens": 0,
+      "note_keys": [
+        1500,
+        1501
+      ],
+      "offsets": [
+        [
+          0,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          4,
+          11
+        ],
+        [
+          11,
+          12
+        ],
+        [
+          12,
+          21
+        ],
+        [
+          21,
+          30
+        ]
+      ],
+      "prompt_tokens": 1500,
+      "q0": 1502,
+      "verdict": "exact_expected_edges"
+    },
+    {
+      "P_act": 5,
+      "S": 7,
+      "case": "one_note_token",
+      "fence_straddle_tokens": 0,
+      "note_keys": [
+        2
+      ],
+      "offsets": [
+        [
+          0,
+          4
+        ],
+        [
+          4,
+          11
+        ],
+        [
+          11,
+          12
+        ],
+        [
+          12,
+          21
+        ],
+        [
+          21,
+          30
+        ]
+      ],
+      "prompt_tokens": 2,
+      "q0": 3,
+      "verdict": "exact_expected_edges"
+    },
+    {
+      "P_act": 50,
+      "S": 52,
+      "case": "one_note_token",
+      "fence_straddle_tokens": 0,
+      "note_keys": [
+        47
+      ],
+      "offsets": [
+        [
+          0,
+          4
+        ],
+        [
+          4,
+          11
+        ],
+        [
+          11,
+          12
+        ],
+        [
+          12,
+          21
+        ],
+        [
+          21,
+          30
+        ]
+      ],
+      "prompt_tokens": 47,
+      "q0": 48,
+      "verdict": "exact_expected_edges"
+    },
+    {
+      "P_act": 103,
+      "S": 105,
+      "case": "one_note_token",
+      "fence_straddle_tokens": 0,
+      "note_keys": [
+        100
+      ],
+      "offsets": [
+        [
+          0,
+          4
+        ],
+        [
+          4,
+          11
+        ],
+        [
+          11,
+          12
+        ],
+        [
+          12,
+          21
+        ],
+        [
+          21,
+          30
+        ]
+      ],
+      "prompt_tokens": 100,
+      "q0": 101,
+      "verdict": "exact_expected_edges"
+    },
+    {
+      "P_act": 1503,
+      "S": 1505,
+      "case": "one_note_token",
+      "fence_straddle_tokens": 0,
+      "note_keys": [
+        1500
+      ],
+      "offsets": [
+        [
+          0,
+          4
+        ],
+        [
+          4,
+          11
+        ],
+        [
+          11,
+          12
+        ],
+        [
+          12,
+          21
+        ],
+        [
+          21,
+          30
+        ]
+      ],
+      "prompt_tokens": 1500,
+      "q0": 1501,
+      "verdict": "exact_expected_edges"
+    },
+    {
+      "P_act": 6,
+      "S": 8,
+      "case": "straddling_fence",
+      "fence_straddle_tokens": 1,
+      "note_keys": [
+        2,
+        3
+      ],
+      "offsets": [
+        [
+          0,
+          3
+        ],
+        [
+          3,
+          7
+        ],
+        [
+          7,
+          11
+        ],
+        [
+          11,
+          12
+        ],
+        [
+          12,
+          21
+        ],
+        [
+          21,
+          30
+        ]
+      ],
+      "prompt_tokens": 2,
+      "q0": 4,
+      "verdict": "exact_expected_edges"
+    },
+    {
+      "P_act": 51,
+      "S": 53,
+      "case": "straddling_fence",
+      "fence_straddle_tokens": 1,
+      "note_keys": [
+        47,
+        48
+      ],
+      "offsets": [
+        [
+          0,
+          3
+        ],
+        [
+          3,
+          7
+        ],
+        [
+          7,
+          11
+        ],
+        [
+          11,
+          12
+        ],
+        [
+          12,
+          21
+        ],
+        [
+          21,
+          30
+        ]
+      ],
+      "prompt_tokens": 47,
+      "q0": 49,
+      "verdict": "exact_expected_edges"
+    },
+    {
+      "P_act": 104,
+      "S": 106,
+      "case": "straddling_fence",
+      "fence_straddle_tokens": 1,
+      "note_keys": [
+        100,
+        101
+      ],
+      "offsets": [
+        [
+          0,
+          3
+        ],
+        [
+          3,
+          7
+        ],
+        [
+          7,
+          11
+        ],
+        [
+          11,
+          12
+        ],
+        [
+          12,
+          21
+        ],
+        [
+          21,
+          30
+        ]
+      ],
+      "prompt_tokens": 100,
+      "q0": 102,
+      "verdict": "exact_expected_edges"
+    },
+    {
+      "P_act": 1504,
+      "S": 1506,
+      "case": "straddling_fence",
+      "fence_straddle_tokens": 1,
+      "note_keys": [
+        1500,
+        1501
+      ],
+      "offsets": [
+        [
+          0,
+          3
+        ],
+        [
+          3,
+          7
+        ],
+        [
+          7,
+          11
+        ],
+        [
+          11,
+          12
+        ],
+        [
+          12,
+          21
+        ],
+        [
+          21,
+          30
+        ]
+      ],
+      "prompt_tokens": 1500,
+      "q0": 1502,
+      "verdict": "exact_expected_edges"
+    },
+    {
+      "P_act": 4,
+      "S": 6,
+      "case": "no_prose",
+      "fence_straddle_tokens": 0,
+      "note_keys": [],
+      "offsets": [
+        [
+          0,
+          7
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          8,
+          17
+        ],
+        [
+          17,
+          26
+        ]
+      ],
+      "prompt_tokens": 2,
+      "q0": 2,
+      "verdict": "skipped_no_prose"
+    },
+    {
+      "P_act": 49,
+      "S": 51,
+      "case": "no_prose",
+      "fence_straddle_tokens": 0,
+      "note_keys": [],
+      "offsets": [
+        [
+          0,
+          7
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          8,
+          17
+        ],
+        [
+          17,
+          26
+        ]
+      ],
+      "prompt_tokens": 47,
+      "q0": 47,
+      "verdict": "skipped_no_prose"
+    },
+    {
+      "P_act": 102,
+      "S": 104,
+      "case": "no_prose",
+      "fence_straddle_tokens": 0,
+      "note_keys": [],
+      "offsets": [
+        [
+          0,
+          7
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          8,
+          17
+        ],
+        [
+          17,
+          26
+        ]
+      ],
+      "prompt_tokens": 100,
+      "q0": 100,
+      "verdict": "skipped_no_prose"
+    },
+    {
+      "P_act": 1502,
+      "S": 1504,
+      "case": "no_prose",
+      "fence_straddle_tokens": 0,
+      "note_keys": [],
+      "offsets": [
+        [
+          0,
+          7
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          8,
+          17
+        ],
+        [
+          17,
+          26
+        ]
+      ],
+      "prompt_tokens": 1500,
+      "q0": 1500,
+      "verdict": "skipped_no_prose"
+    }
+  ],
+  "forbidden_modules_checked_absent": [
+    "mlx",
+    "mlx_lm",
+    "numpy",
+    "torch",
+    "transformers"
+  ],
+  "gate_negative_controls": [
+    {
+      "case": "positive_masked_attention",
+      "producer_assertions": {
+        "P_note_selected_readouts": true,
+        "leaky_carrier_control": true,
+        "masked_attention_and_local_window": false,
+        "nonempty_P_act": true
+      }
+    },
+    {
+      "case": "positive_local_far_attention",
+      "producer_assertions": {
+        "P_note_selected_readouts": true,
+        "leaky_carrier_control": true,
+        "masked_attention_and_local_window": false,
+        "nonempty_P_act": true
+      }
+    },
+    {
+      "case": "changed_P_note_readout",
+      "producer_assertions": {
+        "P_note_selected_readouts": false,
+        "leaky_carrier_control": true,
+        "masked_attention_and_local_window": true,
+        "nonempty_P_act": true
+      }
+    },
+    {
+      "case": "leaky_open_key_zero",
+      "producer_assertions": {
+        "P_note_selected_readouts": true,
+        "leaky_carrier_control": false,
+        "masked_attention_and_local_window": true,
+        "nonempty_P_act": true
+      }
+    },
+    {
+      "case": "leaky_masked_key_positive",
+      "producer_assertions": {
+        "P_note_selected_readouts": true,
+        "leaky_carrier_control": false,
+        "masked_attention_and_local_window": true,
+        "nonempty_P_act": true
+      }
+    }
+  ],
+  "model_imports": 0,
+  "original_empty_cut": "reproduced; new nonempty assertion rejects",
+  "placement_mutations": [
+    {
+      "actual_edges": [
+        [
+          4,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          7,
+          2
+        ],
+        [
+          7,
+          3
+        ]
+      ],
+      "case": "correct",
+      "independent_placement": {
+        "missing_edges": [],
+        "passes": true,
+        "unexpected_edges": []
+      },
+      "producer_assertions": {
+        "P_note_selected_readouts": true,
+        "leaky_carrier_control": true,
+        "masked_attention_and_local_window": true,
+        "nonempty_P_act": true
+      }
+    },
+    {
+      "actual_edges": [
+        [
+          6,
+          2
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          7,
+          2
+        ],
+        [
+          7,
+          3
+        ]
+      ],
+      "case": "delayed_query_start",
+      "independent_placement": {
+        "missing_edges": [
+          [
+            4,
+            2
+          ],
+          [
+            4,
+            3
+          ],
+          [
+            5,
+            2
+          ],
+          [
+            5,
+            3
+          ]
+        ],
+        "passes": false,
+        "unexpected_edges": []
+      },
+      "producer_assertions": {
+        "P_note_selected_readouts": true,
+        "leaky_carrier_control": true,
+        "masked_attention_and_local_window": true,
+        "nonempty_P_act": true
+      }
+    },
+    {
+      "actual_edges": [
+        [
+          4,
+          4
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          7,
+          4
+        ]
+      ],
+      "case": "wrong_keys",
+      "independent_placement": {
+        "missing_edges": [
+          [
+            4,
+            2
+          ],
+          [
+            4,
+            3
+          ],
+          [
+            5,
+            2
+          ],
+          [
+            5,
+            3
+          ],
+          [
+            6,
+            2
+          ],
+          [
+            6,
+            3
+          ],
+          [
+            7,
+            2
+          ],
+          [
+            7,
+            3
+          ]
+        ],
+        "passes": false,
+        "unexpected_edges": [
+          [
+            4,
+            4
+          ],
+          [
+            5,
+            4
+          ],
+          [
+            6,
+            4
+          ],
+          [
+            7,
+            4
+          ]
+        ]
+      },
+      "producer_assertions": {
+        "P_note_selected_readouts": true,
+        "leaky_carrier_control": true,
+        "masked_attention_and_local_window": true,
+        "nonempty_P_act": true
+      }
+    },
+    {
+      "actual_edges": [
+        [
+          4,
+          2
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          7,
+          2
+        ]
+      ],
+      "case": "missing_one_note_key",
+      "independent_placement": {
+        "missing_edges": [
+          [
+            4,
+            3
+          ],
+          [
+            5,
+            3
+          ],
+          [
+            6,
+            3
+          ],
+          [
+            7,
+            3
+          ]
+        ],
+        "passes": false,
+        "unexpected_edges": []
+      },
+      "producer_assertions": {
+        "P_note_selected_readouts": true,
+        "leaky_carrier_control": true,
+        "masked_attention_and_local_window": true,
+        "nonempty_P_act": true
+      }
+    },
+    {
+      "actual_edges": [
+        [
+          4,
+          0
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          6,
+          0
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          7,
+          0
+        ],
+        [
+          7,
+          2
+        ],
+        [
+          7,
+          3
+        ]
+      ],
+      "case": "extra_unrelated_key",
+      "independent_placement": {
+        "missing_edges": [],
+        "passes": false,
+        "unexpected_edges": [
+          [
+            4,
+            0
+          ],
+          [
+            5,
+            0
+          ],
+          [
+            6,
+            0
+          ],
+          [
+            7,
+            0
+          ]
+        ]
+      },
+      "producer_assertions": {
+        "P_note_selected_readouts": true,
+        "leaky_carrier_control": true,
+        "masked_attention_and_local_window": true,
+        "nonempty_P_act": true
+      }
+    },
+    {
+      "actual_edges": [
+        [
+          4,
+          7
+        ],
+        [
+          5,
+          7
+        ],
+        [
+          6,
+          7
+        ],
+        [
+          7,
+          7
+        ]
+      ],
+      "case": "future_only_key",
+      "independent_placement": {
+        "missing_edges": [
+          [
+            4,
+            2
+          ],
+          [
+            4,
+            3
+          ],
+          [
+            5,
+            2
+          ],
+          [
+            5,
+            3
+          ],
+          [
+            6,
+            2
+          ],
+          [
+            6,
+            3
+          ],
+          [
+            7,
+            2
+          ],
+          [
+            7,
+            3
+          ]
+        ],
+        "passes": false,
+        "unexpected_edges": [
+          [
+            4,
+            7
+          ],
+          [
+            5,
+            7
+          ],
+          [
+            6,
+            7
+          ],
+          [
+            7,
+            7
+          ]
+        ]
+      },
+      "producer_assertions": {
+        "P_note_selected_readouts": true,
+        "leaky_carrier_control": true,
+        "masked_attention_and_local_window": true,
+        "nonempty_P_act": true
+      }
+    },
+    {
+      "actual_edges": [],
+      "case": "empty",
+      "independent_placement": {
+        "missing_edges": [
+          [
+            4,
+            2
+          ],
+          [
+            4,
+            3
+          ],
+          [
+            5,
+            2
+          ],
+          [
+            5,
+            3
+          ],
+          [
+            6,
+            2
+          ],
+          [
+            6,
+            3
+          ],
+          [
+            7,
+            2
+          ],
+          [
+            7,
+            3
+          ]
+        ],
+        "passes": false,
+        "unexpected_edges": []
+      },
+      "producer_assertions": {
+        "P_note_selected_readouts": true,
+        "leaky_carrier_control": true,
+        "masked_attention_and_local_window": true,
+        "nonempty_P_act": false
+      }
+    }
+  ],
+  "reporter": {
+    "fixture_count": 15,
+    "fixtures": [
+      {
+        "execution": {
+          "completed_without_exception": true,
+          "error": null,
+          "report": {
+            "arm_row_counts": {
+              "current_note": 1
+            },
+            "arms": {
+              "current_note": {
+                "delta_lens_last_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "delta_model_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "taken_still_top_at_act": {
+                  "n": 1,
+                  "share": 1.0
+                },
+                "unresolved_at_act": {
+                  "n": 1,
+                  "share": 0.0
+                }
+              }
+            },
+            "basis": "fixture; queries masked from synthetic declared positions; control: synthetic declared control; unit = decision (the sample has one decision per episode by rule only if so sampled); mass floor 0.001",
+            "current_note_p_note_identical_to_unmasked": {
+              "n": 1,
+              "share": 1.0
+            },
+            "gate": {
+              "attention_on_masked_edges_all_queries_max": 0.0,
+              "attention_on_masked_keys_max": 0.0,
+              "local_mass_beyond_window_max": 0.0,
+              "n": 1,
+              "n_blocked_edges_at_P_act": {
+                "max": 1,
+                "median": 1,
+                "min": 1,
+                "n": 1,
+                "p10": 1,
+                "p90": 1
+              },
+              "rows_with_zero_blocked_at_P_act": 0
+            },
+            "gate_per_arm": {
+              "current_note": {
+                "attention_on_masked_edges_all_queries_max": 0.0,
+                "attention_on_masked_keys_max": 0.0,
+                "local_mass_beyond_window_max": 0.0,
+                "n": 1,
+                "n_blocked_edges_at_P_act": {
+                  "max": 1,
+                  "median": 1,
+                  "min": 1,
+                  "n": 1,
+                  "p10": 1,
+                  "p90": 1
+                },
+                "rows_with_zero_blocked_at_P_act": 0
+              }
+            },
+            "n": 1,
+            "note_prose_tokens": {
+              "max": 2,
+              "median": 2,
+              "min": 2,
+              "n": 1,
+              "p10": 2,
+              "p90": 2
+            },
+            "note_syntax_tokens": {
+              "max": 3,
+              "median": 3,
+              "min": 3,
+              "n": 1,
+              "p10": 3,
+              "p90": 3
+            },
+            "rows_written": 1,
+            "schema_version": 2,
+            "skipped_arm_counts": {}
+          },
+          "stdout": "{\"event\": \"w3b_analyzed\", \"n\": 1, \"arms\": [\"current_note\"], \"skipped\": {}}\n",
+          "virtual_file_accesses": [
+            {
+              "operation": "read",
+              "path": "fixture/w3b.jsonl"
+            },
+            {
+              "operation": "read",
+              "path": "fixture/manifest.json"
+            },
+            {
+              "operation": "write",
+              "path": "report.json"
+            }
+          ]
+        },
+        "inputs": {
+          "manifest": {
+            "checkpoint": "synthetic-expected-checkpoint",
+            "control": "synthetic declared control",
+            "corpus_sha256": "synthetic-expected-corpus",
+            "queries_masked_from": "synthetic declared positions",
+            "rows_written": 1,
+            "sample": [
+              7
+            ],
+            "schema_version": 2
+          },
+          "rows": [
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_edges_all_queries": 0.0,
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.0,
+                    "n_blocked_edges_at_P_act": 1,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 7,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-1",
+              "tool_idx": 0
+            }
+          ]
+        },
+        "name": "positive_baseline",
+        "purpose": "Valid synthetic schema-2 row and passing gate values."
+      },
+      {
+        "execution": {
+          "completed_without_exception": true,
+          "error": null,
+          "report": {
+            "arm_row_counts": {
+              "current_note": 1
+            },
+            "arms": {
+              "current_note": {
+                "delta_lens_last_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "delta_model_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "taken_still_top_at_act": {
+                  "n": 1,
+                  "share": 1.0
+                },
+                "unresolved_at_act": {
+                  "n": 1,
+                  "share": 0.0
+                }
+              }
+            },
+            "basis": "fixture; queries masked from synthetic declared positions; control: synthetic declared control; unit = decision (the sample has one decision per episode by rule only if so sampled); mass floor 0.001",
+            "current_note_p_note_identical_to_unmasked": {
+              "n": 1,
+              "share": 1.0
+            },
+            "gate": {
+              "attention_on_masked_edges_all_queries_max": 0.125,
+              "attention_on_masked_keys_max": 0.0,
+              "local_mass_beyond_window_max": 0.0,
+              "n": 1,
+              "n_blocked_edges_at_P_act": {
+                "max": 1,
+                "median": 1,
+                "min": 1,
+                "n": 1,
+                "p10": 1,
+                "p90": 1
+              },
+              "rows_with_zero_blocked_at_P_act": 0
+            },
+            "gate_per_arm": {
+              "current_note": {
+                "attention_on_masked_edges_all_queries_max": 0.125,
+                "attention_on_masked_keys_max": 0.0,
+                "local_mass_beyond_window_max": 0.0,
+                "n": 1,
+                "n_blocked_edges_at_P_act": {
+                  "max": 1,
+                  "median": 1,
+                  "min": 1,
+                  "n": 1,
+                  "p10": 1,
+                  "p90": 1
+                },
+                "rows_with_zero_blocked_at_P_act": 0
+              }
+            },
+            "n": 1,
+            "note_prose_tokens": {
+              "max": 2,
+              "median": 2,
+              "min": 2,
+              "n": 1,
+              "p10": 2,
+              "p90": 2
+            },
+            "note_syntax_tokens": {
+              "max": 3,
+              "median": 3,
+              "min": 3,
+              "n": 1,
+              "p10": 3,
+              "p90": 3
+            },
+            "rows_written": 1,
+            "schema_version": 2,
+            "skipped_arm_counts": {}
+          },
+          "stdout": "{\"event\": \"w3b_analyzed\", \"n\": 1, \"arms\": [\"current_note\"], \"skipped\": {}}\n",
+          "virtual_file_accesses": [
+            {
+              "operation": "read",
+              "path": "fixture/w3b.jsonl"
+            },
+            {
+              "operation": "read",
+              "path": "fixture/manifest.json"
+            },
+            {
+              "operation": "write",
+              "path": "report.json"
+            }
+          ]
+        },
+        "inputs": {
+          "manifest": {
+            "checkpoint": "synthetic-expected-checkpoint",
+            "control": "synthetic declared control",
+            "corpus_sha256": "synthetic-expected-corpus",
+            "queries_masked_from": "synthetic declared positions",
+            "rows_written": 1,
+            "sample": [
+              7
+            ],
+            "schema_version": 2
+          },
+          "rows": [
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_edges_all_queries": 0.125,
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.0,
+                    "n_blocked_edges_at_P_act": 1,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 7,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-1",
+              "tool_idx": 0
+            }
+          ]
+        },
+        "name": "failed_masked_edge_gate",
+        "purpose": "One producer gate fails; observe whether the reporter blocks results."
+      },
+      {
+        "execution": {
+          "completed_without_exception": true,
+          "error": null,
+          "report": {
+            "arm_row_counts": {
+              "current_note": 1
+            },
+            "arms": {
+              "current_note": {
+                "delta_lens_last_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "delta_model_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "taken_still_top_at_act": {
+                  "n": 1,
+                  "share": 1.0
+                },
+                "unresolved_at_act": {
+                  "n": 1,
+                  "share": 0.0
+                }
+              }
+            },
+            "basis": "fixture; queries masked from synthetic declared positions; control: synthetic declared control; unit = decision (the sample has one decision per episode by rule only if so sampled); mass floor 0.001",
+            "current_note_p_note_identical_to_unmasked": {
+              "n": 1,
+              "share": 1.0
+            },
+            "gate": {
+              "attention_on_masked_edges_all_queries_max": 0.0,
+              "attention_on_masked_keys_max": 0.0,
+              "local_mass_beyond_window_max": 0.25,
+              "n": 1,
+              "n_blocked_edges_at_P_act": {
+                "max": 1,
+                "median": 1,
+                "min": 1,
+                "n": 1,
+                "p10": 1,
+                "p90": 1
+              },
+              "rows_with_zero_blocked_at_P_act": 0
+            },
+            "gate_per_arm": {
+              "current_note": {
+                "attention_on_masked_edges_all_queries_max": 0.0,
+                "attention_on_masked_keys_max": 0.0,
+                "local_mass_beyond_window_max": 0.25,
+                "n": 1,
+                "n_blocked_edges_at_P_act": {
+                  "max": 1,
+                  "median": 1,
+                  "min": 1,
+                  "n": 1,
+                  "p10": 1,
+                  "p90": 1
+                },
+                "rows_with_zero_blocked_at_P_act": 0
+              }
+            },
+            "n": 1,
+            "note_prose_tokens": {
+              "max": 2,
+              "median": 2,
+              "min": 2,
+              "n": 1,
+              "p10": 2,
+              "p90": 2
+            },
+            "note_syntax_tokens": {
+              "max": 3,
+              "median": 3,
+              "min": 3,
+              "n": 1,
+              "p10": 3,
+              "p90": 3
+            },
+            "rows_written": 1,
+            "schema_version": 2,
+            "skipped_arm_counts": {}
+          },
+          "stdout": "{\"event\": \"w3b_analyzed\", \"n\": 1, \"arms\": [\"current_note\"], \"skipped\": {}}\n",
+          "virtual_file_accesses": [
+            {
+              "operation": "read",
+              "path": "fixture/w3b.jsonl"
+            },
+            {
+              "operation": "read",
+              "path": "fixture/manifest.json"
+            },
+            {
+              "operation": "write",
+              "path": "report.json"
+            }
+          ]
+        },
+        "inputs": {
+          "manifest": {
+            "checkpoint": "synthetic-expected-checkpoint",
+            "control": "synthetic declared control",
+            "corpus_sha256": "synthetic-expected-corpus",
+            "queries_masked_from": "synthetic declared positions",
+            "rows_written": 1,
+            "sample": [
+              7
+            ],
+            "schema_version": 2
+          },
+          "rows": [
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_edges_all_queries": 0.0,
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.25,
+                    "n_blocked_edges_at_P_act": 1,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 7,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-1",
+              "tool_idx": 0
+            }
+          ]
+        },
+        "name": "failed_window_gate",
+        "purpose": "One producer gate fails; observe whether the reporter blocks results."
+      },
+      {
+        "execution": {
+          "completed_without_exception": true,
+          "error": null,
+          "report": {
+            "arm_row_counts": {
+              "current_note": 1
+            },
+            "arms": {
+              "current_note": {
+                "delta_lens_last_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "delta_model_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "taken_still_top_at_act": {
+                  "n": 1,
+                  "share": 1.0
+                },
+                "unresolved_at_act": {
+                  "n": 1,
+                  "share": 0.0
+                }
+              }
+            },
+            "basis": "fixture; queries masked from synthetic declared positions; control: synthetic declared control; unit = decision (the sample has one decision per episode by rule only if so sampled); mass floor 0.001",
+            "current_note_p_note_identical_to_unmasked": {
+              "n": 1,
+              "share": 1.0
+            },
+            "gate": {
+              "attention_on_masked_edges_all_queries_max": 0.0,
+              "attention_on_masked_keys_max": 0.0,
+              "local_mass_beyond_window_max": 0.0,
+              "n": 1,
+              "n_blocked_edges_at_P_act": {
+                "max": 0,
+                "median": 0,
+                "min": 0,
+                "n": 1,
+                "p10": 0,
+                "p90": 0
+              },
+              "rows_with_zero_blocked_at_P_act": 1
+            },
+            "gate_per_arm": {
+              "current_note": {
+                "attention_on_masked_edges_all_queries_max": 0.0,
+                "attention_on_masked_keys_max": 0.0,
+                "local_mass_beyond_window_max": 0.0,
+                "n": 1,
+                "n_blocked_edges_at_P_act": {
+                  "max": 0,
+                  "median": 0,
+                  "min": 0,
+                  "n": 1,
+                  "p10": 0,
+                  "p90": 0
+                },
+                "rows_with_zero_blocked_at_P_act": 1
+              }
+            },
+            "n": 1,
+            "note_prose_tokens": {
+              "max": 2,
+              "median": 2,
+              "min": 2,
+              "n": 1,
+              "p10": 2,
+              "p90": 2
+            },
+            "note_syntax_tokens": {
+              "max": 3,
+              "median": 3,
+              "min": 3,
+              "n": 1,
+              "p10": 3,
+              "p90": 3
+            },
+            "rows_written": 1,
+            "schema_version": 2,
+            "skipped_arm_counts": {}
+          },
+          "stdout": "{\"event\": \"w3b_analyzed\", \"n\": 1, \"arms\": [\"current_note\"], \"skipped\": {}}\n",
+          "virtual_file_accesses": [
+            {
+              "operation": "read",
+              "path": "fixture/w3b.jsonl"
+            },
+            {
+              "operation": "read",
+              "path": "fixture/manifest.json"
+            },
+            {
+              "operation": "write",
+              "path": "report.json"
+            }
+          ]
+        },
+        "inputs": {
+          "manifest": {
+            "checkpoint": "synthetic-expected-checkpoint",
+            "control": "synthetic declared control",
+            "corpus_sha256": "synthetic-expected-corpus",
+            "queries_masked_from": "synthetic declared positions",
+            "rows_written": 1,
+            "sample": [
+              7
+            ],
+            "schema_version": 2
+          },
+          "rows": [
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_edges_all_queries": 0.0,
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.0,
+                    "n_blocked_edges_at_P_act": 0,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 7,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-1",
+              "tool_idx": 0
+            }
+          ]
+        },
+        "name": "failed_nonempty_cut_gate",
+        "purpose": "One producer gate fails; observe whether the reporter blocks results."
+      },
+      {
+        "execution": {
+          "completed_without_exception": true,
+          "error": null,
+          "report": {
+            "arm_row_counts": {
+              "current_note": 1
+            },
+            "arms": {
+              "current_note": {
+                "delta_lens_last_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "delta_model_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "taken_still_top_at_act": {
+                  "n": 1,
+                  "share": 1.0
+                },
+                "unresolved_at_act": {
+                  "n": 1,
+                  "share": 0.0
+                }
+              }
+            },
+            "basis": "fixture; queries masked from synthetic declared positions; control: synthetic declared control; unit = decision (the sample has one decision per episode by rule only if so sampled); mass floor 0.001",
+            "current_note_p_note_identical_to_unmasked": {
+              "n": 1,
+              "share": 0.0
+            },
+            "gate": {
+              "attention_on_masked_edges_all_queries_max": 0.0,
+              "attention_on_masked_keys_max": 0.0,
+              "local_mass_beyond_window_max": 0.0,
+              "n": 1,
+              "n_blocked_edges_at_P_act": {
+                "max": 1,
+                "median": 1,
+                "min": 1,
+                "n": 1,
+                "p10": 1,
+                "p90": 1
+              },
+              "rows_with_zero_blocked_at_P_act": 0
+            },
+            "gate_per_arm": {
+              "current_note": {
+                "attention_on_masked_edges_all_queries_max": 0.0,
+                "attention_on_masked_keys_max": 0.0,
+                "local_mass_beyond_window_max": 0.0,
+                "n": 1,
+                "n_blocked_edges_at_P_act": {
+                  "max": 1,
+                  "median": 1,
+                  "min": 1,
+                  "n": 1,
+                  "p10": 1,
+                  "p90": 1
+                },
+                "rows_with_zero_blocked_at_P_act": 0
+              }
+            },
+            "n": 1,
+            "note_prose_tokens": {
+              "max": 2,
+              "median": 2,
+              "min": 2,
+              "n": 1,
+              "p10": 2,
+              "p90": 2
+            },
+            "note_syntax_tokens": {
+              "max": 3,
+              "median": 3,
+              "min": 3,
+              "n": 1,
+              "p10": 3,
+              "p90": 3
+            },
+            "rows_written": 1,
+            "schema_version": 2,
+            "skipped_arm_counts": {}
+          },
+          "stdout": "{\"event\": \"w3b_analyzed\", \"n\": 1, \"arms\": [\"current_note\"], \"skipped\": {}}\n",
+          "virtual_file_accesses": [
+            {
+              "operation": "read",
+              "path": "fixture/w3b.jsonl"
+            },
+            {
+              "operation": "read",
+              "path": "fixture/manifest.json"
+            },
+            {
+              "operation": "write",
+              "path": "report.json"
+            }
+          ]
+        },
+        "inputs": {
+          "manifest": {
+            "checkpoint": "synthetic-expected-checkpoint",
+            "control": "synthetic declared control",
+            "corpus_sha256": "synthetic-expected-corpus",
+            "queries_masked_from": "synthetic declared positions",
+            "rows_written": 1,
+            "sample": [
+              7
+            ],
+            "schema_version": 2
+          },
+          "rows": [
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_edges_all_queries": 0.0,
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.0,
+                    "n_blocked_edges_at_P_act": 1,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": false
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 7,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-1",
+              "tool_idx": 0
+            }
+          ]
+        },
+        "name": "failed_p_note_identity_gate",
+        "purpose": "P_note identity is false, with other gates passing."
+      },
+      {
+        "execution": {
+          "completed_without_exception": true,
+          "error": null,
+          "report": {
+            "arm_row_counts": {
+              "current_note": 1
+            },
+            "arms": {
+              "current_note": {
+                "delta_lens_last_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "delta_model_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "taken_still_top_at_act": {
+                  "n": 1,
+                  "share": 1.0
+                },
+                "unresolved_at_act": {
+                  "n": 1,
+                  "share": 0.0
+                }
+              }
+            },
+            "basis": "fixture; queries masked from synthetic declared positions; control: synthetic declared control; unit = decision (the sample has one decision per episode by rule only if so sampled); mass floor 0.001",
+            "current_note_p_note_identical_to_unmasked": {
+              "n": 1,
+              "share": 1.0
+            },
+            "gate": {
+              "n": 0
+            },
+            "gate_per_arm": {},
+            "n": 1,
+            "note_prose_tokens": {
+              "max": 2,
+              "median": 2,
+              "min": 2,
+              "n": 1,
+              "p10": 2,
+              "p90": 2
+            },
+            "note_syntax_tokens": {
+              "max": 3,
+              "median": 3,
+              "min": 3,
+              "n": 1,
+              "p10": 3,
+              "p90": 3
+            },
+            "rows_written": 1,
+            "schema_version": 2,
+            "skipped_arm_counts": {}
+          },
+          "stdout": "{\"event\": \"w3b_analyzed\", \"n\": 1, \"arms\": [\"current_note\"], \"skipped\": {}}\n",
+          "virtual_file_accesses": [
+            {
+              "operation": "read",
+              "path": "fixture/w3b.jsonl"
+            },
+            {
+              "operation": "read",
+              "path": "fixture/manifest.json"
+            },
+            {
+              "operation": "write",
+              "path": "report.json"
+            }
+          ]
+        },
+        "inputs": {
+          "manifest": {
+            "checkpoint": "synthetic-expected-checkpoint",
+            "control": "synthetic declared control",
+            "corpus_sha256": "synthetic-expected-corpus",
+            "queries_masked_from": "synthetic declared positions",
+            "rows_written": 1,
+            "sample": [
+              7
+            ],
+            "schema_version": 2
+          },
+          "rows": [
+            {
+              "arms": {
+                "current_note": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 7,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-1",
+              "tool_idx": 0
+            }
+          ]
+        },
+        "name": "missing_gate",
+        "purpose": "A scientific arm has no gate record."
+      },
+      {
+        "execution": {
+          "completed_without_exception": true,
+          "error": null,
+          "report": {
+            "arm_row_counts": {
+              "current_note": 1
+            },
+            "arms": {
+              "current_note": {
+                "delta_lens_last_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "delta_model_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "taken_still_top_at_act": {
+                  "n": 1,
+                  "share": 1.0
+                },
+                "unresolved_at_act": {
+                  "n": 1,
+                  "share": 0.0
+                }
+              }
+            },
+            "basis": "fixture; queries masked from synthetic declared positions; control: synthetic declared control; unit = decision (the sample has one decision per episode by rule only if so sampled); mass floor 0.001",
+            "current_note_p_note_identical_to_unmasked": {
+              "n": 1,
+              "share": 1.0
+            },
+            "gate": {
+              "attention_on_masked_edges_all_queries_max": 0.0,
+              "attention_on_masked_keys_max": 0.0,
+              "local_mass_beyond_window_max": 0.0,
+              "n": 1,
+              "n_blocked_edges_at_P_act": {
+                "max": 1,
+                "median": 1,
+                "min": 1,
+                "n": 1,
+                "p10": 1,
+                "p90": 1
+              },
+              "rows_with_zero_blocked_at_P_act": 0
+            },
+            "gate_per_arm": {
+              "current_note": {
+                "attention_on_masked_edges_all_queries_max": 0.0,
+                "attention_on_masked_keys_max": 0.0,
+                "local_mass_beyond_window_max": 0.0,
+                "n": 1,
+                "n_blocked_edges_at_P_act": {
+                  "max": 1,
+                  "median": 1,
+                  "min": 1,
+                  "n": 1,
+                  "p10": 1,
+                  "p90": 1
+                },
+                "rows_with_zero_blocked_at_P_act": 0
+              }
+            },
+            "n": 1,
+            "note_prose_tokens": {
+              "max": 2,
+              "median": 2,
+              "min": 2,
+              "n": 1,
+              "p10": 2,
+              "p90": 2
+            },
+            "note_syntax_tokens": {
+              "max": 3,
+              "median": 3,
+              "min": 3,
+              "n": 1,
+              "p10": 3,
+              "p90": 3
+            },
+            "rows_written": 1,
+            "schema_version": 1,
+            "skipped_arm_counts": {}
+          },
+          "stdout": "{\"event\": \"w3b_analyzed\", \"n\": 1, \"arms\": [\"current_note\"], \"skipped\": {}}\n",
+          "virtual_file_accesses": [
+            {
+              "operation": "read",
+              "path": "fixture/w3b.jsonl"
+            },
+            {
+              "operation": "read",
+              "path": "fixture/manifest.json"
+            },
+            {
+              "operation": "write",
+              "path": "report.json"
+            }
+          ]
+        },
+        "inputs": {
+          "manifest": {
+            "checkpoint": "synthetic-expected-checkpoint",
+            "control": "synthetic declared control",
+            "corpus_sha256": "synthetic-expected-corpus",
+            "queries_masked_from": "synthetic declared positions",
+            "rows_written": 1,
+            "sample": [
+              7
+            ],
+            "schema_version": 1
+          },
+          "rows": [
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_edges_all_queries": 0.0,
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.0,
+                    "n_blocked_edges_at_P_act": 1,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 7,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-1",
+              "tool_idx": 0
+            }
+          ]
+        },
+        "name": "schema_1",
+        "purpose": "Schema version is legacy, although this fixture retains newer fields."
+      },
+      {
+        "execution": {
+          "completed_without_exception": true,
+          "error": null,
+          "report": {
+            "arm_row_counts": {
+              "current_note": 1
+            },
+            "arms": {
+              "current_note": {
+                "delta_lens_last_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "delta_model_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "taken_still_top_at_act": {
+                  "n": 1,
+                  "share": 1.0
+                },
+                "unresolved_at_act": {
+                  "n": 1,
+                  "share": 0.0
+                }
+              }
+            },
+            "basis": "fixture; queries masked from synthetic declared positions; control: synthetic declared control; unit = decision (the sample has one decision per episode by rule only if so sampled); mass floor 0.001",
+            "current_note_p_note_identical_to_unmasked": {
+              "n": 1,
+              "share": 1.0
+            },
+            "gate": {
+              "attention_on_masked_edges_all_queries_max": 0.0,
+              "attention_on_masked_keys_max": 0.0,
+              "local_mass_beyond_window_max": 0.0,
+              "n": 1,
+              "n_blocked_edges_at_P_act": {
+                "max": 1,
+                "median": 1,
+                "min": 1,
+                "n": 1,
+                "p10": 1,
+                "p90": 1
+              },
+              "rows_with_zero_blocked_at_P_act": 0
+            },
+            "gate_per_arm": {
+              "current_note": {
+                "attention_on_masked_edges_all_queries_max": 0.0,
+                "attention_on_masked_keys_max": 0.0,
+                "local_mass_beyond_window_max": 0.0,
+                "n": 1,
+                "n_blocked_edges_at_P_act": {
+                  "max": 1,
+                  "median": 1,
+                  "min": 1,
+                  "n": 1,
+                  "p10": 1,
+                  "p90": 1
+                },
+                "rows_with_zero_blocked_at_P_act": 0
+              }
+            },
+            "n": 1,
+            "note_prose_tokens": {
+              "max": 2,
+              "median": 2,
+              "min": 2,
+              "n": 1,
+              "p10": 2,
+              "p90": 2
+            },
+            "note_syntax_tokens": {
+              "max": 3,
+              "median": 3,
+              "min": 3,
+              "n": 1,
+              "p10": 3,
+              "p90": 3
+            },
+            "rows_written": 2,
+            "schema_version": 2,
+            "skipped_arm_counts": {}
+          },
+          "stdout": "{\"event\": \"w3b_analyzed\", \"n\": 1, \"arms\": [\"current_note\"], \"skipped\": {}}\n",
+          "virtual_file_accesses": [
+            {
+              "operation": "read",
+              "path": "fixture/w3b.jsonl"
+            },
+            {
+              "operation": "read",
+              "path": "fixture/manifest.json"
+            },
+            {
+              "operation": "write",
+              "path": "report.json"
+            }
+          ]
+        },
+        "inputs": {
+          "manifest": {
+            "checkpoint": "synthetic-expected-checkpoint",
+            "control": "synthetic declared control",
+            "corpus_sha256": "synthetic-expected-corpus",
+            "queries_masked_from": "synthetic declared positions",
+            "rows_written": 2,
+            "sample": [
+              7,
+              8
+            ],
+            "schema_version": 2
+          },
+          "rows": [
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_edges_all_queries": 0.0,
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.0,
+                    "n_blocked_edges_at_P_act": 1,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 7,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-1",
+              "tool_idx": 0
+            }
+          ]
+        },
+        "name": "missing_expected_id",
+        "purpose": "Expected row 8 is absent; manifest still declares two rows."
+      },
+      {
+        "execution": {
+          "completed_without_exception": true,
+          "error": null,
+          "report": {
+            "arm_row_counts": {
+              "current_note": 2
+            },
+            "arms": {
+              "current_note": {
+                "delta_lens_last_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 2,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "delta_model_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 2,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "taken_still_top_at_act": {
+                  "n": 2,
+                  "share": 1.0
+                },
+                "unresolved_at_act": {
+                  "n": 2,
+                  "share": 0.0
+                }
+              }
+            },
+            "basis": "fixture; queries masked from synthetic declared positions; control: synthetic declared control; unit = decision (the sample has one decision per episode by rule only if so sampled); mass floor 0.001",
+            "current_note_p_note_identical_to_unmasked": {
+              "n": 2,
+              "share": 1.0
+            },
+            "gate": {
+              "attention_on_masked_edges_all_queries_max": 0.0,
+              "attention_on_masked_keys_max": 0.0,
+              "local_mass_beyond_window_max": 0.0,
+              "n": 2,
+              "n_blocked_edges_at_P_act": {
+                "max": 1,
+                "median": 1.0,
+                "min": 1,
+                "n": 2,
+                "p10": 1,
+                "p90": 1
+              },
+              "rows_with_zero_blocked_at_P_act": 0
+            },
+            "gate_per_arm": {
+              "current_note": {
+                "attention_on_masked_edges_all_queries_max": 0.0,
+                "attention_on_masked_keys_max": 0.0,
+                "local_mass_beyond_window_max": 0.0,
+                "n": 2,
+                "n_blocked_edges_at_P_act": {
+                  "max": 1,
+                  "median": 1.0,
+                  "min": 1,
+                  "n": 2,
+                  "p10": 1,
+                  "p90": 1
+                },
+                "rows_with_zero_blocked_at_P_act": 0
+              }
+            },
+            "n": 2,
+            "note_prose_tokens": {
+              "max": 2,
+              "median": 2.0,
+              "min": 2,
+              "n": 2,
+              "p10": 2,
+              "p90": 2
+            },
+            "note_syntax_tokens": {
+              "max": 3,
+              "median": 3.0,
+              "min": 3,
+              "n": 2,
+              "p10": 3,
+              "p90": 3
+            },
+            "rows_written": 2,
+            "schema_version": 2,
+            "skipped_arm_counts": {}
+          },
+          "stdout": "{\"event\": \"w3b_analyzed\", \"n\": 2, \"arms\": [\"current_note\"], \"skipped\": {}}\n",
+          "virtual_file_accesses": [
+            {
+              "operation": "read",
+              "path": "fixture/w3b.jsonl"
+            },
+            {
+              "operation": "read",
+              "path": "fixture/manifest.json"
+            },
+            {
+              "operation": "write",
+              "path": "report.json"
+            }
+          ]
+        },
+        "inputs": {
+          "manifest": {
+            "checkpoint": "synthetic-expected-checkpoint",
+            "control": "synthetic declared control",
+            "corpus_sha256": "synthetic-expected-corpus",
+            "queries_masked_from": "synthetic declared positions",
+            "rows_written": 2,
+            "sample": [
+              7,
+              8
+            ],
+            "schema_version": 2
+          },
+          "rows": [
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_edges_all_queries": 0.0,
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.0,
+                    "n_blocked_edges_at_P_act": 1,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 7,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-1",
+              "tool_idx": 0
+            },
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_edges_all_queries": 0.0,
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.0,
+                    "n_blocked_edges_at_P_act": 1,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 7,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-1",
+              "tool_idx": 0
+            }
+          ]
+        },
+        "name": "duplicate_id_replaces_expected_id",
+        "purpose": "Row 7 is duplicated instead of expected row 8."
+      },
+      {
+        "execution": {
+          "completed_without_exception": true,
+          "error": null,
+          "report": {
+            "arm_row_counts": {
+              "current_note": 2
+            },
+            "arms": {
+              "current_note": {
+                "delta_lens_last_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 2,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "delta_model_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 2,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "taken_still_top_at_act": {
+                  "n": 2,
+                  "share": 1.0
+                },
+                "unresolved_at_act": {
+                  "n": 2,
+                  "share": 0.0
+                }
+              }
+            },
+            "basis": "fixture; queries masked from synthetic declared positions; control: synthetic declared control; unit = decision (the sample has one decision per episode by rule only if so sampled); mass floor 0.001",
+            "current_note_p_note_identical_to_unmasked": {
+              "n": 2,
+              "share": 1.0
+            },
+            "gate": {
+              "attention_on_masked_edges_all_queries_max": 0.0,
+              "attention_on_masked_keys_max": 0.0,
+              "local_mass_beyond_window_max": 0.0,
+              "n": 2,
+              "n_blocked_edges_at_P_act": {
+                "max": 1,
+                "median": 1.0,
+                "min": 1,
+                "n": 2,
+                "p10": 1,
+                "p90": 1
+              },
+              "rows_with_zero_blocked_at_P_act": 0
+            },
+            "gate_per_arm": {
+              "current_note": {
+                "attention_on_masked_edges_all_queries_max": 0.0,
+                "attention_on_masked_keys_max": 0.0,
+                "local_mass_beyond_window_max": 0.0,
+                "n": 2,
+                "n_blocked_edges_at_P_act": {
+                  "max": 1,
+                  "median": 1.0,
+                  "min": 1,
+                  "n": 2,
+                  "p10": 1,
+                  "p90": 1
+                },
+                "rows_with_zero_blocked_at_P_act": 0
+              }
+            },
+            "n": 2,
+            "note_prose_tokens": {
+              "max": 2,
+              "median": 2.0,
+              "min": 2,
+              "n": 2,
+              "p10": 2,
+              "p90": 2
+            },
+            "note_syntax_tokens": {
+              "max": 3,
+              "median": 3.0,
+              "min": 3,
+              "n": 2,
+              "p10": 3,
+              "p90": 3
+            },
+            "rows_written": 1,
+            "schema_version": 2,
+            "skipped_arm_counts": {}
+          },
+          "stdout": "{\"event\": \"w3b_analyzed\", \"n\": 2, \"arms\": [\"current_note\"], \"skipped\": {}}\n",
+          "virtual_file_accesses": [
+            {
+              "operation": "read",
+              "path": "fixture/w3b.jsonl"
+            },
+            {
+              "operation": "read",
+              "path": "fixture/manifest.json"
+            },
+            {
+              "operation": "write",
+              "path": "report.json"
+            }
+          ]
+        },
+        "inputs": {
+          "manifest": {
+            "checkpoint": "synthetic-expected-checkpoint",
+            "control": "synthetic declared control",
+            "corpus_sha256": "synthetic-expected-corpus",
+            "queries_masked_from": "synthetic declared positions",
+            "rows_written": 1,
+            "sample": [
+              7
+            ],
+            "schema_version": 2
+          },
+          "rows": [
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_edges_all_queries": 0.0,
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.0,
+                    "n_blocked_edges_at_P_act": 1,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 7,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-1",
+              "tool_idx": 0
+            },
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_edges_all_queries": 0.0,
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.0,
+                    "n_blocked_edges_at_P_act": 1,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 8,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-2",
+              "tool_idx": 0
+            }
+          ]
+        },
+        "name": "extra_id",
+        "purpose": "An additional row is not in the manifest sample."
+      },
+      {
+        "execution": {
+          "completed_without_exception": true,
+          "error": null,
+          "report": {
+            "arm_row_counts": {
+              "current_note": 1
+            },
+            "arms": {
+              "current_note": {
+                "delta_lens_last_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "delta_model_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "taken_still_top_at_act": {
+                  "n": 1,
+                  "share": 1.0
+                },
+                "unresolved_at_act": {
+                  "n": 1,
+                  "share": 0.0
+                }
+              }
+            },
+            "basis": "fixture; queries masked from synthetic declared positions; control: synthetic declared control; unit = decision (the sample has one decision per episode by rule only if so sampled); mass floor 0.001",
+            "current_note_p_note_identical_to_unmasked": {
+              "n": 1,
+              "share": 1.0
+            },
+            "gate": {
+              "attention_on_masked_edges_all_queries_max": 0.0,
+              "attention_on_masked_keys_max": 0.0,
+              "local_mass_beyond_window_max": 0.0,
+              "n": 1,
+              "n_blocked_edges_at_P_act": {
+                "max": 1,
+                "median": 1,
+                "min": 1,
+                "n": 1,
+                "p10": 1,
+                "p90": 1
+              },
+              "rows_with_zero_blocked_at_P_act": 0
+            },
+            "gate_per_arm": {
+              "current_note": {
+                "attention_on_masked_edges_all_queries_max": 0.0,
+                "attention_on_masked_keys_max": 0.0,
+                "local_mass_beyond_window_max": 0.0,
+                "n": 1,
+                "n_blocked_edges_at_P_act": {
+                  "max": 1,
+                  "median": 1,
+                  "min": 1,
+                  "n": 1,
+                  "p10": 1,
+                  "p90": 1
+                },
+                "rows_with_zero_blocked_at_P_act": 0
+              }
+            },
+            "n": 1,
+            "note_prose_tokens": {
+              "max": 2,
+              "median": 2,
+              "min": 2,
+              "n": 1,
+              "p10": 2,
+              "p90": 2
+            },
+            "note_syntax_tokens": {
+              "max": 3,
+              "median": 3,
+              "min": 3,
+              "n": 1,
+              "p10": 3,
+              "p90": 3
+            },
+            "rows_written": 1,
+            "schema_version": 2,
+            "skipped_arm_counts": {}
+          },
+          "stdout": "{\"event\": \"w3b_analyzed\", \"n\": 1, \"arms\": [\"current_note\"], \"skipped\": {}}\n",
+          "virtual_file_accesses": [
+            {
+              "operation": "read",
+              "path": "fixture/w3b.jsonl"
+            },
+            {
+              "operation": "read",
+              "path": "fixture/manifest.json"
+            },
+            {
+              "operation": "write",
+              "path": "report.json"
+            }
+          ]
+        },
+        "inputs": {
+          "manifest": {
+            "checkpoint": "synthetic-expected-checkpoint",
+            "control": "synthetic declared control",
+            "corpus_sha256": "synthetic-expected-corpus",
+            "queries_masked_from": "synthetic declared positions",
+            "rows_written": 1,
+            "sample": [
+              7
+            ],
+            "schema_version": 2
+          },
+          "rows": [
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_edges_all_queries": 0.0,
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.0,
+                    "n_blocked_edges_at_P_act": 1,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 999,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-1",
+              "tool_idx": 0
+            }
+          ]
+        },
+        "name": "unexpected_id_with_matching_count",
+        "purpose": "Row count matches but requested identity does not."
+      },
+      {
+        "execution": {
+          "completed_without_exception": true,
+          "error": null,
+          "report": {
+            "arm_row_counts": {
+              "current_note": 2
+            },
+            "arms": {
+              "current_note": {
+                "delta_lens_last_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 2,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "delta_model_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 2,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "taken_still_top_at_act": {
+                  "n": 2,
+                  "share": 1.0
+                },
+                "unresolved_at_act": {
+                  "n": 2,
+                  "share": 0.0
+                }
+              }
+            },
+            "basis": "fixture; queries masked from synthetic declared positions; control: synthetic declared control; unit = decision (the sample has one decision per episode by rule only if so sampled); mass floor 0.001",
+            "current_note_p_note_identical_to_unmasked": {
+              "n": 2,
+              "share": 1.0
+            },
+            "gate": {
+              "attention_on_masked_keys_max": 0.0,
+              "local_mass_beyond_window_max": 0.0,
+              "n": 2
+            },
+            "gate_per_arm": {
+              "current_note": {
+                "attention_on_masked_keys_max": 0.0,
+                "local_mass_beyond_window_max": 0.0,
+                "n": 2
+              }
+            },
+            "n": 2,
+            "note_prose_tokens": {
+              "max": 2,
+              "median": 2.0,
+              "min": 2,
+              "n": 2,
+              "p10": 2,
+              "p90": 2
+            },
+            "note_syntax_tokens": {
+              "max": 3,
+              "median": 3.0,
+              "min": 3,
+              "n": 2,
+              "p10": 3,
+              "p90": 3
+            },
+            "rows_written": 2,
+            "schema_version": 2,
+            "skipped_arm_counts": {}
+          },
+          "stdout": "{\"event\": \"w3b_analyzed\", \"n\": 2, \"arms\": [\"current_note\"], \"skipped\": {}}\n",
+          "virtual_file_accesses": [
+            {
+              "operation": "read",
+              "path": "fixture/w3b.jsonl"
+            },
+            {
+              "operation": "read",
+              "path": "fixture/manifest.json"
+            },
+            {
+              "operation": "write",
+              "path": "report.json"
+            }
+          ]
+        },
+        "inputs": {
+          "manifest": {
+            "checkpoint": "synthetic-expected-checkpoint",
+            "control": "synthetic declared control",
+            "corpus_sha256": "synthetic-expected-corpus",
+            "queries_masked_from": "synthetic declared positions",
+            "rows_written": 2,
+            "sample": [
+              7,
+              8
+            ],
+            "schema_version": 2
+          },
+          "rows": [
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.0,
+                    "n_blocked_edges_at_P_act": 1,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 7,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-1",
+              "tool_idx": 0
+            },
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_edges_all_queries": 0.5,
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.0,
+                    "n_blocked_edges_at_P_act": 1,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 8,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-2",
+              "tool_idx": 0
+            }
+          ]
+        },
+        "name": "first_legacy_gate_hides_later_leak",
+        "purpose": "The later all-query leak is absent from the summary when the first gate lacks that field."
+      },
+      {
+        "execution": {
+          "completed_without_exception": true,
+          "error": null,
+          "report": {
+            "arm_row_counts": {
+              "current_note": 1
+            },
+            "arms": {
+              "current_note": {
+                "delta_lens_last_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "delta_model_p_taken_at_act": {
+                  "max": 0.7000000000000001,
+                  "median": 0.7000000000000001,
+                  "min": 0.7000000000000001,
+                  "n": 1,
+                  "p10": 0.7000000000000001,
+                  "p90": 0.7000000000000001
+                },
+                "taken_still_top_at_act": {
+                  "n": 1,
+                  "share": 1.0
+                },
+                "unresolved_at_act": {
+                  "n": 1,
+                  "share": 0.0
+                }
+              }
+            },
+            "basis": "fixture; queries masked from synthetic declared positions; control: synthetic declared control; unit = decision (the sample has one decision per episode by rule only if so sampled); mass floor 0.001",
+            "current_note_p_note_identical_to_unmasked": {
+              "n": 1,
+              "share": 1.0
+            },
+            "gate": {
+              "attention_on_masked_edges_all_queries_max": 0.0,
+              "attention_on_masked_keys_max": 0.0,
+              "local_mass_beyond_window_max": 0.0,
+              "n": 1,
+              "n_blocked_edges_at_P_act": {
+                "max": 1,
+                "median": 1,
+                "min": 1,
+                "n": 1,
+                "p10": 1,
+                "p90": 1
+              },
+              "rows_with_zero_blocked_at_P_act": 0
+            },
+            "gate_per_arm": {
+              "current_note": {
+                "attention_on_masked_edges_all_queries_max": 0.0,
+                "attention_on_masked_keys_max": 0.0,
+                "local_mass_beyond_window_max": 0.0,
+                "n": 1,
+                "n_blocked_edges_at_P_act": {
+                  "max": 1,
+                  "median": 1,
+                  "min": 1,
+                  "n": 1,
+                  "p10": 1,
+                  "p90": 1
+                },
+                "rows_with_zero_blocked_at_P_act": 0
+              }
+            },
+            "n": 1,
+            "note_prose_tokens": {
+              "max": 2,
+              "median": 2,
+              "min": 2,
+              "n": 1,
+              "p10": 2,
+              "p90": 2
+            },
+            "note_syntax_tokens": {
+              "max": 3,
+              "median": 3,
+              "min": 3,
+              "n": 1,
+              "p10": 3,
+              "p90": 3
+            },
+            "rows_written": 1,
+            "schema_version": 2,
+            "skipped_arm_counts": {}
+          },
+          "stdout": "{\"event\": \"w3b_analyzed\", \"n\": 1, \"arms\": [\"current_note\"], \"skipped\": {}}\n",
+          "virtual_file_accesses": [
+            {
+              "operation": "read",
+              "path": "fixture/w3b.jsonl"
+            },
+            {
+              "operation": "read",
+              "path": "fixture/manifest.json"
+            },
+            {
+              "operation": "write",
+              "path": "report.json"
+            }
+          ]
+        },
+        "inputs": {
+          "manifest": {
+            "checkpoint": "synthetic-expected-checkpoint",
+            "control": "synthetic declared control",
+            "corpus_sha256": "synthetic-expected-corpus",
+            "queries_masked_from": "synthetic declared positions",
+            "rows_written": 1,
+            "sample": [
+              7
+            ],
+            "schema_version": 2
+          },
+          "rows": [
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_edges_all_queries": 0.0,
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.0,
+                    "n_blocked_edges_at_P_act": 1,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.1,
+                      0.8,
+                      0.025,
+                      0.025,
+                      0.025,
+                      0.025
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 7,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-1",
+              "tool_idx": 0
+            }
+          ]
+        },
+        "name": "gained_winner_reported_still_top",
+        "purpose": "Expert tool 0 becomes top only after masking; this is gain, not retention."
+      },
+      {
+        "execution": {
+          "completed_without_exception": true,
+          "error": null,
+          "report": {
+            "arm_row_counts": {
+              "current_note": 1
+            },
+            "arms": {
+              "current_note": {
+                "delta_lens_last_p_taken_at_act": {
+                  "max": 0.0,
+                  "median": 0.0,
+                  "min": 0.0,
+                  "n": 1,
+                  "p10": 0.0,
+                  "p90": 0.0
+                },
+                "delta_model_p_taken_at_act": {
+                  "n": 0
+                },
+                "taken_still_top_at_act": {
+                  "n": 1,
+                  "share": 1.0
+                },
+                "unresolved_at_act": {
+                  "n": 1,
+                  "share": 0.0
+                }
+              }
+            },
+            "basis": "fixture; queries masked from synthetic declared positions; control: synthetic declared control; unit = decision (the sample has one decision per episode by rule only if so sampled); mass floor 0.001",
+            "current_note_p_note_identical_to_unmasked": {
+              "n": 1,
+              "share": 1.0
+            },
+            "gate": {
+              "attention_on_masked_edges_all_queries_max": 0.0,
+              "attention_on_masked_keys_max": 0.0,
+              "local_mass_beyond_window_max": 0.0,
+              "n": 1,
+              "n_blocked_edges_at_P_act": {
+                "max": 1,
+                "median": 1,
+                "min": 1,
+                "n": 1,
+                "p10": 1,
+                "p90": 1
+              },
+              "rows_with_zero_blocked_at_P_act": 0
+            },
+            "gate_per_arm": {
+              "current_note": {
+                "attention_on_masked_edges_all_queries_max": 0.0,
+                "attention_on_masked_keys_max": 0.0,
+                "local_mass_beyond_window_max": 0.0,
+                "n": 1,
+                "n_blocked_edges_at_P_act": {
+                  "max": 1,
+                  "median": 1,
+                  "min": 1,
+                  "n": 1,
+                  "p10": 1,
+                  "p90": 1
+                },
+                "rows_with_zero_blocked_at_P_act": 0
+              }
+            },
+            "n": 1,
+            "note_prose_tokens": {
+              "max": 2,
+              "median": 2,
+              "min": 2,
+              "n": 1,
+              "p10": 2,
+              "p90": 2
+            },
+            "note_syntax_tokens": {
+              "max": 3,
+              "median": 3,
+              "min": 3,
+              "n": 1,
+              "p10": 3,
+              "p90": 3
+            },
+            "rows_written": 1,
+            "schema_version": 2,
+            "skipped_arm_counts": {}
+          },
+          "stdout": "{\"event\": \"w3b_analyzed\", \"n\": 1, \"arms\": [\"current_note\"], \"skipped\": {}}\n",
+          "virtual_file_accesses": [
+            {
+              "operation": "read",
+              "path": "fixture/w3b.jsonl"
+            },
+            {
+              "operation": "read",
+              "path": "fixture/manifest.json"
+            },
+            {
+              "operation": "write",
+              "path": "report.json"
+            }
+          ]
+        },
+        "inputs": {
+          "manifest": {
+            "checkpoint": "synthetic-expected-checkpoint",
+            "control": "synthetic declared control",
+            "corpus_sha256": "synthetic-expected-corpus",
+            "queries_masked_from": "synthetic declared positions",
+            "rows_written": 1,
+            "sample": [
+              7
+            ],
+            "schema_version": 2
+          },
+          "rows": [
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_edges_all_queries": 0.0,
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.0,
+                    "n_blocked_edges_at_P_act": 1,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1e-06
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 7,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-1",
+              "tool_idx": 0
+            }
+          ]
+        },
+        "name": "unresolved_baseline_reported_still_top",
+        "purpose": "The unmasked model reading is below the declared floor."
+      },
+      {
+        "execution": {
+          "completed_without_exception": true,
+          "error": null,
+          "report": {
+            "arm_row_counts": {
+              "current_note": 1
+            },
+            "arms": {
+              "current_note": {
+                "delta_lens_last_p_taken_at_act": {
+                  "n": 0
+                },
+                "delta_model_p_taken_at_act": {
+                  "n": 0
+                },
+                "taken_still_top_at_act": {
+                  "n": 0,
+                  "share": 0.0
+                },
+                "unresolved_at_act": {
+                  "n": 1,
+                  "share": 1.0
+                }
+              }
+            },
+            "basis": "fixture; queries masked from synthetic declared positions; control: synthetic declared control; unit = decision (the sample has one decision per episode by rule only if so sampled); mass floor 0.001",
+            "current_note_p_note_identical_to_unmasked": {
+              "n": 1,
+              "share": 1.0
+            },
+            "gate": {
+              "attention_on_masked_edges_all_queries_max": 0.0,
+              "attention_on_masked_keys_max": 0.0,
+              "local_mass_beyond_window_max": 0.0,
+              "n": 1,
+              "n_blocked_edges_at_P_act": {
+                "max": 1,
+                "median": 1,
+                "min": 1,
+                "n": 1,
+                "p10": 1,
+                "p90": 1
+              },
+              "rows_with_zero_blocked_at_P_act": 0
+            },
+            "gate_per_arm": {
+              "current_note": {
+                "attention_on_masked_edges_all_queries_max": 0.0,
+                "attention_on_masked_keys_max": 0.0,
+                "local_mass_beyond_window_max": 0.0,
+                "n": 1,
+                "n_blocked_edges_at_P_act": {
+                  "max": 1,
+                  "median": 1,
+                  "min": 1,
+                  "n": 1,
+                  "p10": 1,
+                  "p90": 1
+                },
+                "rows_with_zero_blocked_at_P_act": 0
+              }
+            },
+            "n": 1,
+            "note_prose_tokens": {
+              "max": 2,
+              "median": 2,
+              "min": 2,
+              "n": 1,
+              "p10": 2,
+              "p90": 2
+            },
+            "note_syntax_tokens": {
+              "max": 3,
+              "median": 3,
+              "min": 3,
+              "n": 1,
+              "p10": 3,
+              "p90": 3
+            },
+            "rows_written": 1,
+            "schema_version": 2,
+            "skipped_arm_counts": {}
+          },
+          "stdout": "{\"event\": \"w3b_analyzed\", \"n\": 1, \"arms\": [\"current_note\"], \"skipped\": {}}\n",
+          "virtual_file_accesses": [
+            {
+              "operation": "read",
+              "path": "fixture/w3b.jsonl"
+            },
+            {
+              "operation": "read",
+              "path": "fixture/manifest.json"
+            },
+            {
+              "operation": "write",
+              "path": "report.json"
+            }
+          ]
+        },
+        "inputs": {
+          "manifest": {
+            "checkpoint": "synthetic-expected-checkpoint",
+            "control": "synthetic declared control",
+            "corpus_sha256": "synthetic-expected-corpus",
+            "queries_masked_from": "synthetic declared positions",
+            "rows_written": 1,
+            "sample": [
+              7
+            ],
+            "schema_version": 2
+          },
+          "rows": [
+            {
+              "arms": {
+                "current_note": {
+                  "gate": {
+                    "attention_on_masked_edges_all_queries": 0.0,
+                    "attention_on_masked_keys": 0.0,
+                    "local_mass_beyond_window": 0.0,
+                    "n_blocked_edges_at_P_act": 1,
+                    "n_blocked_edges_total": 2
+                  },
+                  "lens_act": {
+                    "1": {
+                      "mass": 1e-09,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1e-09
+                  ],
+                  "p_note_identical_to_unmasked": true
+                },
+                "unmasked": {
+                  "lens_act": {
+                    "1": {
+                      "mass": 1.0,
+                      "six": [
+                        0.8,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04,
+                        0.04
+                      ]
+                    }
+                  },
+                  "model_six_act": [
+                    [
+                      0.8,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04,
+                      0.04
+                    ],
+                    1.0
+                  ]
+                }
+              },
+              "family": "synthetic-family-a",
+              "i": 7,
+              "note_prose_tokens": 2,
+              "note_syntax_tokens": 3,
+              "skipped_arms": {},
+              "step": 0,
+              "task_id": "synthetic-episode-1",
+              "tool_idx": 0
+            }
+          ]
+        },
+        "name": "empty_denominator_reported_zero_share",
+        "purpose": "No masked model reading is resolved; inspect n=0 and share=0.0."
+      }
+    ],
+    "method": "Full frozen source AST; verified standard-library imports stripped and supplied explicitly; in-memory inputs and output; actual argparse parser with fixed fixture arguments.",
+    "model_or_native_imports": false,
+    "scientific_outcome_files_read": false,
+    "source_relative_path": "source/workspace_w3b_analyze.py",
+    "source_sha256": "85948cba4b7fabde05a79fb35f0f45bcefc69ed8f58c5f487f5761dc2bc6b923"
+  },
+  "scope": "builder AST, gate assertions with analytic attention sums, full reporter AST on virtual files; no torch tensor/pre-hook or real tokenizer execution",
+  "source_hashes_verified": 7,
+  "two_layer_relay": {
+    "correct": {
+      "attention": [
+        {
+          "0,0": 1.0,
+          "1,1": 1.0,
+          "2,2": 1.0,
+          "3,3": 1.0,
+          "4,4": 1.0,
+          "5,5": 1.0,
+          "6,6": 1.0,
+          "7,7": 1.0
+        },
+        {
+          "0,0": 1.0,
+          "1,1": 1.0,
+          "2,2": 1.0,
+          "3,3": 1.0,
+          "4,4": 1.0,
+          "5,5": 1.0,
+          "6,4": 1.0,
+          "7,7": 1.0
+        }
+      ],
+      "masked_sum": 0,
+      "note_reaches_P_act": false,
+      "reachable_after_layers": [
+        [
+          3
+        ],
+        [
+          3
+        ]
+      ]
+    },
+    "delayed_query_start": {
+      "attention": [
+        {
+          "0,0": 1.0,
+          "1,1": 1.0,
+          "2,2": 1.0,
+          "3,3": 1.0,
+          "4,3": 1.0,
+          "5,5": 1.0,
+          "6,6": 1.0,
+          "7,7": 1.0
+        },
+        {
+          "0,0": 1.0,
+          "1,1": 1.0,
+          "2,2": 1.0,
+          "3,3": 1.0,
+          "4,4": 1.0,
+          "5,5": 1.0,
+          "6,4": 1.0,
+          "7,7": 1.0
+        }
+      ],
+      "masked_sum": 0,
+      "note_reaches_P_act": true,
+      "reachable_after_layers": [
+        [
+          3,
+          4
+        ],
+        [
+          3,
+          4,
+          6
+        ]
+      ]
+    }
+  }
+}
