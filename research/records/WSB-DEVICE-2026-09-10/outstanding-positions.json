@@ -1,0 +1,25 @@
+{
+ "what": "the two positions the re-based run left outside the tie band",
+ "positions": [
+  {
+   "episode": "agentic-d2-read-0108",
+   "turn": 0,
+   "position": 521,
+   "recorded_token": 2234,
+   "recorded_probability": 0.999739,
+   "produced_token": 1399,
+   "reference_gap_ulps": 3.0,
+   "verdict": "outstanding"
+  },
+  {
+   "episode": "chat-long-summary",
+   "turn": 1,
+   "position": 1912,
+   "recorded_token": 3530,
+   "recorded_probability": 0.599491,
+   "produced_token": 18997,
+   "reference_gap_ulps": 3.0,
+   "verdict": "outstanding"
+  }
+ ]
+}

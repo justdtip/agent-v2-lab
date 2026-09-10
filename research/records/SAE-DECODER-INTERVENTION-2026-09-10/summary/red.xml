@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.061" timestamp="2026-09-09T16:25:20.162280+10:00" hostname="daniel.tipton-Mac"><testcase classname="tests.test_sae_intervention" name="test_summary_is_exact_reduction_of_full_counterexample_and_preserves_edit" time="0.004"><failure message="TypeError: SAEIntervention.__init__() got an unexpected keyword argument 'diagnostic'">def test_summary_is_exact_reduction_of_full_counterexample_and_preserves_edit():
+        encoder, decoder, bias = dictionary()
+        h = torch.tensor([1.5, 1.5, 4.0])
+        records, outputs = {}, {}
+        for mode in ("full", "summary"):
+&gt;           edit = SAEIntervention(
+                encoder, decoder, bias, features=(0,), target_values=torch.tensor([3.0]),
+                diagnostic=mode,
+            )
+E           TypeError: SAEIntervention.__init__() got an unexpected keyword argument 'diagnostic'
+
+tests/test_sae_intervention.py:260: TypeError</failure></testcase></testsuite></testsuites>

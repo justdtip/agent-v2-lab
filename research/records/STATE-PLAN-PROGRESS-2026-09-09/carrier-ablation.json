@@ -1,0 +1,277 @@
+{
+  "basis": "measured-here",
+  "by_family": {
+    "aggregate_report": {
+      "counter and queue removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter, queue and next removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "whole note": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      }
+    },
+    "batch_update": {
+      "counter and queue removed": {
+        "distinguishable_share": 0.7767,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter removed": {
+        "distinguishable_share": 0.7767,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter, queue and next removed": {
+        "distinguishable_share": 0.7767,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "whole note": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      }
+    },
+    "calculate": {
+      "counter and queue removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter, queue and next removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "whole note": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      }
+    },
+    "conditional_update": {
+      "counter and queue removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter, queue and next removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "whole note": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      }
+    },
+    "cross_reference": {
+      "counter and queue removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter, queue and next removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "whole note": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      }
+    },
+    "ledger_reconcile": {
+      "counter and queue removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter, queue and next removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "whole note": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      }
+    },
+    "list": {
+      "counter and queue removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter, queue and next removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "whole note": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      }
+    },
+    "pointer_chain": {
+      "counter and queue removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter, queue and next removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "whole note": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      }
+    },
+    "read": {
+      "counter and queue removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter, queue and next removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "whole note": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      }
+    },
+    "search": {
+      "counter and queue removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter, queue and next removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "whole note": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      }
+    },
+    "synthesis": {
+      "counter and queue removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter, queue and next removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "whole note": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      }
+    },
+    "update": {
+      "counter and queue removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "counter, queue and next removed": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      },
+      "whole note": {
+        "distinguishable_share": 1.0,
+        "episodes": 94,
+        "episodes_at_or_below_half_distinct": 0
+      }
+    }
+  },
+  "question": "after removing a candidate clause from every note in an episode, how many of the remaining texts are still distinct strings?",
+  "reading": "distinguishable_share is the mean over episodes of (distinct remaining notes / steps). 1.0 means every step is still told apart by what is left, so the rule removed a label and not the carrier. The arm is constructible for a family only where a rule drives this near its floor of 1/n.",
+  "rules": {
+    "counter": "^(?:(?:Inspected|Applied|Read|Visited|Checked|Updated|Loaded)\\s+\\d+\\s+of\\s+\\d+\\.\\s*|Visited\\s+\\d+\\s+node\\(s\\)[^.]*\\.\\s*|approved:[^.]*\\.\\s*|loads so far:[^.]*\\.\\s*)",
+    "next": "Next:[^.]*\\.\\s*",
+    "queue": "(?:queue|pending|remaining):[^.]*\\.\\s*"
+  },
+  "what_this_is": "a screening diagnostic, not the acceptance gate: the second half of the gate \u2014 that the tool call and next-action clause are byte-identical after the removal \u2014 is not implemented here"
+}

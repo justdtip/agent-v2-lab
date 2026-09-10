@@ -1772,6 +1772,10 @@ def test_reanalyse_cli_is_deterministic_and_never_calls_model_loading(
         "base",
         "training",
         "probe_capture_dtype",
+        # Added 2026-09-09 (WS-D, the width rows): what arithmetic a lens for this entry was
+        # fitted in. Separate from the capture's dtype because the ruling separates them -- the
+        # lens is fitted in float32, the capture stays native -- so a run records both.
+        "probe_lens_fit_dtype",
         "memory_budget_gib",
         "policies",
     }

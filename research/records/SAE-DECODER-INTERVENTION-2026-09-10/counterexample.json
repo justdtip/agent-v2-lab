@@ -1,0 +1,85 @@
+{
+  "source_commit": "eb601af6f6b317ed8a8bfb148f6aa884d324e35b",
+  "utc": "2026-09-09T05:37:03.551008+00:00",
+  "device": "cpu",
+  "torch": "2.14.0",
+  "checkpoint_sha256": null,
+  "scope": "CPU float32 synthetic JumpReLU dictionary; no model; desktop not certified idle",
+  "input_convention": "decoder[residual, feature], bias separate, JumpReLU threshold 0.25",
+  "measured": {
+    "base_residual": {
+      "value": [
+        1.5,
+        1.5,
+        4.0
+      ],
+      "basis": "measured-here",
+      "basis_note": "CPU float32 synthetic JumpReLU dictionary; no model; desktop not certified idle"
+    },
+    "patched_residual": {
+      "value": [
+        5.5,
+        3.5,
+        4.0
+      ],
+      "basis": "measured-here",
+      "basis_note": "CPU float32 synthetic JumpReLU dictionary; no model; desktop not certified idle"
+    },
+    "replaced_code": {
+      "value": [
+        3.0,
+        2.0
+      ],
+      "basis": "measured-here",
+      "basis_note": "CPU float32 synthetic JumpReLU dictionary; no model; desktop not certified idle"
+    },
+    "epsilon_before": {
+      "value": [
+        -1.0,
+        -1.0,
+        3.0
+      ],
+      "basis": "measured-here",
+      "basis_note": "CPU float32 synthetic JumpReLU dictionary; no model; desktop not certified idle"
+    },
+    "epsilon_after": {
+      "value": [
+        -1.0,
+        -1.0,
+        3.0
+      ],
+      "basis": "measured-here",
+      "basis_note": "CPU float32 synthetic JumpReLU dictionary; no model; desktop not certified idle"
+    },
+    "max_error_in_preservation": {
+      "value": 0.0,
+      "basis": "measured-here",
+      "basis_note": "CPU float32 synthetic JumpReLU dictionary; no model; desktop not certified idle"
+    }
+  },
+  "reencoding": {
+    "kind": "sae_decoder_reencoding",
+    "basis": "measured-here",
+    "features": [
+      0
+    ],
+    "before": [
+      1.0
+    ],
+    "target": [
+      3.0
+    ],
+    "achieved": [
+      5.0
+    ],
+    "target_error": [
+      2.0
+    ],
+    "off_target_features": [
+      1
+    ],
+    "off_target_change": [
+      2.0
+    ]
+  }
+}

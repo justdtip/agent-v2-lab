@@ -1,0 +1,71 @@
+{
+  "basis": "file-only review of producer evidence",
+  "sources": {
+    "calibration/README.md": {
+      "bytes": 18896,
+      "commit": "9380e74fd888e81df71de4aa7429f89b1bd39045",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/README.md",
+      "sha256": "02ac9eb194c2654c218456025a43828364422a3931e29dd4484d716cd39dcbfb"
+    },
+    "calibration/artefacts/ladder-w1.jsonl": {
+      "bytes": 625424,
+      "commit": "9380e74fd888e81df71de4aa7429f89b1bd39045",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/ladder-w1.jsonl",
+      "sha256": "7b79ed98b83c292361b7109d4767a7348f7ba549f68cbc6cd30a7e4e808a023c"
+    },
+    "calibration/artefacts/ladder-w64.jsonl": {
+      "bytes": 620986,
+      "commit": "9380e74fd888e81df71de4aa7429f89b1bd39045",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/ladder-w64.jsonl",
+      "sha256": "f850d4ad537c4b906ca1fefa6cd188d1611529d2933ef8592f6ed3069e0f833f"
+    },
+    "calibration/artefacts/ladder.jsonl": {
+      "bytes": 557885,
+      "commit": "9380e74fd888e81df71de4aa7429f89b1bd39045",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/ladder.jsonl",
+      "sha256": "a1881efc48bea440c0cb6770067a780b2bd9fb1a04efd30c4cbbde822a4128cb"
+    },
+    "calibration/artefacts/manifest.json": {
+      "bytes": 1957,
+      "commit": "9380e74fd888e81df71de4aa7429f89b1bd39045",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/manifest.json",
+      "sha256": "1e296b6104d2b58446a63012cf2f6adc42c8f5b9f7282b86497df8198931dd70"
+    },
+    "calibration/artefacts/progress.jsonl": {
+      "bytes": 5861,
+      "commit": "9380e74fd888e81df71de4aa7429f89b1bd39045",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/progress.jsonl",
+      "sha256": "1c4e9e1071e54fcd6b8e44067410dc0a51d67ad3e5a302271715c479c215aad4"
+    },
+    "calibration/ladder.py": {
+      "bytes": 18685,
+      "commit": "9380e74fd888e81df71de4aa7429f89b1bd39045",
+      "path": "research/records/WSD-FD-CALIBRATION-2026-09-10/ladder.py",
+      "sha256": "87c77d416dcd54bea0028b5ef6203cedc5c505790e00cb3e94f60c71bc3171b4"
+    },
+    "fitter/finite_difference.py": {
+      "bytes": 27034,
+      "commit": "9380e74fd888e81df71de4aa7429f89b1bd39045",
+      "path": "src/local_llm_lab/pipeline/lens_fitting/finite_difference.py",
+      "sha256": "83cd48e0233c682a96bda6c9589701d9d18f6c08ead9801f60a57aaafe47cd26"
+    },
+    "orders/PROTOCOL.md": {
+      "bytes": 9221,
+      "commit": "558d424dccdec2c502653a5aa816e673693c67cf",
+      "path": "research/records/FD-NUMERICS-2026-09-09/RESOLUTION-PROTOCOL.md",
+      "sha256": "1eaf811eef67d072224013aa2737259a7c26df95098053af4b1ad95e766f784b"
+    },
+    "orders/WSA.md": {
+      "bytes": 40427,
+      "commit": "a3614bea95c95b7414708bbc98bb04a8bec2bc7e",
+      "path": "design_specifications/pending/CUDA-WS-A-CODEX-2026-09-09.md",
+      "sha256": "f87b45ad2b51d150d69da59e9210c04daeb8fa9a2002700e854e4c9faf886f91"
+    },
+    "orders/WSD.md": {
+      "bytes": 30108,
+      "commit": "a3614bea95c95b7414708bbc98bb04a8bec2bc7e",
+      "path": "design_specifications/pending/CUDA-WS-D-ORDER-2026-09-09.md",
+      "sha256": "0fb72967db27e3cedd0a83e730455e349a1ea01d4406ed74acd44d59feb1b1b4"
+    }
+  }
+}

@@ -333,6 +333,226 @@ def test_fetch_dictionary_records_digests_and_the_offline_check_reads_them(
     assert result["basis"] is None and result["files"]["params.safetensors"]["ok"] is None
 
 
+# ------------------------------------------------------ dictionary rows and the render row
+
+
+def _dictionary_fixture(root, model_name="google/gemma-3-4b-it"):
+    """A dictionary folder in the cache's shape: params bytes and the config that names it."""
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "params.safetensors").write_bytes(b"\x00" * 64 + b"dictionary-bytes")
+    (root / "config.json").write_text(
+        json.dumps(
+            {
+                "hf_hook_point_in": "model.layers.17.output",
+                "width": 16384,
+                "model_name": model_name,
+                "architecture": "jump_relu",
+                "l0": 20,
+            }
+        )
+    )
+    return root
+
+
+def _verified(fixture, folder, *, ok, basis="hub-declared", present=True, note=None):
+    """What verify_cached_dictionary returns, in its own shape, for one stubbed folder."""
+    files = {}
+    for name in device_setup.DICTIONARY_FILES:
+        path = fixture / name
+        entry = {"present": present, "path": str(path) if present else None}
+        if present and ok is None:
+            entry.update(ok=None, note="undecided: no hub answer and no digest recorded at fetch")
+        elif present:
+            actual = device_setup._file_digest(path, "sha256")
+            entry.update(
+                algorithm="sha256", expected=actual if ok else "0" * 64, actual=actual, ok=ok
+            )
+        files[name] = entry
+    return {"repo": "google/scope", "folder": folder, "basis": basis, "note": note, "files": files}
+
+
+FOLDER = "resid_post_all/layer_17_width_16k_l0_small"
+ENTRY, BASE = "gemma3-4b-cuda-bf16", "google/gemma-3-4b-it"
+
+
+def _stub_verify(monkeypatch, fixture, **kw):
+    monkeypatch.setattr(
+        device_setup,
+        "verify_cached_dictionary",
+        lambda repo, folder, *, offline: _verified(fixture, folder, **kw),
+    )
+
+
+def test_dictionary_rows_read_the_verification_and_check_the_model(monkeypatch, tmp_path):
+    fixture = _dictionary_fixture(tmp_path / "dict")
+    monkeypatch.setattr(device_setup, "configure_local_cache", lambda: tmp_path / "cache")
+    _stub_verify(monkeypatch, fixture, ok=True)
+    rows = device_setup.dictionary_rows(ENTRY, BASE, [("google/scope", FOLDER)], offline=False)
+    checks = {r["check"].split(" dictionary ")[1]: r for r in rows}
+    assert checks[f"{FOLDER} present"]["ok"] is True
+    assert checks[f"{FOLDER} digest"]["ok"] is True
+    assert checks[f"{FOLDER} digest"]["basis"] == "hub-declared"
+    assert checks[f"{FOLDER} model"]["ok"] is True
+    assert checks[f"{FOLDER} model"]["basis"] == "registry"
+
+    # The verification found different bytes: the digest row fails with both digests shown.
+    _stub_verify(monkeypatch, fixture, ok=False)
+    rows = device_setup.dictionary_rows(ENTRY, BASE, [("google/scope", FOLDER)], offline=False)
+    digest = [r for r in rows if r["check"].endswith("digest")][0]
+    assert digest["ok"] is False and "!=" in digest["detail"]
+
+    # Undecided stays undecided, and the verification's note travels with it.
+    _stub_verify(monkeypatch, fixture, ok=None, basis=None, note="hub not reachable: no route")
+    rows = device_setup.dictionary_rows(ENTRY, BASE, [("google/scope", FOLDER)], offline=True)
+    digest = [r for r in rows if r["check"].endswith("digest")][0]
+    assert digest["ok"] is None and "undecided" in digest["detail"]
+    assert "hub not reachable" in digest["detail"]
+
+
+def test_dictionary_of_another_checkpoint_fails_the_model_row(monkeypatch, tmp_path):
+    fixture = _dictionary_fixture(tmp_path / "dict", model_name="google/gemma-3-4b-pt")
+    _stub_verify(monkeypatch, fixture, ok=True)
+    rows = device_setup.dictionary_rows(ENTRY, BASE, [("google/scope", FOLDER)], offline=False)
+    model = [r for r in rows if r["check"].endswith("model")][0]
+    assert model["ok"] is False
+    assert "gemma-3-4b-pt" in model["detail"] and "gemma-3-4b-it" in model["detail"]
+
+
+def test_a_missing_dictionary_names_the_fetch_command_with_its_layer(monkeypatch, tmp_path):
+    _stub_verify(monkeypatch, tmp_path, ok=None, present=False)
+    rows = device_setup.dictionary_rows(ENTRY, BASE, [("google/scope", FOLDER)], offline=True)
+    assert len(rows) == 1 and rows[0]["ok"] is False
+    assert (
+        "lab-device fetch-dictionary google/scope --layer 17 --site resid_post_all "
+        "--width 16k --l0 small" in rows[0]["detail"]
+    )
+    assert "not the suite's layout" in device_setup._fetch_command("google/scope", "odd/folder")
+
+
+def test_entry_dictionaries_are_read_from_the_registry_file(monkeypatch, tmp_path):
+    from local_llm_lab import models
+
+    (tmp_path / "e.yaml").write_text(
+        "name: e\ndictionaries:\n  - repo: google/scope\n    folder: resid_post_all/layer_1_w\n"
+    )
+    (tmp_path / "bad.yaml").write_text("name: bad\ndictionaries:\n  - repo: google/scope\n")
+    monkeypatch.setattr(models, "_REGISTRY_DIR", tmp_path)
+    assert device_setup._entry_dictionaries("e") == [("google/scope", "resid_post_all/layer_1_w")]
+    assert device_setup._entry_dictionaries("absent") == []
+    with pytest.raises(ValueError, match="names a repo and a folder"):
+        device_setup._entry_dictionaries("bad")
+    assert device_setup._parse_dictionary_arg("google/scope:site/layer_2") == (
+        "google/scope",
+        "site/layer_2",
+    )
+    with pytest.raises(ValueError, match="owner/repo:folder"):
+        device_setup._parse_dictionary_arg("scope")
+
+
+class _StubTokenizer:
+    """Answers the one call the render makes, deterministically, ending in the entry's suffix."""
+
+    def __init__(self, suffix, salt=""):
+        self.suffix, self.salt = suffix, salt
+
+    def apply_chat_template(self, messages, add_generation_prompt, tokenize, **kwargs):
+        body = "".join(f"<{m['role']}>{m['content']}</{m['role']}>" for m in messages)
+        return body + self.salt + (self.suffix if add_generation_prompt else "")
+
+
+@pytest.fixture
+def corpus(tmp_path):
+    """A source corpus in the render's shape: three roles of replay rows and a manifest."""
+    root = tmp_path / "source"
+    root.mkdir()
+    for role, n in (("train", 3), ("valid", 2), ("test", 1)):
+        rows = [
+            {
+                "messages": [
+                    {"role": "system", "content": "s"},
+                    {"role": "user", "content": f"{role} {i}"},
+                    {"role": "assistant", "content": f"reply {i}"},
+                ],
+                "metadata": {"source": "pre-expansion-policy-replay"},
+            }
+            for i in range(n)
+        ]
+        (root / f"{role}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    (root / "manifest.json").write_text(json.dumps({"seed": 1, "generator_version": 4}))
+    return root
+
+
+def test_render_row_reproduces_the_laptop_manifest_and_names_a_differing_split(
+    monkeypatch, tmp_path, corpus
+):
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.pipeline.data import generation_suffix, render_dataset
+
+    spec = load_model_spec(ENTRY)
+    suffix = generation_suffix(spec)
+    laptop = tmp_path / "laptop"
+    recorded = render_dataset(corpus, laptop, _StubTokenizer(suffix), spec=spec)
+    assert set(recorded["outputs"]) == {"train", "valid", "test"}
+
+    monkeypatch.setattr(device_setup, "_render_tokenizer", lambda hf_id: _StubTokenizer(suffix))
+    row = device_setup.render_row(ENTRY, corpus, laptop / "manifest.json")
+    assert row["ok"] is True and "train=same" in row["detail"]
+
+    # A tokenizer that renders differently: the same corpus, a different digest, named by split.
+    monkeypatch.setattr(
+        device_setup, "_render_tokenizer", lambda hf_id: _StubTokenizer(suffix, salt="x")
+    )
+    row = device_setup.render_row(ENTRY, corpus, laptop / "manifest.json")
+    assert row["ok"] is False and "train=DIFFERENT" in row["detail"]
+
+    # A different source corpus is refused before any render, as the wrong comparison.
+    (corpus / "valid.jsonl").write_text((corpus / "valid.jsonl").read_text() + "\n")
+    monkeypatch.setattr(
+        device_setup,
+        "_render_tokenizer",
+        lambda hf_id: (_ for _ in ()).throw(AssertionError("no render on a different source")),
+    )
+    row = device_setup.render_row(ENTRY, corpus, laptop / "manifest.json")
+    assert row["ok"] is False and "['valid']" in row["detail"]
+
+
+def test_preflight_carries_the_dictionary_and_render_rows_with_a_basis(
+    monkeypatch, tmp_path, tiny_snapshot, corpus, capsys
+):
+    from local_llm_lab.models import load_model_spec
+    from local_llm_lab.pipeline.data import generation_suffix, render_dataset
+
+    monkeypatch.setenv("LLL_BACKEND", "torch")
+    monkeypatch.setenv("LLL_DEVICE", "cpu")
+    monkeypatch.setattr(device_setup, "_torch_models", lambda: [(ENTRY, BASE)])
+    monkeypatch.setattr(device_setup, "_snapshot_dir", lambda repo_id: tiny_snapshot)
+    _stub_verify(monkeypatch, _dictionary_fixture(tmp_path / "dict"), ok=True)
+    spec = load_model_spec(ENTRY)
+    suffix = generation_suffix(spec)
+    laptop = tmp_path / "laptop"
+    render_dataset(corpus, laptop, _StubTokenizer(suffix), spec=spec)
+    monkeypatch.setattr(device_setup, "_render_tokenizer", lambda hf_id: _StubTokenizer(suffix))
+    report = tmp_path / "report.json"
+    code = device_setup.main(
+        [
+            "preflight", "--allow-cpu", "--json", str(report),
+            "--model", ENTRY,
+            "--dictionary", f"google/scope:{FOLDER}",
+            "--render-source", str(corpus), "--render-manifest", str(laptop / "manifest.json"),
+        ]
+    )  # fmt: skip
+    rows = {r["check"]: r for r in json.loads(report.read_text())["rows"]}
+    # The exit code reports the laptop's own environment rows too (MLX present, peft absent);
+    # what this test owns is every row the dictionary and render checks added.
+    assert code in (0, 1)
+    added = [r for k, r in rows.items() if " dictionary " in k or k.startswith("render ")]
+    assert len(added) == 4 and all(r["ok"] is True for r in added), added
+    assert rows[f"{ENTRY} dictionary {FOLDER} digest"]["basis"] == "hub-declared"
+    assert rows[f"{ENTRY} dictionary {FOLDER} model"]["basis"] == "registry"
+    assert all(r["basis"] for r in rows.values())
+    assert f"render {ENTRY}" in capsys.readouterr().out
+
+
 # ---------------------------------------------------------------------------------- bootstrap
 
 

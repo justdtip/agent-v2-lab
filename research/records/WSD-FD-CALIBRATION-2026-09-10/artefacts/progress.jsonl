@@ -1,0 +1,11 @@
+{"event": "loaded_bf16", "elapsed_s": 14.48, "seconds": 13.44, "allocated_gib": 22.01, "checkpoint_sha256": "39172c4124d3470341bbbb25f2926fd97edf68f0fe3a9fa4cde6acb9b7ed2cc6"}
+{"event": "promoted_float32", "elapsed_s": 14.51, "seconds": 0.03, "allocated_gib": 43.966, "free_gib": 38.122, "dtype": "torch.float32", "basis": "measured-here"}
+{"event": "wrapped", "elapsed_s": 14.51, "n_layers": 48, "d_model": 3840, "repo_layers": [1, 24, 47], "upstream_layers": {"1": 0, "24": 23, "47": 46}, "target_upstream": 47}
+{"event": "smoke", "elapsed_s": 20.6, "seconds": 6.02, "peak_gib": 44.098, "free_after_gib": 38.047, "repo_layer": 47, "dim_batch": 1, "d_model": 3840, "forward_batch": 1, "anchor_batch": 1, "basis": "measured-here"}
+{"event": "anchors", "elapsed_s": 21.07, "repo_layer": 1, "anchor_displacement_norm": 0.0005216202698647976, "anchor_norm": 1123.8056640625, "relative_displacement": 4.6415522411514373e-07, "width": 8, "basis": "measured-here"}
+{"event": "layer_done", "elapsed_s": 25.85, "repo_layer": 1, "cells": 18, "peak_gib": 59.014}
+{"event": "anchors", "elapsed_s": 25.85, "repo_layer": 24, "anchor_displacement_norm": 0.01440142560750246, "anchor_norm": 45772.8515625, "relative_displacement": 3.146281063096583e-07, "width": 8, "basis": "measured-here"}
+{"event": "layer_done", "elapsed_s": 29.59, "repo_layer": 24, "cells": 36, "peak_gib": 59.014}
+{"event": "anchors", "elapsed_s": 29.59, "repo_layer": 47, "anchor_displacement_norm": 0.13143666088581085, "anchor_norm": 168655.96875, "relative_displacement": 7.793181697627339e-07, "width": 8, "basis": "measured-here"}
+{"event": "layer_done", "elapsed_s": 32.31, "repo_layer": 47, "cells": 54, "peak_gib": 59.014}
+{"event": "done", "elapsed_s": 32.32, "cells": 54, "max_identity_residual": 0.0, "peak_gib": 59.014}

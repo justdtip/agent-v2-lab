@@ -123,3 +123,68 @@ All four are cleared. Two by ruling, two by code; none by being decided to matte
 
 The gate tables above are unchanged. Nothing here supplies a number that was marked unknown; the
 per-layer agreement in §2 is still the measurement and still does not exist.
+
+## Device readiness, D-CRO, 2026-09-09 — gate 0 passed, one input built, one defect found before the window
+
+Read-only on the card except where stated. No model loaded, no window taken, and the checkout's
+`git status --porcelain` was 0 lines before and after every step, so no other seat's resume key moved.
+
+**Gate 0, the part that needs no model: passed, measured here.** `load_upstream().provenance()` on
+the card returns commit `581d398613e5602a5af361e1c34d3a92ea82ba8e`,
+`commit_matches_expected: true`, `vendored: false`, resolved from the **installed distribution**
+rather than a clone — there is no `/workspace/jacobian-lens` and `$JLENS_PATH` is unset, so this is
+the `_installed_commit()` fallback taking the path it was written for. `torch 2.14.0+cu130`,
+`cuda 13.0`, `torch.cuda.is_available()` true, one RTX PRO 6000 Blackwell, 97,887 MiB, idle at 1 MiB
+and 0% when read. MLX absent, as the environment intends. All six of my modules are present on the
+checkout at `c4e7da9`.
+
+**The corpus was not on the card, and now is.** The runbook says "the corpus under `data/`"; there
+was no `data/` directory and no WikiText in the cache. Built with `scripts/lens_corpus.py --corpus
+prose --download-prose` against `gemma3-4b-cuda-bf16`, from the pinned `Salesforce/wikitext`
+`wikitext-103-raw-v1` **validation** split (the Director's answer, `corpus.py:588`): **201 fit
+sequences / 205,824 tokens and 50 held / 51,200**, manifest sha256 `b8c2ab292899fff5…`, sequences
+sha256 `2cccc19fd7fd254b…`, at `/workspace/lens-corpus/`.
+
+**Deliberately outside the checkout.** `data/` is *not* in `.gitignore`, and the resume key hashes
+the working tree's content **including untracked files**, so a corpus written under `data/` would
+have changed the tree digest for every seat mid-run and made WS-B's records resume only their own.
+`models/` and `outputs/` are ignored and are safe; `data/` is not. Artefacts go to `models/jlens/`;
+inputs go to `/workspace/lens-corpus/`.
+
+### The defect: two fits of one checkpoint can declare the same dtype and run different arithmetic
+
+WS-A's device finding — on CUDA at 1,400 tokens the promoted-float32 block path differs from native
+bf16 by **69.4%**, 6.9 on CPU, 1.24 at 64 tokens on both, while the native path is exact at both
+lengths — lands inside the golden test, and it would not have been caught by any gate I built.
+
+`fit_upstream_jacobian` runs the model's own forward and captures; it is **native** by construction.
+My finite-difference estimator captured the residual with `.detach().float()` and wrote that tensor
+back as the block's output, so **every block above the source ran promoted float32**. Both sides
+read the same weights, so `_observed_precision` reported `bfloat16` for both, ν's `precision` block
+matched, and `assert_estimator_is_the_only_difference` passed a pair that had not run the same
+arithmetic. The golden residual would have been the estimator difference **plus** the precision
+path, with nothing in the record able to separate them.
+
+**Fixed, and the fix is a declaration rather than a preference.** `capture_dtype` is now a field of
+the observed precision — `"native"` for any estimator that does not replace an activation, which is
+the truth for the exact side — and a parameter of the finite-difference fit, defaulting to
+`"native"` so the two estimators run one arithmetic. `promoted-float32` remains reachable because it
+is a path worth *measuring against* native rather than inheriting by accident. It is declared in ν
+and in the provenance, and `golden.COMPARABLE_KEYS["precision"]` now contains it, so a cross-path
+comparison is refused by name with `precision` in the message.
+
+**Proved, not asserted.** The fixture is float32 throughout, so both paths give the identical
+residual there (3.6286e-03 worst layer, unchanged) — a fixture that cannot tell them apart, which is
+why the test asserts the property directly: the perturbation handed back to a bf16 block is
+`torch.bfloat16` under `native` and `torch.float32` under the promoted path. A bf16 fixture fit runs
+clean and declares `native`; the promoted path on that same bf16 fixture **raises a dtype error in
+the block's own matmul**, because these blocks do not silently promote and a real HF block does.
+That is the whole hazard in one line: loud on a fixture, invisible on the model that matters.
+
+**What every capture record must therefore say**, and what mine now do: the arithmetic path by name,
+beside the weight dtype, because the weight dtype does not imply it.
+
+**Still missing before §4 can run** (none of it mine to decide): no lens artefact exists on the card
+(`models/jlens/` is empty), so the fits are the first thing the window does; the FD subset — how
+many rows and which positions — is a declaration the record must carry and I will fix it in the
+manifest before the run, with the exact side re-run on that same subset.

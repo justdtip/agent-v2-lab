@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "basis": "executed locally, standard library and static lint only",
+  "source_count": 4,
+  "sources_match_git": true,
+  "analysis_reproduces": true,
+  "source_mutations_refused": 4,
+  "passage_removal_controls": 4,
+  "table_cell_mutations_refused": 18,
+  "table_cells_verified": 18,
+  "lint": "All checks passed!",
+  "git_diff_check": "passed",
+  "model_imports": false,
+  "device_access": false,
+  "reviewer_parent": "ca396fbcf69f88a3a2841400e5bbb2c9dac88a86",
+  "check_sha256": "1d0a6ece1504124435fac65dee4af680394e17655913399a7222409ffd05c32b"
+}

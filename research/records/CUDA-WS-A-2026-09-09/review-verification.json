@@ -1,0 +1,195 @@
+{
+  "source_commit": "ac8a91eade9f37dcaf053db667a88b395bf52b14",
+  "source_root": "/Users/daniel.tipton/worktrees/cuda-torch-seam",
+  "torch": "2.14.0",
+  "shared_python": "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
+  "upstream_commit": "581d398613e5602a5af361e1c34d3a92ea82ba8e",
+  "changes": [
+    "shared upstream loader for view, capture and acceptance helpers; reasoned optional-dependency skips",
+    "input_device reports actual embedding placement without moving model",
+    "architecture constant guard follows the extracted shared policy; torch implementation remains scanned",
+    "duplicate patch artifacts removed; records cite commits",
+    "audited local bf16 CPU calibration with atomic reports and final memory measurement on failure"
+  ],
+  "checks": {
+    "review-tests": {
+      "tests": 91,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 91,
+      "xml_sha256": "829b4362f6cf6286cc591a74f146acb8b09db19fe8138cc16d00fb045d89a7f6",
+      "log_sha256": "d4e92d8c39ced25d040a614dc328c995e2222069033ec94ecf8e52707351ad95",
+      "seconds": 7.091,
+      "skips": []
+    },
+    "calibration-tests": {
+      "tests": 104,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 104,
+      "xml_sha256": "e660f6f7bd22fbab88ffc4f5364d956fca5058e91dc1ce1af613050df528070a",
+      "log_sha256": "38b159ab149e1a8bf3396e4566c5ba0e09c18bdf3f32ca65b64118df0cbdd1c0",
+      "seconds": 8.349,
+      "skips": []
+    },
+    "full-suite": {
+      "tests": 2199,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 14,
+      "passed": 2184,
+      "xml_sha256": "aef06169e887193131e3ca5323755d475ae5a2dec8060372ae9710639d5848d5",
+      "log_sha256": "87ecbb01c785ad665c88082e1321c282178615bd31ce9473be845cc50a991f5c",
+      "seconds": 130.458,
+      "skips": [
+        {
+          "test": "test_retroactive_saved_evaluations_match_memo_contract",
+          "reason": "saved B/C evaluations are not available"
+        },
+        {
+          "test": "test_real_saved_evaluations_select_exactly_the_spec_universe",
+          "reason": "protected saved evaluations not present on this checkout"
+        },
+        {
+          "test": "test_real_tokenizer_resolves_and_aligns_the_seven_cells_on_the_first_case",
+          "reason": "protected saved evaluations not present on this checkout"
+        },
+        {
+          "test": "test_real_saved_evaluations_measure_every_dropped_value_as_hidden",
+          "reason": "protected saved evaluations not present on this checkout"
+        },
+        {
+          "test": "test_recorded_statistics_match_their_artifacts",
+          "reason": "run artifacts are untracked; the report carries their paths and fields instead"
+        },
+        {
+          "test": "test_recorded_holm_family_sizes_vary_by_readout",
+          "reason": "run artifacts are untracked; the report carries their paths and fields instead"
+        },
+        {
+          "test": "test_position_baseline_reproduces_the_confound_on_the_captured_base_dataset",
+          "reason": "the base capture has not been made"
+        },
+        {
+          "test": "test_the_real_template_refuses_the_system_only_prefix_and_the_locator_starts_past_it",
+          "reason": "the real mlx-community/Qwen3.5-4B-MLX-4bit tokenizer is not cached under /Users/daniel.tipton/worktrees/cuda-torch-seam/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit, so the only tests in this file that render through the writer rather than a stand-in did not run. That is the blind spot EXP-002 died in. Populate the cache with `uv run python -c \"from local_llm_lab.project import configure_local_cache; configure_local_cache(); from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('mlx-community/Qwen3.5-4B-MLX-4bit')\"` and re-run."
+        },
+        {
+          "test": "test_the_real_locator_puts_every_hidden_observation_outside_the_head_block",
+          "reason": "the real mlx-community/Qwen3.5-4B-MLX-4bit tokenizer is not cached under /Users/daniel.tipton/worktrees/cuda-torch-seam/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit, so the only tests in this file that render through the writer rather than a stand-in did not run. That is the blind spot EXP-002 died in. Populate the cache with `uv run python -c \"from local_llm_lab.project import configure_local_cache; configure_local_cache(); from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('mlx-community/Qwen3.5-4B-MLX-4bit')\"` and re-run."
+        },
+        {
+          "test": "test_the_real_locator_refuses_the_two_shapes_the_head_block_cannot_carry",
+          "reason": "the real mlx-community/Qwen3.5-4B-MLX-4bit tokenizer is not cached under /Users/daniel.tipton/worktrees/cuda-torch-seam/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit, so the only tests in this file that render through the writer rather than a stand-in did not run. That is the blind spot EXP-002 died in. Populate the cache with `uv run python -c \"from local_llm_lab.project import configure_local_cache; configure_local_cache(); from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('mlx-community/Qwen3.5-4B-MLX-4bit')\"` and re-run."
+        },
+        {
+          "test": "test_the_stand_in_and_the_writer_agree_row_for_row_on_the_shape_table",
+          "reason": "the real mlx-community/Qwen3.5-4B-MLX-4bit tokenizer is not cached under /Users/daniel.tipton/worktrees/cuda-torch-seam/.cache/huggingface/hub/models--mlx-community--Qwen3.5-4B-MLX-4bit, so the only tests in this file that render through the writer rather than a stand-in did not run. That is the blind spot EXP-002 died in. Populate the cache with `uv run python -c \"from local_llm_lab.project import configure_local_cache; configure_local_cache(); from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('mlx-community/Qwen3.5-4B-MLX-4bit')\"` and re-run."
+        },
+        {
+          "test": "test_reference_generator_hashes_include_configured_replay[agent_v2c.yaml]",
+          "reason": "configured protected replay directory is absent: /Users/daniel.tipton/worktrees/cuda-torch-seam/data/chat_replay"
+        },
+        {
+          "test": "test_reference_generator_hashes_include_configured_replay[agent_v2d.yaml]",
+          "reason": "configured protected replay directory is absent: /Users/daniel.tipton/worktrees/cuda-torch-seam/data/chat_replay"
+        },
+        {
+          "test": "test_run_d_dataset_on_disk_regenerates_byte_for_byte",
+          "reason": "run D dataset is not present on this checkout: /Users/daniel.tipton/worktrees/cuda-torch-seam/data/agent_v2d"
+        }
+      ]
+    },
+    "final-suite": {
+      "tests": 2213,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 10,
+      "passed": 2203,
+      "xml_sha256": "f0fc0d0f3c630ef9b4d7b3d8472d4fefdd1001cdc5b884df9ba99c8a90759d1c",
+      "log_sha256": "0816d9c2602a1ceecd952c192a39590f96e6365a5fcfadece8199c39f62a95ac",
+      "seconds": 135.205,
+      "skips": [
+        {
+          "test": "test_retroactive_saved_evaluations_match_memo_contract",
+          "reason": "saved B/C evaluations are not available"
+        },
+        {
+          "test": "test_real_saved_evaluations_select_exactly_the_spec_universe",
+          "reason": "protected saved evaluations not present on this checkout"
+        },
+        {
+          "test": "test_real_tokenizer_resolves_and_aligns_the_seven_cells_on_the_first_case",
+          "reason": "protected saved evaluations not present on this checkout"
+        },
+        {
+          "test": "test_real_saved_evaluations_measure_every_dropped_value_as_hidden",
+          "reason": "protected saved evaluations not present on this checkout"
+        },
+        {
+          "test": "test_recorded_statistics_match_their_artifacts",
+          "reason": "run artifacts are untracked; the report carries their paths and fields instead"
+        },
+        {
+          "test": "test_recorded_holm_family_sizes_vary_by_readout",
+          "reason": "run artifacts are untracked; the report carries their paths and fields instead"
+        },
+        {
+          "test": "test_position_baseline_reproduces_the_confound_on_the_captured_base_dataset",
+          "reason": "the base capture has not been made"
+        },
+        {
+          "test": "test_reference_generator_hashes_include_configured_replay[agent_v2c.yaml]",
+          "reason": "configured protected replay directory is absent: /Users/daniel.tipton/worktrees/cuda-torch-seam/data/chat_replay"
+        },
+        {
+          "test": "test_reference_generator_hashes_include_configured_replay[agent_v2d.yaml]",
+          "reason": "configured protected replay directory is absent: /Users/daniel.tipton/worktrees/cuda-torch-seam/data/chat_replay"
+        },
+        {
+          "test": "test_run_d_dataset_on_disk_regenerates_byte_for_byte",
+          "reason": "run D dataset is not present on this checkout: /Users/daniel.tipton/worktrees/cuda-torch-seam/data/agent_v2d"
+        }
+      ]
+    }
+  },
+  "test_environment": {
+    "PYTHONPATH": "/Users/daniel.tipton/worktrees/cuda-torch-seam/src:/Users/daniel.tipton/worktrees/cuda-torch-seam",
+    "full_suite_HF_HOME": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface",
+    "full_suite_HF_HUB_OFFLINE": "1",
+    "cpu_threads": 1,
+    "real_MLX": "blocked in focused CPU suites; native library exercised only in separate full-suite process; no checkpoint test loads"
+  },
+  "initial_full_suite_failure": "arch_base.py projection-list: existing approved architecture policy had moved outside scanner exemption; fixed narrowly and full suite rerun",
+  "source_sha256": {
+    "src/local_llm_lab/arch.py": "5cfcca8e341e52d08ea76908770ee450c674fb9144486e41e5644d333edf8722",
+    "src/local_llm_lab/arch_base.py": "df7bb2b4fac8286a24656b88ef05b5a82ba8f37505165882262be5fd916e5dbe",
+    "src/local_llm_lab/arch_torch.py": "9c3cfe3094baed8d094fa0355622a8866ecef145dc6bafd63a1cd18aaa701908",
+    "src/local_llm_lab/torch_capture.py": "0c4a9dec2fc133f68999ccd7d82806a78475c85a9de074d8f218f85a35572396",
+    "src/local_llm_lab/upstream_ref.py": "86065216341be1008107aec093946c5b29dbd3f28f47a846042947657824c07f",
+    "src/local_llm_lab/device.py": "0ac377cd969303d968e50beac7282fc32b25c180240054903c323e9e3fcef5a8",
+    "research/acceptance/torch_seam.py": "798335c8606d65e839808a4518ce4250928e0725489753e10580b07800ccb94f",
+    "tests/test_arch_torch.py": "d144097d26fd9c5dccfb608f1eac9085f730dc993b48f9c8c70c7d3881962945",
+    "tests/test_repository_rules.py": "1d07fcd3a111f97a1cfc7b93ebb0e7270059040579acb2f3bc504828bb0f5746",
+    "tests/test_torch_capture.py": "866024ac8489d63ddb0f85aee3466ba093252189d08c4e869b5e00e3287614ad",
+    "tests/test_torch_upstream_imports.py": "08147931ebf2822eb417e51481f43ae663ee4309ed7896f30f54e48915bd866c",
+    "research/records/CUDA-WS-A-2026-09-09/cpu_gates.py": "f7ca28bfcded95d30b29cd5c276a2772a7b1755ccca505e33fca152f70c3893f",
+    "research/records/CUDA-WS-A-2026-09-09/test_cpu_gates.py": "8dfcccf870faf8c7b037b91524d09ddeedb36d4db0b19847dfab0589bb19fc8e"
+  },
+  "development_measurement": {
+    "file": "development-torch214.json",
+    "source_commit": "0431e0077d79f01f63759622ad042255b224534a",
+    "sha256": "f3e4ad9f8a3bf81108f51a556d060651d06991e73cf4b33414e393537b735b80"
+  },
+  "precision_diagnosis": {
+    "file": "precision-diagnosis.json",
+    "source_commit": "0431e0077d79f01f63759622ad042255b224534a",
+    "sha256": "35a42a30b23d2cece2a1ef33dbbd28dd74b01acf773ac0b659a154983752e5e1",
+    "scope": "tiny random three-block model only; no full-checkpoint conclusion"
+  },
+  "full_checkpoint_status": "see individual cpu-calibration-*.json; no completed acceptance claimed",
+  "graph_once_estimator": "not started; requires accepted checkpoint gates 1-4",
+  "cuda": "unexecuted"
+}

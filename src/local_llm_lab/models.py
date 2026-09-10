@@ -27,6 +27,10 @@ _CACHE_STRATEGIES = frozenset({"auto", "trim", "snapshot", "history", "none"})
 # signature default so an upgrade cannot move one without the other being noticed.
 NATIVE_PREFILL_STEP_SIZE = 2048
 _CAPTURE_DTYPES = frozenset({"native", "float32"})
+#: What a lens for this entry must have been *fitted* in. Separate from `_CAPTURE_DTYPES`
+#: because the two answer different questions and the width-rows ruling separates them:
+#: the lens is fitted in float32, the capture stays native.
+_LENS_FIT_DTYPES = frozenset({"float32", "bfloat16"})
 _DEFAULT_PROBE_FRACTIONS = (0.167, 0.333, 0.5, 0.667, 0.833, 1.0)
 _REGISTRY_DIR = Path(__file__).resolve().parents[2] / "configs" / "models"
 #: A registry `hf_id` starting with this names a checkpoint **in this repository** rather than a
@@ -152,6 +156,11 @@ class ProbesSpec:
     #: Recorded answers to equal-distance partner ties, in-band layer to its partner (issue 86).
     #: A ruling, not a rule: the code consults it and reports any tie it does not cover.
     partner_tie_breaks: dict[int, int]
+    #: The precision a lens for this entry must have been fitted in, or ``None`` where the entry
+    #: declares none. Not the capture's dtype and not the lens's storage dtype: it is a statement
+    #: about the arithmetic the Jacobian was taken in, which the width rows made a property of
+    #: the map rather than a detail of the run.
+    lens_fit_dtype: str | None = None
 
 
 @dataclass(frozen=True)
@@ -192,6 +201,9 @@ class ModelSpec:
     # R18: native block execution during capture is the default; the float32 block path is for
     # the J-lens tail and JVP, where the deviation is measured by the preflight and recorded.
     probe_capture_dtype: Literal["native", "float32"] = "native"
+    #: ``probes.lens_fit_dtype``: what a lens read against this model must have been fitted in.
+    #: ``None`` where the entry declares nothing, which is every entry fitted before the ruling.
+    probe_lens_fit_dtype: str | None = None
 
     def __post_init__(self) -> None:
         """An unconverted checkpoint is its own base, stated once here.
@@ -213,6 +225,7 @@ class ModelSpec:
             live_lens_pairs=self.probe_live_lens_pairs,
             partner_tie_breaks=dict(self.probe_partner_tie_breaks),
             capture_dtype=self.probe_capture_dtype,
+            lens_fit_dtype=self.probe_lens_fit_dtype,
         )
 
     def resolve(self, model: Any, tokenizer: Any) -> ResolvedSpec:
@@ -408,6 +421,12 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
     capture_dtype = probes.get("capture_dtype", "native")
     if capture_dtype not in _CAPTURE_DTYPES:
         raise ValueError(f"{source}: probes.capture_dtype must be one of {sorted(_CAPTURE_DTYPES)}")
+    lens_fit_dtype = probes.get("lens_fit_dtype")
+    if lens_fit_dtype is not None and lens_fit_dtype not in _LENS_FIT_DTYPES:
+        raise ValueError(
+            f"{source}: probes.lens_fit_dtype must be one of {sorted(_LENS_FIT_DTYPES)} "
+            "or absent; it says what arithmetic a lens for this entry was fitted in"
+        )
     template_kwargs = chat.get("template_kwargs")
     if not isinstance(template_kwargs, dict):
         raise ValueError(f"{source}: chat.template_kwargs must be a mapping")
@@ -453,6 +472,7 @@ def _model_spec_from_mapping(raw: dict[str, Any], *, source: str) -> ModelSpec:
         ),
         probe_partner_tie_breaks=tie_breaks,
         probe_capture_dtype=capture_dtype,
+        probe_lens_fit_dtype=lens_fit_dtype,
         memory_budget_gib=float(memory.get("budget_gib")),
         policies=dict(policies),
     )

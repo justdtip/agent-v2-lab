@@ -156,9 +156,11 @@ def test_a_readout_that_disagrees_at_the_final_layer_stops_the_run(tmp_path):
     tokenizer = SimpleNamespace(bos_token=None, encode=lambda text, **kwargs: [1, 2, 3])
     session = CaptureSession(view, Skewed(view, lens), lambda row: None, layers=layers, top_k=3)
     session.set_context(kind="chat", messages=[{"role": "user", "content": "first"}])
-    with pytest.raises(ValueError, match="disagrees with the model's own logits"):
-        with session.generation(model, tokenizer, "first", turn_cache=None) as captured:
-            captured(mx.array([[1, 2, 3]]), cache=view.make_cache())
+    with (
+        pytest.raises(ValueError, match="disagrees with the model's own logits"),
+        session.generation(model, tokenizer, "first", turn_cache=None) as captured,
+    ):
+        captured(mx.array([[1, 2, 3]]), cache=view.make_cache())
 
 
 def test_every_emitted_token_carries_its_span_label_at_write_time(tmp_path):
@@ -277,13 +279,15 @@ def test_the_final_layer_gate_fires_at_decode_and_not_only_at_prefill(tmp_path):
     session = CaptureSession(view, readout, lambda row: None, layers=layers, top_k=3)
     session.set_context(kind="chat", messages=[{"role": "user", "content": "first"}])
 
-    with pytest.raises(ValueError, match="disagrees with the model's own logits"):
-        with session.generation(model, tokenizer, "first", turn_cache=None) as captured:
-            cache = view.make_cache()
-            logits = captured(mx.array([prompt]), cache=cache)
-            assert readout.remaining == 0, "the prefill consumed exactly the unskewed reads"
-            token = int(mx.argmax(logits[0, -1]).item())
-            captured(mx.array([[token]]), cache=cache)
+    with (
+        pytest.raises(ValueError, match="disagrees with the model's own logits"),
+        session.generation(model, tokenizer, "first", turn_cache=None) as captured,
+    ):
+        cache = view.make_cache()
+        logits = captured(mx.array([prompt]), cache=cache)
+        assert readout.remaining == 0, "the prefill consumed exactly the unskewed reads"
+        token = int(mx.argmax(logits[0, -1]).item())
+        captured(mx.array([[token]]), cache=cache)
 
 
 def test_the_final_layer_comparison_uses_the_captured_residual_and_not_the_logits_it_checks(
@@ -312,12 +316,14 @@ def test_the_final_layer_comparison_uses_the_captured_residual_and_not_the_logit
     session = CaptureSession(view, LensReadout(view, lens), lambda row: None, layers=layers, top_k=3)
     session.set_context(kind="chat", messages=[{"role": "user", "content": "first"}])
 
-    with pytest.raises(ValueError, match="disagrees with the model's own logits"):
-        with session.generation(model, tokenizer, "first", turn_cache=None) as captured:
-            original = session.residual
+    with (
+        pytest.raises(ValueError, match="disagrees with the model's own logits"),
+        session.generation(model, tokenizer, "first", turn_cache=None) as captured,
+    ):
+        original = session.residual
 
-            def corrupted(layer, offset, hidden):
-                return original(layer, offset, hidden + 3.0)
+        def corrupted(layer, offset, hidden):
+            return original(layer, offset, hidden + 3.0)
 
-            session.residual = corrupted
-            captured(mx.array([[1, 2, 3]]), cache=view.make_cache())
+        session.residual = corrupted
+        captured(mx.array([[1, 2, 3]]), cache=view.make_cache())

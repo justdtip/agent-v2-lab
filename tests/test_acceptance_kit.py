@@ -1,0 +1,948 @@
+"""The acceptance kit: the golden harness, the measured band, and the gate reporting.
+
+The harness is exercised against synthetic records rather than the stage-two corpus, so this
+file runs anywhere and does not depend on a scratchpad path. The corpus itself is checked by
+running the kit against it, which is a separate act with its own output.
+
+The property under test throughout is that a check which has not really run cannot report
+success: an unimplemented gate is never a pass, a band cannot be measured from nothing, and a
+projection cannot exist without the measurement it rests on.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+_ACCEPTANCE = Path(__file__).resolve().parents[1] / "research" / "acceptance"
+_SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+for _path in (_ACCEPTANCE, _SCRIPTS):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
+
+import acceptance_gates as gates  # noqa: E402
+import golden_trajectories as golden  # noqa: E402
+import readout_tolerance as readout  # noqa: E402
+import tolerance  # noqa: E402
+
+
+def _encoded(value) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+
+
+def _write_record(path: Path, events: list[dict]) -> None:
+    """Write a hash-chained record the way the capture writer does."""
+    previous = "0" * 64
+    with path.open("w", encoding="utf-8") as handle:
+        for sequence, event in enumerate(events):
+            payload = {"event": event, "previous": previous, "sequence": sequence}
+            digest = hashlib.sha256(_encoded(payload)).hexdigest()
+            handle.write(_encoded(payload | {"sha256": digest}).decode() + "\n")
+            previous = digest
+
+
+#: Deliberately not 34. Gemma 3 4B has 34 layers and the GPU is expected to bring other
+#: models, so a fixture at 34 would pass against a reader that had the depth hardcoded.
+FIXTURE_LAYERS = list(range(1, 13))
+FINAL_LAYER = max(FIXTURE_LAYERS)
+
+
+def _episode_events(label: str, prompt_ids: list[int], emitted: list[int]) -> list[dict]:
+    """One turn: a prefill forward, then one single-token forward per emission."""
+    events: list[dict] = [
+        {
+            "kind": "manifest",
+            "schema_version": 1,
+            "provenance": {"episode": {"label": label, "kind": "agentic"}},
+        },
+        {
+            "kind": "begin_turn",
+            "turn": 0,
+            "prompt_ids": prompt_ids,
+            "context": {},
+            "layers": FIXTURE_LAYERS,
+        },
+    ]
+    sequence = list(prompt_ids) + list(emitted)
+    # The forward at offset p predicts position p + 1, which is the convention the whole
+    # harness rests on and the one this fixture must reproduce faithfully to be a fixture.
+    for index, token in enumerate(emitted):
+        offset = len(prompt_ids) - 1 + index
+        events.append(
+            {
+                "kind": "forward",
+                "turn": 0,
+                "offset": offset,
+                "input_ids": sequence[: offset + 1],
+                "argmax": [[token]],
+                "logits_sha256": f"digest-{offset}",
+                "logits_shape": [1, 1, 32],
+            }
+        )
+        events.append(
+            {
+                "kind": "reading",
+                "turn": 0,
+                "position": offset,
+                "top": {str(FINAL_LAYER): [token]},
+            }
+        )
+        events.append(
+            {
+                "kind": "emitted",
+                "turn": 0,
+                "position": len(prompt_ids) + index,
+                "token_id": token,
+                "span": "note",
+            }
+        )
+    events.append(
+        {
+            "kind": "end_turn",
+            "turn": 0,
+            "status": "complete",
+            "emitted_count": len(emitted),
+            "forwarded_count": len(sequence),
+        }
+    )
+    events.append({"kind": "end_record", "status": "complete"})
+    return events
+
+
+@pytest.fixture
+def records(tmp_path: Path) -> Path:
+    directory = tmp_path / "stage2"
+    directory.mkdir()
+    _write_record(directory / "one.jsonl", _episode_events("one", [5, 6, 7], [11, 12, 13, 14]))
+    _write_record(directory / "two.jsonl", _episode_events("two", [1, 2], [21, 22]))
+    return directory
+
+
+def test_the_harness_reads_a_record_and_its_own_oracle_holds(records: Path) -> None:
+    episodes = golden.load_episodes(records)
+    assert [episode.label for episode in episodes] == ["one", "two"]
+    assert [episode.emission_count for episode in episodes] == [4, 2]
+    for episode in episodes:
+        consistency = golden.record_consistency(episode)
+        assert consistency.passed
+        assert consistency.disagreements == 0 and consistency.missing_forwards == 0
+
+
+def test_a_broken_position_convention_is_caught_by_the_oracle(tmp_path: Path) -> None:
+    """The error class the bookkeeping check exists for: forwards off by one."""
+    directory = tmp_path / "broken"
+    directory.mkdir()
+    events = _episode_events("shifted", [5, 6, 7], [11, 12, 13])
+    for event in events:
+        if event["kind"] == "forward":
+            event["offset"] += 1
+    _write_record(directory / "shifted.jsonl", events)
+    consistency = golden.record_consistency(golden.load_episodes(directory)[0])
+    assert not consistency.passed
+    assert consistency.missing_forwards > 0
+    assert consistency.detail, "a failure must say where, not only that"
+
+
+def test_a_tampered_record_does_not_load(records: Path) -> None:
+    path = records / "one.jsonl"
+    lines = path.read_text().splitlines()
+    payload = json.loads(lines[1])
+    payload["event"]["prompt_ids"] = [9, 9, 9]
+    lines[1] = json.dumps(payload)
+    path.write_text("\n".join(lines) + "\n")
+    with pytest.raises(ValueError, match="hash chain"):
+        golden.load_episode(path)
+
+
+def test_reproduction_reports_the_first_divergence_with_both_sides(records: Path) -> None:
+    episode = golden.load_episodes(records)[0]
+    honest = golden.recorded_generator(episode)
+    assert golden.reproduce(episode, honest).reproduced
+
+    def wrong_at_two(prompt_ids, *, max_tokens):
+        generated = honest(prompt_ids, max_tokens=max_tokens)
+        tokens = list(generated.token_ids)
+        tokens[2] = 999
+        return golden.GeneratedTurn(token_ids=tuple(tokens), final_top=generated.final_top)
+
+    result = golden.reproduce(episode, wrong_at_two)
+    divergence = result.first_divergence
+    assert not result.reproduced
+    assert divergence.index == 2
+    assert divergence.expected_token == 13 and divergence.actual_token == 999
+    assert divergence.position == len(episode.turns[0].prompt_ids) + 2
+    assert divergence.expected_final_top == (13,), "the recorded layer-34 top travels with it"
+
+
+def test_readout_agreement_says_when_bit_identity_was_not_assessed(records: Path) -> None:
+    episode = golden.load_episodes(records)[0]
+    agreement = golden.readout_agreement(episode, golden.recorded_generator(episode))
+    assert agreement.compared == 4 and agreement.rate == 1.0
+    assert agreement.digests_compared == 0
+    assert "not assessed" in agreement.digest_note, (
+        "a generator that supplies no digests must not produce a bit-identity number"
+    )
+
+
+def test_a_band_is_measured_and_carries_what_it_was_measured_on() -> None:
+    deltas = [0.1 * index for index in range(1, 1001)]
+    band = readout.measure_band(deltas, basis="cpu fp32 against mlx 4-bit, 15 episodes")
+    assert band.n == 1000
+    assert band.value == pytest.approx(99.9), (
+        "the 0.999 quantile of a thousand samples is the 999th of them, not the largest; a "
+        "band that silently equalled the maximum would be a chosen number wearing a quantile"
+    )
+    assert band.maximum == pytest.approx(100.0)
+    assert band.median == pytest.approx(50.05)
+    assert band.measured
+    assert "15 episodes" in band.describe()
+
+
+def test_a_band_cannot_be_conjured_from_nothing() -> None:
+    with pytest.raises(ValueError, match="empty sample"):
+        readout.measure_band([], basis="anything")
+    with pytest.raises(ValueError, match="must carry the measurement"):
+        readout.measure_band([1.0], basis="   ")
+    with pytest.raises(ValueError, match="NaN"):
+        readout.measure_band([1.0, float("nan")], basis="a sample with a hole in it")
+
+
+def test_a_projection_carries_its_basis_and_refuses_to_exist_without_one() -> None:
+    measured = readout.measure_band([1.0, 2.0, 3.0], basis="cpu fp32 against mlx 4-bit")
+    projected = readout.project_band(measured, factor=4.0, reason="bf16 has 8 fewer mantissa bits")
+    assert not projected.measured
+    assert projected.value == pytest.approx(measured.value * 4.0)
+    assert projected.projected_from is measured
+    described = projected.describe()
+    assert "projected from" in described and "cpu fp32 against mlx 4-bit" in described, (
+        "a projection without its basis cannot be learned from, only failed"
+    )
+    with pytest.raises(ValueError, match="why its factor"):
+        readout.project_band(measured, factor=2.0, reason="")
+    with pytest.raises(ValueError, match="positive"):
+        readout.project_band(measured, factor=0.0, reason="a reason")
+
+
+def test_a_band_check_reports_the_worst_case_not_only_the_verdict() -> None:
+    band = readout.measure_band([1.0, 1.0, 1.0], basis="a flat sample")
+    inside = readout.check_band(band, [0.5, 0.9, 1.0])
+    assert inside.passed and inside.worst == pytest.approx(1.0)
+    outside = readout.check_band(band, [0.5, 7.25])
+    assert not outside.passed and outside.exceeded == 1
+    assert "7.25" in outside.describe()
+
+
+def test_an_unimplemented_gate_is_never_a_pass(records: Path) -> None:
+    exit_code = gates.main(["--records", str(records), "--keep-going"])
+    assert exit_code == 1, "the kit is not green while gates remain unrunnable"
+    for gate in gates.GATES:
+        assert gate.owner in {"WS-A", "WS-B", "WS-D"}
+
+
+def test_the_kit_reports_gate_five_unavailable_rather_than_passing(records: Path) -> None:
+    arguments = gates.argparse.Namespace(
+        records=records, model=None, keep_going=True, smoke=False, decoding="greedy"
+    )
+    result = gates.gate_5_golden_trajectories(arguments)
+    assert result.status == gates.UNAVAILABLE, (
+        "records that read cleanly are not a reproduction, and reporting them as one would "
+        "make the kit's green run meaningless"
+    )
+    assert any("bookkeeping" in note for note in result.notes)
+
+
+def test_the_kit_fails_gate_five_when_the_record_disagrees_with_itself(tmp_path: Path) -> None:
+    directory = tmp_path / "broken"
+    directory.mkdir()
+    events = _episode_events("bad", [5, 6], [11, 12])
+    for event in events:
+        if event["kind"] == "forward":
+            event["argmax"] = [[404]]
+    _write_record(directory / "bad.jsonl", events)
+    arguments = gates.argparse.Namespace(
+        records=directory, model=None, keep_going=True, smoke=False, decoding="greedy"
+    )
+    result = gates.gate_5_golden_trajectories(arguments)
+    assert result.status == gates.FAIL and result.blocking
+    assert "disagreement" in result.saw
+
+
+def test_the_kit_refuses_to_load_a_model_without_a_box_window(records: Path, monkeypatch) -> None:
+    from local_llm_lab import runlock
+
+    monkeypatch.setattr(runlock, "read_window", lambda *args, **kwargs: None)
+    arguments = gates.argparse.Namespace(
+        records=records, model="gemma3-4b", keep_going=True, smoke=False, decoding="greedy"
+    )
+    with pytest.raises(SystemExit, match="no box window"):
+        gates._load_backend(arguments)
+
+
+# --- G-2(b): the tolerance half -------------------------------------------------------------
+
+
+def _with_confidence(events: list[dict], probability: float) -> list[dict]:
+    """Add the layer-34 horizon-1 rank rows the P >= 0.99 rule reads."""
+    extra = []
+    for event in events:
+        if event["kind"] == "emitted":
+            extra.append(
+                {
+                    "kind": "rank",
+                    "turn": event["turn"],
+                    "layer": FINAL_LAYER,
+                    "horizon": 1,
+                    "position": event["position"] - 1,
+                    "token_id": event["token_id"],
+                    "rank": 1,
+                    "probability": probability,
+                }
+            )
+    return events[:-1] + extra + events[-1:]
+
+
+def test_teacher_forcing_keeps_every_position_an_independent_comparison(tmp_path: Path) -> None:
+    directory = tmp_path / "tf"
+    directory.mkdir()
+    events = _with_confidence(_episode_events("tf", [5, 6], [11, 12, 13, 14]), 0.5)
+    _write_record(directory / "tf.jsonl", events)
+    episode = golden.load_episodes(directory)[0]
+
+    produced = {
+        (0, position): token for position, token in zip([2, 3, 4, 5], [11, 12, 13, 14], strict=True)
+    }
+    perfect = tolerance.teacher_forced_agreement(episode, produced, reference=tolerance.MLX_BF16)
+    assert perfect.compared == 4 and perfect.rate == 1.0 and perfect.passed
+
+    produced[(0, 3)] = 999
+    one_flip = tolerance.teacher_forced_agreement(episode, produced, reference=tolerance.MLX_BF16)
+    assert one_flip.compared == 4, (
+        "a flip at one position does not stop the other three being compared; that is what "
+        "teacher forcing buys and free running does not"
+    )
+    assert one_flip.agreed == 3 and len(one_flip.flips) == 1
+
+
+def test_a_flip_at_high_recorded_confidence_fails_the_run(tmp_path: Path) -> None:
+    directory = tmp_path / "hard"
+    directory.mkdir()
+    _write_record(
+        directory / "hard.jsonl",
+        _with_confidence(_episode_events("hard", [5, 6], [11, 12]), 0.999998),
+    )
+    episode = golden.load_episodes(directory)[0]
+
+    clean = tolerance.teacher_forced_agreement(
+        episode, {(0, 2): 11, (0, 3): 12}, reference=tolerance.MLX_BF16
+    )
+    assert clean.passed and not tolerance.confidence_violations(clean)
+
+    flipped = tolerance.teacher_forced_agreement(
+        episode, {(0, 2): 11, (0, 3): 404}, reference=tolerance.MLX_BF16
+    )
+    violations = tolerance.confidence_violations(flipped)
+    assert len(violations) == 1 and violations[0].hard
+    assert not flipped.passed, (
+        "quantisation does not move an argmax at P = 0.999998; a flip there is a mask, "
+        "position, entry or norm defect and fails outright"
+    )
+    assert "HARD" in violations[0].describe()
+
+
+def test_the_recordings_own_confidence_no_longer_gates_anything(tmp_path: Path) -> None:
+    """Superseded 2026-09-10: the gate reads the reference's margin, not the recording's.
+
+    The recorded probability belongs to the 4-bit model. It gated this rule until a
+    bfloat16-against-bfloat16 comparison dropped a real disagreement because a quantised model
+    had been unsure of it — the position that made the four counts fail to sum. The same flip
+    now fails or passes on the reference's gap alone.
+    """
+    directory = tmp_path / "soft"
+    directory.mkdir()
+    _write_record(
+        directory / "soft.jsonl",
+        _with_confidence(_episode_events("soft", [5, 6], [11, 12]), 0.51),
+    )
+    episode = golden.load_episodes(directory)[0]
+    produced = {(0, 2): 11, (0, 3): 404}
+
+    wide = tolerance.teacher_forced_agreement(
+        episode,
+        produced,
+        reference=tolerance.MLX_BF16,
+        readings={(0, 2): (11, 40.0), (0, 3): (12, 40.0)},
+    )
+    assert len(wide.hard_flips) == 1 and not wide.passed, (
+        "an unconfident recording does not excuse a disagreement the reference is clear about"
+    )
+
+    tied = tolerance.teacher_forced_agreement(
+        episode,
+        produced,
+        reference=tolerance.MLX_BF16,
+        readings={(0, 2): (11, 40.0), (0, 3): (12, 1.0)},
+    )
+    assert len(tied.ties) == 1 and tied.passed
+
+
+def test_a_position_with_no_recorded_probability_is_counted_not_assumed(records: Path) -> None:
+    """The fixture records carry no rank rows, so the recording's confidence is unknown."""
+    episode = golden.load_episodes(records)[0]
+    report = tolerance.teacher_forced_agreement(episode, {(0, 3): 999})
+    assert report.compared == 1 and report.unrecorded_probability == 1
+    assert not report.confident_disagreements, (
+        "an unrecorded probability is never treated as a high one"
+    )
+    assert "could not be applied" in report.describe()
+
+
+def test_the_divergence_profile_reports_a_floor(records: Path) -> None:
+    class _Result:
+        def __init__(self, index):
+            self.first_divergence = None if index is None else SimpleNamespace(index=index)
+
+    profile = tolerance.divergence_indices(
+        [_Result(None), _Result(120), _Result(3), _Result(64)], floor=16
+    )
+    assert profile.reproduced == 1
+    assert profile.below_floor == [3]
+    assert not profile.passed, "an episode that parts company at token 3 did not drift there"
+    assert profile.percentile(0.5) == 64
+    assert "floor of 16" in profile.describe()
+
+
+def test_top_k_jaccard_uses_ids_because_that_is_all_the_record_has(records: Path) -> None:
+    episode = golden.load_episodes(records)[0]
+    # Position 3 is the first emission, token 11, and its reading sits at position 2.
+    identical = tolerance.top_k_jaccard(episode, {(0, 3): [11]}, k=5)
+    assert identical.mean == 1.0
+    disjoint = tolerance.top_k_jaccard(episode, {(0, 3): [777]}, k=5)
+    assert disjoint.mean == 0.0
+    assert "top-5 Jaccard" in identical.describe()
+
+
+def test_a_divergence_refuses_a_truncated_distribution() -> None:
+    """The records cannot supply a layer-34 distribution, only a top-k slice and one probability."""
+    with pytest.raises(ValueError, match="not a distribution"):
+        tolerance.symmetric_kl([0.6, 0.3], [0.5, 0.4])
+    with pytest.raises(ValueError, match="differ in support"):
+        tolerance.symmetric_kl([0.5, 0.5], [1.0])
+    same = tolerance.symmetric_kl([0.25, 0.25, 0.25, 0.25], [0.25, 0.25, 0.25, 0.25])
+    assert same == pytest.approx(0.0)
+    apart = tolerance.symmetric_kl([1.0, 0.0], [0.0, 1.0])
+    assert apart == pytest.approx(math.log(2))
+
+
+def _fake_forward(rows_by_sequence: dict[tuple[int, ...], list]):
+    def forward(sequence):
+        return rows_by_sequence[tuple(sequence)]
+
+    return forward
+
+
+def test_the_runner_reads_each_deciding_position_with_the_recorded_prefix(tmp_path: Path) -> None:
+    directory = tmp_path / "run"
+    directory.mkdir()
+    _write_record(
+        directory / "run.jsonl",
+        _with_confidence(_episode_events("run", [5, 6], [11, 12, 13]), 0.999998),
+    )
+    episode = golden.load_episodes(directory)[0]
+
+    # One row per input position. Position p's row is the prediction for p + 1, so the rows at
+    # 1, 2 and 3 must name 11, 12 and 13. Position 0 and the last row are never read.
+    sequence = (5, 6, 11, 12, 13)
+    rows = [(999, (999,)), (11, (11,)), (12, (12,)), (13, (13,)), (0, (0,))]
+    report = tolerance.run_tolerance(
+        episode, _fake_forward({sequence: rows}), reference=tolerance.MLX_BF16
+    )
+
+    assert report.agreement.compared == 3 and report.agreement.rate == 1.0
+    assert report.passed
+    assert report.jaccard.mean == 1.0
+    assert report.divergence is None
+    assert "not measured" in report.describe()
+
+    # Jaccard is over sets, so producing the right token plus extras is not a perfect score.
+    # The fixture records a single id per position; a two-id top halves the overlap. That is
+    # the statistic working, and it is worth pinning so nobody later "fixes" it into a
+    # top-1 agreement rate wearing a Jaccard's name.
+    wider = [(999, (999,)), (11, (11, 7)), (12, (12, 7)), (13, (13, 7)), (0, (0,))]
+    padded = tolerance.run_tolerance(episode, _fake_forward({sequence: wider}))
+    assert padded.agreement.rate == 1.0
+    assert padded.jaccard.mean == 0.5
+
+
+def test_the_runner_refuses_a_row_count_that_would_shift_the_join(tmp_path: Path) -> None:
+    """An off-by-one here shifts every comparison and still yields a plausible rate."""
+    directory = tmp_path / "shift"
+    directory.mkdir()
+    _write_record(directory / "shift.jsonl", _episode_events("shift", [5, 6], [11, 12]))
+    episode = golden.load_episodes(directory)[0]
+    with pytest.raises(ValueError, match="shifted and still look plausible"):
+        tolerance.run_tolerance(episode, _fake_forward({(5, 6, 11, 12): [(0, (0,))] * 3}))
+
+
+def test_the_runner_fails_on_a_clear_reference_and_survives_a_tie(tmp_path: Path) -> None:
+    """End to end through ``run_tolerance``: the reference's gap decides, nothing else."""
+    directory = tmp_path / "runner"
+    directory.mkdir()
+    _write_record(
+        directory / "runner.jsonl",
+        _with_confidence(_episode_events("runner", [5, 6], [11, 12]), 0.9999),
+    )
+    episode = golden.load_episodes(directory)[0]
+    forward = _fake_forward({(5, 6, 11, 12): [(0, (0,)), (11, (11,)), (404, (404,)), (0, (0,))]})
+
+    clear = tolerance.run_tolerance(
+        episode,
+        forward,
+        reference=tolerance.MLX_BF16,
+        readings={(0, 2): (11, 40.0), (0, 3): (12, 40.0)},
+    )
+    assert not clear.passed
+
+    tied = tolerance.run_tolerance(
+        episode,
+        forward,
+        reference=tolerance.MLX_BF16,
+        readings={(0, 2): (11, 40.0), (0, 3): (12, 2.0)},
+    )
+    assert tied.passed
+
+
+def test_the_runner_gates_on_the_divergence_floor_too(tmp_path: Path) -> None:
+    directory = tmp_path / "floor"
+    directory.mkdir()
+    _write_record(
+        directory / "floor.jsonl",
+        _with_confidence(_episode_events("floor", [5, 6], [11, 12]), 0.5),
+    )
+    episode = golden.load_episodes(directory)[0]
+    rows = [(0, (0,)), (11, (11,)), (12, (12,)), (0, (0,))]
+    forward = _fake_forward({(5, 6, 11, 12): rows})
+
+    class _Result:
+        def __init__(self, index):
+            self.first_divergence = None if index is None else SimpleNamespace(index=index)
+
+    early = tolerance.run_tolerance(
+        episode, forward, free_running=[_Result(2)], floor=16, reference=tolerance.MLX_BF16
+    )
+    assert not early.passed, "an episode that parts company at token 2 did not drift there"
+    late = tolerance.run_tolerance(
+        episode, forward, free_running=[_Result(120)], floor=16, reference=tolerance.MLX_BF16
+    )
+    assert late.passed
+
+
+def test_an_interrupted_run_leaves_what_completed_on_disk(records: Path, tmp_path: Path) -> None:
+    """The defect that cost ten minutes of box time and recovered nothing.
+
+    The runner accumulated every result and wrote once at the end, so an interrupt partway
+    through lost all of it. On a laptop that is ten wasted minutes; on a rented device it is a
+    paid hour with nothing to show for where it failed.
+    """
+    import tolerance_baseline as runner
+
+    episodes = golden.load_episodes(records)
+    assert len(episodes) == 2
+    per_episode = tmp_path / "rows.jsonl"
+
+    calls = {"n": 0}
+
+    def forward(sequence):
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise KeyboardInterrupt("stopped partway, as a run on a shared box is")
+        return [(0, (0,))] * len(sequence)
+
+    with pytest.raises(KeyboardInterrupt):
+        runner.run_episodes(episodes, forward, per_episode=per_episode)
+
+    rows = [json.loads(line) for line in per_episode.read_text().splitlines()]
+    assert len(rows) == 1, "the episode that finished is on disk; the one that did not is not"
+    assert rows[0]["label"] == episodes[0].label
+    assert set(rows[0]) >= {"compared", "agreed", "hard_flips", "confident_positions", "seconds"}
+
+
+def test_no_result_file_is_written_when_none_was_asked_for(records: Path) -> None:
+    import tolerance_baseline as runner
+
+    episodes = golden.load_episodes(records)[:1]
+    reports = runner.run_episodes(
+        episodes, lambda sequence: [(0, (0,))] * len(sequence), per_episode=None
+    )
+    assert len(reports) == 1
+
+
+def test_every_number_in_an_episode_row_says_what_kind_of_number_it_is(records: Path) -> None:
+    """Once the prose is gone, the field is the only thing left saying where a figure came from."""
+    import tolerance_baseline as runner
+
+    episode = golden.load_episodes(records)[0]
+    forward = _fake_forward(
+        {
+            tuple(list(episode.turns[0].prompt_ids) + list(episode.turns[0].token_ids)): [(0, (0,))]
+            * (len(episode.turns[0].prompt_ids) + len(episode.turns[0].token_ids))
+        }
+    )
+    report = tolerance.run_tolerance(episode, forward, reference=tolerance.MLX_BF16)
+    row = runner._episode_row(episode, report, 12.3)
+
+    for name, cell in row.items():
+        if name == "label":
+            continue
+        assert "basis" in cell, f"{name} was written without saying what kind of number it is"
+        assert cell["basis"] in {"measured-here", "laptop-basis", "expected"}
+
+    assert row["agreed"]["basis"] == "measured-here"
+    assert row["confident_positions"]["basis"] == "laptop-basis", (
+        "the confident count comes from the MLX recording, not from this run, and stays a "
+        "laptop basis even when the agreement beside it was measured on the device"
+    )
+    assert "P >=" in row["confident_positions"]["basis_note"]
+
+
+def test_a_gating_flip_prints_even_when_soft_flips_would_have_crowded_it_out() -> None:
+    """The cap must never hide the evidence for the failure the run is reporting.
+
+    This was one cap of twelve over all flips in position order. On the rented card an episode
+    with many near-ties pushed its confident flips past the cap: the run reported 24 gating
+    flips and the log carried 12, and the positions of the other 12 were recorded nowhere, so
+    the input to the follow-up test had to be reconstructed and could not be.
+    """
+    soft = [
+        tolerance.Flip(0, index, 10 + index, 900 + index, 0.4, reference_gap_ulps=1.0)
+        for index in range(20)
+    ]
+    late = tolerance.Flip(3, 999, 777, 888, 0.9999, reference_gap_ulps=40.0)
+    report = tolerance.AgreementReport(
+        "ep", compared=100, agreed=79, flips=[*soft, late], reference=tolerance.MLX_BF16
+    )
+
+    text = report.describe()
+    assert not report.passed and len(report.hard_flips) == 1
+    assert "position 999" in text, "the gating flip is the one line that may never be dropped"
+    assert "[HARD]" in text and "P=0.999900" in text
+    assert "further soft flips, none of them gating" in text, (
+        "the reader is told what was withheld, so a short list is not read as a complete one"
+    )
+    assert text.count("[TIE]") == 12, "ties stay capped; they are the noise this cap exists for"
+
+
+def test_the_failing_positions_are_in_the_record_and_not_only_in_the_log() -> None:
+    """A log truncates and a record is what the next run reads."""
+    import tolerance_baseline as runner
+
+    flips = [
+        tolerance.Flip(1, 735, 2818, 107, 1.0, reference_gap_ulps=40.0),
+        tolerance.Flip(0, 66, 496, 506, 0.3, reference_gap_ulps=1.0),
+    ]
+    report = SimpleNamespace(
+        agreement=tolerance.AgreementReport("ep", compared=10, agreed=8, flips=flips),
+        jaccard=SimpleNamespace(mean=0.5),
+    )
+    episode = SimpleNamespace(
+        label="ep",
+        turns=[SimpleNamespace(emitted_confidence=lambda position: 1.0, emissions=[])],
+    )
+    row = runner._episode_row(episode, report, 1.0)
+
+    recorded = row["hard_flip_positions"]["value"]
+    assert len(recorded) == 1, "only the gating flips, and all of them"
+    assert recorded[0]["position"] == 735 and recorded[0]["recorded_token"] == 2818
+    assert recorded[0]["produced_token"] == 107
+    assert row["hard_flip_positions"]["basis"] == "measured-here"
+
+
+# --- the restated rule: a defect test needs a precision-matched reference -------------------
+
+
+def test_a_comparison_against_a_differently_quantised_reference_refuses_a_verdict() -> None:
+    """The rule the corpus paid for: this check fired 24 times and found nothing.
+
+    Against a 4-bit recording the recorded probability is the *quantised* model's confidence in
+    its own preference, and it does not bound what a bfloat16 port will do. So the comparison
+    has no verdict to give, and asking raises rather than returning a light somebody will read
+    as a statement about the port.
+    """
+    flip = tolerance.Flip(0, 5, recorded=11, produced=12, recorded_probability=0.9999)
+    report = tolerance.AgreementReport("ep", compared=10, agreed=9, flips=[flip])
+
+    assert report.reference is tolerance.MLX_4BIT
+    with pytest.raises(tolerance.NotADefectTest, match="not a defect test"):
+        _ = report.passed
+    assert "not a defect test" in report.describe()
+    assert len(report.hard_flips) == 1, "the observation is still reported, just not as a verdict"
+
+    matched = tolerance.AgreementReport(
+        "ep", compared=10, agreed=9, flips=[flip], reference=tolerance.MLX_BF16
+    )
+    assert matched.passed is False, "the same evidence against a matched reference is a verdict"
+
+
+def test_a_disagreement_inside_two_ulps_is_a_tie_and_not_a_flip() -> None:
+    """A tie is counted as a tie: never a defect, and never quietly folded into agreement."""
+    tie = tolerance.Flip(0, 5, 11, 12, recorded_probability=0.9999, reference_gap_ulps=2.0)
+    real = tolerance.Flip(0, 6, 11, 12, recorded_probability=0.9999, reference_gap_ulps=2.5)
+    report = tolerance.AgreementReport(
+        "ep", compared=10, agreed=8, flips=[tie, real], reference=tolerance.MLX_BF16
+    )
+
+    assert tie.tie and not tie.hard
+    assert not real.tie and real.hard
+    assert len(report.ties) == 1 and len(report.hard_flips) == 1
+    assert report.passed is False, "the one that is not a tie still fails the run"
+    assert report.agreed == 8, "a tie is not counted as agreement"
+    assert "[TIE]" in tie.describe() and "2.0 ULP" in tie.describe()
+
+
+def test_an_exact_tie_on_the_reference_cannot_be_a_defect() -> None:
+    """The read-0108 case: the reference's own top two are equal in its stored dtype."""
+    flip = tolerance.Flip(0, 521, 2234, 1399, recorded_probability=0.999739, reference_gap_ulps=0.0)
+    report = tolerance.AgreementReport(
+        "ep", compared=1, agreed=0, flips=[flip], reference=tolerance.MLX_BF16
+    )
+    assert flip.tie and report.passed, (
+        "where the reference is settling a coin toss, which side the port lands is not "
+        "information about the port"
+    )
+
+
+def test_the_bfloat16_grid_is_the_one_the_gaps_landed_on() -> None:
+    """Every measured gap was an exact multiple of the step this returns; that is the check."""
+    assert tolerance.bf16_ulp(32.0) == 0.25
+    assert tolerance.bf16_ulp(20.0) == 0.125
+    assert tolerance.bf16_ulp(-40.0) == 0.25
+    for gap in (0.0, 0.25, 0.5, 0.75, 1.5):
+        assert gap % tolerance.bf16_ulp(32.0) == 0
+
+
+def test_re_basing_compares_against_the_reference_and_not_the_recording(tmp_path: Path) -> None:
+    """Re-basing changes what the port is compared with, not merely what the record is called."""
+    directory = tmp_path / "rebase"
+    directory.mkdir()
+    _write_record(
+        directory / "rebase.jsonl",
+        _with_confidence(_episode_events("rebase", [5, 6], [11, 12]), 0.9999),
+    )
+    episode = golden.load_episodes(directory)[0]
+
+    # The reference disagrees with the 4-bit recording at position 3 and the port matches the
+    # reference. Against the recording that is a flip; against the reference it is agreement.
+    readings = {(0, 2): (11, 40.0), (0, 3): (404, 40.0)}
+    produced = {(0, 2): 11, (0, 3): 404}
+
+    against_recording = tolerance.teacher_forced_agreement(episode, produced)
+    assert against_recording.agreed == 1 and len(against_recording.flips) == 1
+
+    rebased = tolerance.teacher_forced_agreement(
+        episode, produced, reference=tolerance.MLX_BF16, readings=readings
+    )
+    assert rebased.compared == 2 and rebased.agreed == 2 and rebased.passed
+
+
+def test_a_position_the_reference_has_no_answer_for_is_not_compared(tmp_path: Path) -> None:
+    """Silently falling back to the old reference would mix two references in one number."""
+    directory = tmp_path / "partial"
+    directory.mkdir()
+    _write_record(
+        directory / "partial.jsonl",
+        _with_confidence(_episode_events("partial", [5, 6], [11, 12]), 0.9999),
+    )
+    episode = golden.load_episodes(directory)[0]
+    rebased = tolerance.teacher_forced_agreement(
+        episode,
+        {(0, 2): 11, (0, 3): 12},
+        reference=tolerance.MLX_BF16,
+        readings={(0, 2): (11, 40.0)},
+    )
+    assert rebased.compared == 1
+
+
+def test_a_reference_file_that_does_not_declare_its_precision_is_refused(tmp_path: Path) -> None:
+    path = tmp_path / "ref.json"
+    path.write_text(json.dumps({"reference": "mlx-4bit", "episodes": {}}))
+    with pytest.raises(ValueError, match="cannot be read as a defect test"):
+        tolerance.load_reference(path)
+
+    good = tmp_path / "good.json"
+    good.write_text(
+        json.dumps(
+            {
+                "reference": "mlx-bf16",
+                "episodes": {"ep": [{"turn": 0, "position": 5, "token": 11, "gap_ulps": 3.0}]},
+            }
+        )
+    )
+    reference, readings = tolerance.load_reference(good)
+    assert reference.precision_matched and readings["ep"][(0, 5)] == (11, 3.0)
+
+
+def test_a_disagreement_the_ports_own_devices_straddle_is_below_resolution() -> None:
+    """read-0108/521: the reference is 3 ULP clear and the port's devices are 5 apart.
+
+    A defect is a claim that the port disagrees with the reference by more than the port's own
+    arithmetic can explain. Where the port's two devices straddle the reference's margin the
+    claim cannot be made from that position, and calling it a defect reads the port's
+    resolution as the port's error.
+    """
+    covered = tolerance.Flip(
+        0, 521, 2234, 1399, 0.999739, reference_gap_ulps=3.0, port_spread_ulps=5.0
+    )
+    exposed = tolerance.Flip(
+        1, 1912, 3530, 18997, 0.599491, reference_gap_ulps=3.0, port_spread_ulps=1.0
+    )
+
+    assert covered.below_resolution and not covered.hard and not covered.tie
+    assert exposed.hard and not exposed.below_resolution
+    assert "BELOW-RES" in covered.describe() and "port spread 5.0 ULP" in covered.describe()
+
+    report = tolerance.AgreementReport(
+        "ep", compared=10, agreed=8, flips=[covered, exposed], reference=tolerance.MLX_BF16
+    )
+    assert len(report.below_resolution) == 1 and len(report.hard_flips) == 1
+    assert not report.passed, "the one the port's spread does not cover still fails"
+
+
+def test_below_resolution_needs_both_margins_and_never_guesses() -> None:
+    """One device measured is not a spread, and an unmeasured spread is not a small one."""
+    unmeasured = tolerance.Flip(0, 5, 11, 12, 0.9999, reference_gap_ulps=3.0)
+    assert not unmeasured.below_resolution and unmeasured.hard
+
+
+def test_the_four_classes_add_up_to_the_positions_compared() -> None:
+    """The identity that exposed a class the classifier had no name for.
+
+    5,213 agreed, 30 ties and 1 flip left one position of 5,245 unaccounted for: a disagreement
+    outside the tie band that the old confidence gate silently dropped. A count that does not
+    sum is a position nobody will look at, so the identity is asserted rather than assumed.
+    """
+    flips = [
+        tolerance.Flip(0, 1, 11, 12, 0.4, reference_gap_ulps=1.0),
+        tolerance.Flip(0, 2, 11, 12, 0.9, reference_gap_ulps=3.0, port_spread_ulps=4.0),
+        tolerance.Flip(0, 3, 11, 12, 0.5, reference_gap_ulps=3.0, port_spread_ulps=1.0),
+    ]
+    report = tolerance.AgreementReport(
+        "ep", compared=10, agreed=7, flips=flips, reference=tolerance.MLX_BF16
+    )
+    assert report.counts() == {"agreed": 7, "ties": 1, "below_resolution": 1, "flips": 1}
+    assert sum(report.counts().values()) == report.compared
+
+    wrong = tolerance.AgreementReport(
+        "ep", compared=11, agreed=7, flips=flips, reference=tolerance.MLX_BF16
+    )
+    with pytest.raises(AssertionError, match="a position with no class"):
+        wrong.counts()
+
+
+def test_the_runner_classifies_a_known_set_and_not_merely_a_summing_one(tmp_path: Path) -> None:
+    """The guard that was missing when the spread never reached the classifier.
+
+    ``run_episodes`` grew a ``spreads`` parameter and the call site did not pass it. The four
+    classes still summed — 5,213 + 30 + 0 + 2 — because a conservation law is satisfied by a
+    system that has done nothing at all. So the summary is asserted against a known set, class
+    by class, which is the only thing that separates "classified" from "added up".
+    """
+    import tolerance_baseline as runner
+
+    directory = tmp_path / "known"
+    directory.mkdir()
+    _write_record(
+        directory / "known.jsonl",
+        _with_confidence(_episode_events("known", [5, 6], [11, 12, 13, 14]), 0.9999),
+    )
+    episodes = golden.load_episodes(directory)
+    sequence = (5, 6, 11, 12, 13, 14)
+    # Position 2 agrees; 3 is a tie on the reference; 4 is covered by the port's spread; 5 is not.
+    rows = [(0, ()), (11, ()), (99, ()), (99, ()), (99, ()), (0, ())]
+    readings = {(0, 2): (11, 40.0), (0, 3): (12, 1.0), (0, 4): (13, 3.0), (0, 5): (14, 3.0)}
+    spreads = {(0, 4): 5.0, (0, 5): 1.0}
+
+    reports = runner.run_episodes(
+        episodes,
+        _fake_forward({sequence: rows}),
+        reference=tolerance.MLX_BF16,
+        readings={"known": readings},
+        spreads={"known": spreads},
+    )
+    agreement = reports[0][1].agreement
+    assert agreement.counts() == {
+        "agreed": 1,
+        "ties": 1,
+        "below_resolution": 1,
+        "flips": 1,
+    }, "each class by name, because the total alone is satisfied by classifying nothing"
+
+    # And the failure the identity could not see: the spread withheld.
+    without = runner.run_episodes(
+        episodes,
+        _fake_forward({sequence: rows}),
+        reference=tolerance.MLX_BF16,
+        readings={"known": readings},
+    )
+    counts = without[0][1].agreement.counts()
+    assert sum(counts.values()) == 4, "still sums"
+    assert counts["below_resolution"] == 0 and counts["flips"] == 2, (
+        "and is still wrong, which is why the identity needs an expected value beside it"
+    )
+
+
+def test_corrupting_each_class_in_turn_changes_the_summary_that_reports_it() -> None:
+    """The strong form of the reporter rule, after the D-CRO's self-test.
+
+    Feeding a known set and asserting the summary catches a reporter that says nothing. It does
+    not catch one whose answer is insensitive to an input it claims to read — their pinning
+    check passed a corrupted document because it searched the whole file rather than the line,
+    and the self-test that was meant to catch *that* corrupted the wrong digit. So each class is
+    corrupted at its own input in turn, and the class that should move is asserted to move.
+    """
+
+    def report(readings, spreads):
+        flips = [
+            tolerance.Flip(
+                0,
+                position,
+                11,
+                12,
+                0.5,
+                reference_gap_ulps=readings[position],
+                port_spread_ulps=spreads.get(position),
+            )
+            for position in sorted(readings)
+        ]
+        return tolerance.AgreementReport(
+            "ep", compared=len(flips) + 1, agreed=1, flips=flips, reference=tolerance.MLX_BF16
+        )
+
+    readings = {1: 1.0, 2: 3.0, 3: 3.0}
+    spreads = {3: 1.0, 2: 5.0}
+    clean = report(readings, spreads).counts()
+    assert clean == {"agreed": 1, "ties": 1, "below_resolution": 1, "flips": 1}
+
+    widened = report({**readings, 1: 3.0}, spreads).counts()
+    assert widened["ties"] == 0 and widened["flips"] == 2, (
+        "a tie whose reference gap is widened past the band must stop being reported as a tie"
+    )
+
+    withheld = report(readings, {3: 1.0}).counts()
+    assert withheld["below_resolution"] == 0 and withheld["flips"] == 2, (
+        "a spread the reporter no longer has must stop being reported as covering anything"
+    )
+
+    narrowed = report(readings, {**spreads, 3: 9.0}).counts()
+    assert narrowed["flips"] == 0 and narrowed["below_resolution"] == 2, (
+        "a flip the port's spread now covers must stop being attributed to the port"
+    )
+
+    for corrupted in (widened, withheld, narrowed):
+        assert sum(corrupted.values()) == 4, (
+            "every corruption still sums, which is why the identity alone proves nothing"
+        )

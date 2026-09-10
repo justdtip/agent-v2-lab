@@ -1,0 +1,374 @@
+{
+  "analytic": {
+    "attention_mass": {
+      "contributions": [
+        0.0,
+        1.0
+      ],
+      "mass": [
+        0.99,
+        0.01
+      ],
+      "projected_values": [
+        0.0,
+        100.0
+      ]
+    },
+    "basis": "analytic counterexamples; not Gemma measurements",
+    "derivative_vs_activation": {
+      "f_h": 9,
+      "h": 3,
+      "j_times_h": 18
+    },
+    "five_fold_dependence": {
+      "all_losses_identical_within_every_dataset": true,
+      "equally_likely_datasets": 32,
+      "expected_error": 0.5,
+      "fixed_score_bootstrap_variance_every_dataset": 0.0,
+      "naive_independent_mean_variance": 0.05,
+      "true_cv_mean_variance": 0.25
+    },
+    "gram_spectrum": {
+      "gram_b": [
+        [
+          1.0,
+          0.0,
+          0.7071067811865475
+        ],
+        [
+          0.0,
+          1.0,
+          0.7071067811865475
+        ],
+        [
+          0.7071067811865475,
+          0.7071067811865475,
+          0.9999999999999998
+        ]
+      ],
+      "gram_c": [
+        [
+          1.0,
+          0.0,
+          -0.7071067811865475
+        ],
+        [
+          0.0,
+          1.0,
+          -0.7071067811865475
+        ],
+        [
+          -0.7071067811865475,
+          -0.7071067811865475,
+          0.9999999999999998
+        ]
+      ],
+      "nonnegative_squared_error_b": 1.0,
+      "nonnegative_squared_error_c": 0.0,
+      "pairwise_b": [
+        0.0,
+        0.7071067811865475,
+        0.7071067811865475
+      ],
+      "pairwise_c": [
+        0.0,
+        -0.7071067811865475,
+        -0.7071067811865475
+      ],
+      "same_spectrum_by_orthogonal_similarity": true,
+      "similarity_diagonal": [
+        1,
+        1,
+        -1
+      ],
+      "sparsity_budget_c": 1,
+      "target": [
+        -0.7071067811865475,
+        -0.7071067811865475
+      ]
+    },
+    "local_relay": {
+      "broken_relay_reaches": false,
+      "direct_far_edge": false,
+      "edges_by_layer": [
+        [
+          [
+            900,
+            0
+          ]
+        ],
+        [
+          [
+            1800,
+            900
+          ]
+        ]
+      ],
+      "total_distance": 1800,
+      "two_local_layers_reach": true,
+      "window": 1024
+    },
+    "note_causal_nonidentifiability": {
+      "clean_computation_actions": [
+        0,
+        1
+      ],
+      "clean_report_actions": [
+        0,
+        1
+      ],
+      "note_flip_computation_actions": [
+        1,
+        0
+      ],
+      "note_flip_report_actions": [
+        0,
+        1
+      ]
+    },
+    "six_class_rank": {
+      "contrast_rank": 5,
+      "maximum_softmax_linear_contrast_rank": 5,
+      "raw_rank": 6
+    },
+    "softmax_crossing": {
+      "first_crossings": {
+        "0.1": 4,
+        "0.5": 5,
+        "0.9": 5
+      },
+      "linear_logits": [
+        -12,
+        -8,
+        -4,
+        0,
+        4,
+        8,
+        12,
+        16
+      ],
+      "logit_second_difference": 0,
+      "probabilities": [
+        1.22884096061368e-06,
+        6.70880244755041e-05,
+        0.0036497582469304443,
+        0.16666666666666666,
+        0.9161047784667921,
+        0.9983254955288391,
+        0.999969279881988,
+        0.999999437324443
+      ],
+      "width_layers": 1
+    },
+    "within_family_constant_null": {
+      "permutation_changes_labels": false
+    }
+  },
+  "capture": {
+    "basis": "unchanged producer metadata functions; spy callback and in-memory shard writer",
+    "callback_path": {
+      "anchor_batch": 64,
+      "capture_dtype": "promoted-float32",
+      "dtype": "torch.float32",
+      "forward_batch": 64
+    },
+    "changed_messages_refused_before_callback": true,
+    "changed_token_ids_accepted_under_same_messages_digest": true,
+    "direct_width_cell_mutation_refused": true,
+    "fractional_token_index_1_9_recorded_as": 1,
+    "production_module_imported": false,
+    "recorded_path": {
+      "anchor_batch": 1,
+      "capture_dtype": "native",
+      "dtype": "torch.float32",
+      "forward_batch": 1
+    },
+    "resume_identity_or_storage_mismatches_refused": 0,
+    "resume_results": {
+      "baseline": {
+        "already_present": 1,
+        "captured": 0,
+        "shards": 1
+      },
+      "changed_checkpoint": {
+        "already_present": 1,
+        "captured": 0,
+        "shards": 1
+      },
+      "changed_prompt": {
+        "already_present": 1,
+        "captured": 0,
+        "shards": 1
+      },
+      "changed_shard": {
+        "already_present": 1,
+        "captured": 0,
+        "shards": 1
+      },
+      "missing_shard": {
+        "already_present": 1,
+        "captured": 0,
+        "shards": 1
+      }
+    },
+    "torch_imported": false
+  },
+  "carrier": {
+    "basis": "synthetic notes passed through frozen producer script; not corpus finding",
+    "declared_floor_plus_one_over_n": 0.1,
+    "floor": 0.05,
+    "producer_cells": {
+      "ten_groups": {
+        "distinguishable_share": 0.5,
+        "episodes": 1,
+        "fully_ablated_episodes": 1
+      },
+      "two_groups": {
+        "distinguishable_share": 0.1,
+        "episodes": 1,
+        "fully_ablated_episodes": 1
+      }
+    },
+    "producer_checks_call_or_next_action_identity": false,
+    "steps": 20,
+    "two_group_calls_and_next_action_identical": true,
+    "two_group_early_late_bit_retained": true
+  },
+  "gate_count_scope": "eleven named checks in this review only, not a programme-wide total",
+  "gate_counts": {
+    "cannot_certify_claimed_target": 5,
+    "demonstrated_can_disagree": 1,
+    "unexecuted_or_unknown": 5
+  },
+  "gates": [
+    {
+      "evidence": "source/check_prereg.py; audit.prereg_metadata",
+      "gate": "check_prereg pinned-claim consistency",
+      "id": "G1",
+      "negative_control": "7,629 to 7,628 in the distinct-decisions cell",
+      "scope": "pinned documentary claims only; not statistical validity",
+      "status": "demonstrated_can_disagree"
+    },
+    {
+      "evidence": "source/tolerances.py; analytic five-fold example",
+      "gate": "required_n closed-form examples as a confidence guarantee",
+      "id": "G2",
+      "negative_control": "correlated cross-fit losses leave every formula check unchanged",
+      "scope": "can test evaluation of a formula; cannot establish its assumptions",
+      "status": "cannot_certify_claimed_target"
+    },
+    {
+      "evidence": "source/carrier_ablation.py; audit.carrier_fixture",
+      "gate": "carrier removal acceptance including preserved action",
+      "id": "G3",
+      "negative_control": "20 notes in ten groups are reported fully ablated; no action identity check",
+      "scope": "producer script is a screening diagnostic, not the promised acceptance gate",
+      "status": "cannot_certify_claimed_target"
+    },
+    {
+      "evidence": "source/capture.py; capture_metadata_fixture",
+      "gate": "capture writer actual width and precision",
+      "id": "G9",
+      "negative_control": "spy reports width 64 and promoted float32; writer stamps width 1 and native",
+      "scope": "direct cell-label mutations fail, but actual callback path is not checked",
+      "status": "cannot_certify_claimed_target"
+    },
+    {
+      "evidence": "source/capture.py; capture_metadata_fixture",
+      "gate": "capture input identity as exact consumed tokens",
+      "id": "G10",
+      "negative_control": "different token IDs with identical messages are accepted",
+      "scope": "message changes do fail; token identity is not bound",
+      "status": "cannot_certify_claimed_target"
+    },
+    {
+      "evidence": "source/capture.py; capture_metadata_fixture",
+      "gate": "capture resume identity and shard integrity",
+      "id": "G11",
+      "negative_control": "changed checkpoint or prompt; missing or altered shard all skip as done",
+      "scope": "resume trusts task and step plus shard number",
+      "status": "cannot_certify_claimed_target"
+    },
+    {
+      "evidence": "source/workspace-order.md W-3",
+      "gate": "workspace local-mask structural gate",
+      "id": "G4",
+      "negative_control": "not delivered",
+      "scope": "direct attention support only, never all causal paths",
+      "status": "unexecuted_or_unknown"
+    },
+    {
+      "evidence": "source/workspace-order.md W-3",
+      "gate": "checkpoint layer_types versus is_sliding agreement",
+      "id": "G5",
+      "negative_control": "not delivered",
+      "scope": "architecture identity; count is stated but not independently rechecked here",
+      "status": "unexecuted_or_unknown"
+    },
+    {
+      "evidence": "source/workspace-order.md mass floor",
+      "gate": "workspace mass-floor classification",
+      "id": "G6",
+      "negative_control": "not delivered",
+      "scope": "declared 1e-3 retained; tool IDs and boundaries still need fixtures",
+      "status": "unexecuted_or_unknown"
+    },
+    {
+      "evidence": "source/workspace-order.md discipline",
+      "gate": "workspace lens/capture manifest binding and seal",
+      "id": "G7",
+      "negative_control": "not delivered",
+      "scope": "no capture-reader scripts in the reviewed commits",
+      "status": "unexecuted_or_unknown"
+    },
+    {
+      "evidence": "source/workspace-order.md W-2",
+      "gate": "W-2 family permutation and fold exclusion",
+      "id": "G8",
+      "negative_control": "not delivered; constant-family example supplied",
+      "scope": "family split, class support and fit dependencies must be frozen",
+      "status": "unexecuted_or_unknown"
+    }
+  ],
+  "prereg": {
+    "approved_formula_required_n": {
+      "0.09": 763,
+      "0.11": 511,
+      "0.15": 275,
+      "0.16": 242,
+      "0.17": 214
+    },
+    "arbitrary_paired_range_minus1_plus1_sufficient_n": {
+      "0.09": 1525,
+      "0.11": 1021,
+      "0.17": 428
+    },
+    "basis": "recomputed from frozen metadata; no captures read",
+    "byte_digest": "98c78f1674902575ba87135edcfec409d3e82c6331e155a3ab7da6d22b731a4d",
+    "decisions": 7629,
+    "episodes": 1128,
+    "fold_counts": {
+      "0": 220,
+      "1": 232,
+      "2": 226,
+      "3": 224,
+      "4": 226
+    },
+    "fold_digest": "c5e9622f7bef663c96614a99bab7e120873ad9eb79617912526c02e48016372c",
+    "independent_fold_recomputation_agrees": true,
+    "independent_pinned_cell_mutation_refused": true,
+    "logical_digest": "1a7cfbdd4e21fc203eafbcc3ec50b96afcb214c169f21c7ba968ca83dfc9709a",
+    "producer_fold_script_reproduced": true,
+    "range_comparison_is_not_a_new_ruling": true,
+    "reporter_pinned_claims": 49,
+    "reporter_self_test": "self-test: 49 pinned claim(s) corrupted; 0 survived corruption\n  every pinned claim's corruption was caught by the claim that pins it.",
+    "source_prompt_sha_hashes": "canonical JSON messages[:-1], not rendered prompt bytes",
+    "unsupported_science_sentence_passes_reporter": true,
+    "workspace_residual_bytes_two_positions_excluding_embedding": {
+      "12b": 11249418240,
+      "4b": 5312225280
+    }
+  },
+  "scope": "standing requests 1 and 3; prospective reviewer design audit, no captures",
+  "source_files_verified": 22
+}

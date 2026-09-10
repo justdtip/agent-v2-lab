@@ -1,0 +1,46 @@
+{
+  "canonical_commit": "c3abdbe8b9eb89777faae68283449d51cee74eb8",
+  "canonical_record": "research/records/WSD-GOLDEN-4B-2026-09-09/",
+  "files": {
+    "golden-report.json": {
+      "path": "research/records/WSD-GOLDEN-4B-2026-09-09/artefacts/golden-report.json",
+      "sha256": "020c0623f1fcab92323d620c447cefc22ba9d27c840079e7136d6879ec22c882",
+      "byte_identical_to_remote_copy": true
+    },
+    "manifest.json": {
+      "path": "research/records/WSD-GOLDEN-4B-2026-09-09/artefacts/manifest.json",
+      "sha256": "b295fd9605197be037c4455a4e7c84814e8a58b865055dd2a85cbb82c43500ee",
+      "byte_identical_to_remote_copy": true
+    },
+    "nu-exact.json": {
+      "path": "research/records/WSD-GOLDEN-4B-2026-09-09/artefacts/nu-exact.json",
+      "sha256": "24ed42d3f26fdac27dc605920b7be5f3ee779cc8ca58e902aec7d048be987cfe",
+      "byte_identical_to_remote_copy": true
+    },
+    "nu-finite-difference.json": {
+      "path": "research/records/WSD-GOLDEN-4B-2026-09-09/artefacts/nu-finite-difference.json",
+      "sha256": "76f937d71f6246bd203cf8b49da45a10bbccac2e32e28d07b592bb38c7bddcdf",
+      "byte_identical_to_remote_copy": true
+    },
+    "progress.jsonl": {
+      "path": "research/records/WSD-GOLDEN-4B-2026-09-09/artefacts/progress.jsonl",
+      "sha256": "1cb06c6c039f7025d02595bd7033b5b380704addfad4f99b8c07e79bf471ae12",
+      "byte_identical_to_remote_copy": true
+    },
+    "rows.jsonl": {
+      "path": "research/records/WSD-GOLDEN-4B-2026-09-09/artefacts/diagnose-rows.jsonl",
+      "sha256": "e92b4074e7f2e923a0d5dafe52648fa3b5289df21ce10769e34e1b73f8575f4d",
+      "byte_identical_to_remote_copy": true
+    },
+    "diagnose.py": {
+      "path": "research/records/WSD-GOLDEN-4B-2026-09-09/diagnose.as-run.py",
+      "sha256": "bfc3cd98ed9e24ec73676faac25936ee7274921edbfda09793c5802a6ea40c33",
+      "byte_identical_to_remote_copy": true
+    },
+    "golden.py": {
+      "path": "research/records/WSD-GOLDEN-4B-2026-09-09/golden.as-run.py",
+      "sha256": "0e53d5de0876ffdbe6c9ea74f3acf3fff7c29a5a1d14de40f08a8cce01af10db",
+      "byte_identical_to_remote_copy": true
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "source_commit": "c4f2f9f1a4f6cde4cfcc1105eafc248859c0ba88",
+  "order_commit": "9114d66f7802ad7850a082094ade13038b5cc899",
+  "reviewer_parent": "43d69a304fc8275d51dd75710b2a1536c1874020",
+  "sources": [
+    {
+      "commit": "c4f2f9f1a4f6cde4cfcc1105eafc248859c0ba88",
+      "repository_path": "src/local_llm_lab/probes/sae_bridge.py",
+      "snapshot": "source/sae_bridge.py",
+      "sha256": "ba8d82379d2e8beced6e151d4bdd15499fe761f72430b927f6f2c8b8df82167c",
+      "bytes": 47824
+    },
+    {
+      "commit": "c4f2f9f1a4f6cde4cfcc1105eafc248859c0ba88",
+      "repository_path": "src/local_llm_lab/probes/anchor_sensitivity.json",
+      "snapshot": "source/anchor_sensitivity.json",
+      "sha256": "b99912d7ba6dbcc18ebb36c8c4d6a5deaee172e57067c866b7b47de560e284ad",
+      "bytes": 4042
+    },
+    {
+      "commit": "c4f2f9f1a4f6cde4cfcc1105eafc248859c0ba88",
+      "repository_path": "tests/test_sae_bridge.py",
+      "snapshot": "source/test_sae_bridge.py",
+      "sha256": "bbe63867c01aecbd2511afa5f2168abdc36435ee500ce503af39710aac721473",
+      "bytes": 40969
+    },
+    {
+      "commit": "c4f2f9f1a4f6cde4cfcc1105eafc248859c0ba88",
+      "repository_path": "research/records/SAE-J-BRIDGE-2026-09-09/README.md",
+      "snapshot": "source/bridge-readme.md",
+      "sha256": "7984b92a12669c06e2bcf6d1b8a32a584a2b331b69aacf17ea270dad31751355",
+      "bytes": 33542
+    },
+    {
+      "commit": "9114d66f7802ad7850a082094ade13038b5cc899",
+      "repository_path": "design_specifications/pending/CUDA-WS-D-ORDER-2026-09-09.md",
+      "snapshot": "source/order.md",
+      "sha256": "150e35f63d4da22a9c1a099bafa6160ab924cfa04103143c54e5bc123c5ace9b",
+      "bytes": 46814
+    },
+    {
+      "commit": "ca396fbcf69f88a3a2841400e5bbb2c9dac88a86",
+      "repository_path": "research/records/WSA-MAP-ANCHOR-AUDIT-2026-09-10/analysis.json",
+      "snapshot": "source/previous-analysis.json",
+      "sha256": "9e5d037c17516a6cb2de6fca9c5e4341f46d50e6a1bb0180b249c8475bb1a65d",
+      "bytes": 14956
+    },
+    {
+      "commit": "dc21d58538242141fdb727625eaa3b734f6765d2",
+      "repository_path": "research/records/WSD-FD-CALIBRATION-2026-09-10/artefacts/displacement.jsonl",
+      "snapshot": "source/displacement.jsonl",
+      "sha256": "4992a08e5e275d6f6cdcbb536d3c9edcf5ac2eec6ce05bb9a54e1e524062f20d",
+      "bytes": 35687
+    }
+  ]
+}

@@ -1108,11 +1108,11 @@ class _FlagModel:
     def __init__(self) -> None:
         self.training = True
 
-    def train(self, mode: bool = True) -> "_FlagModel":
+    def train(self, mode: bool = True) -> _FlagModel:
         self.training = bool(mode)
         return self
 
-    def eval(self) -> "_FlagModel":
+    def eval(self) -> _FlagModel:
         return self.train(False)
 
 
@@ -1157,9 +1157,8 @@ def test_the_validation_wrapper_restores_the_flag_when_evaluate_raises() -> None
 
     trainer.evaluate = exploding
     try:
-        with cli._kernel_path_validation():
-            with pytest.raises(RuntimeError, match="validation blew up"):
-                trainer.evaluate(model=model, dataset=[])
+        with cli._kernel_path_validation(), pytest.raises(RuntimeError, match="validation blew up"):
+            trainer.evaluate(model=model, dataset=[])
     finally:
         trainer.evaluate = library
 

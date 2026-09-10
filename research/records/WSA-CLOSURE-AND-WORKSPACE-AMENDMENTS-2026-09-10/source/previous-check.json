@@ -1,0 +1,309 @@
+{
+  "capture": {
+    "basis": "unchanged metadata functions, inert callback, synthetic receipt writer",
+    "changed_messages_refused": true,
+    "changed_rendered_prompt_accepted_under_unchanged_messages_digest": true,
+    "coverage_scope": "manifest-line membership, not verified capture identity or storage",
+    "missing_manifest_negative_control": {
+      "already_present": 0,
+      "captured": 1,
+      "complete": false,
+      "coverage_note": "requested is what this call was given, not necessarily the whole capture set; complete says every requested decision now has a manifest line",
+      "outstanding": 1,
+      "requested": 1,
+      "shards": 1
+    },
+    "real_corpus_or_model_used": false,
+    "resume_cases": {
+      "checkpoint_changed": {
+        "already_present": 1,
+        "captured": 0,
+        "complete": true,
+        "coverage_note": "requested is what this call was given, not necessarily the whole capture set; complete says every requested decision now has a manifest line",
+        "outstanding": 0,
+        "requested": 1,
+        "shards": 1
+      },
+      "prompt_changed": {
+        "already_present": 1,
+        "captured": 0,
+        "complete": true,
+        "coverage_note": "requested is what this call was given, not necessarily the whole capture set; complete says every requested decision now has a manifest line",
+        "outstanding": 0,
+        "requested": 1,
+        "shards": 1
+      },
+      "same": {
+        "already_present": 1,
+        "captured": 0,
+        "complete": true,
+        "coverage_note": "requested is what this call was given, not necessarily the whole capture set; complete says every requested decision now has a manifest line",
+        "outstanding": 0,
+        "requested": 1,
+        "shards": 1
+      },
+      "shard_changed": {
+        "already_present": 1,
+        "captured": 0,
+        "complete": true,
+        "coverage_note": "requested is what this call was given, not necessarily the whole capture set; complete says every requested decision now has a manifest line",
+        "outstanding": 0,
+        "requested": 1,
+        "shards": 1
+      },
+      "shard_missing": {
+        "already_present": 1,
+        "captured": 0,
+        "complete": true,
+        "coverage_note": "requested is what this call was given, not necessarily the whole capture set; complete says every requested decision now has a manifest line",
+        "outstanding": 0,
+        "requested": 1,
+        "shards": 1
+      }
+    },
+    "row_interface_without_ids_works_in_fixture": true
+  },
+  "checkpoint": {
+    "basis": "actual config-hash selector expressions with synthetic loader reports",
+    "loader_already_reports_weight_shard_hashes": true,
+    "loader_reports_have_different_weight_hashes": true,
+    "selected_hash_identifies": "config.json only",
+    "selected_hashes": {
+      "repeat_gate.py": [
+        [
+          "f60bc9eb068faa2669af8c0e2ee1c5f394ba7fad28f5c2c6741ba1a8e2171284"
+        ],
+        [
+          "f60bc9eb068faa2669af8c0e2ee1c5f394ba7fad28f5c2c6741ba1a8e2171284"
+        ]
+      ],
+      "runner.py": [
+        [
+          "f60bc9eb068faa2669af8c0e2ee1c5f394ba7fad28f5c2c6741ba1a8e2171284",
+          "f60bc9eb068faa2669af8c0e2ee1c5f394ba7fad28f5c2c6741ba1a8e2171284"
+        ],
+        [
+          "f60bc9eb068faa2669af8c0e2ee1c5f394ba7fad28f5c2c6741ba1a8e2171284",
+          "f60bc9eb068faa2669af8c0e2ee1c5f394ba7fad28f5c2c6741ba1a8e2171284"
+        ]
+      ]
+    }
+  },
+  "gate_counts": {
+    "cannot_certify_claimed_target": 7,
+    "demonstrated_can_disagree": 1,
+    "unexecuted_or_unknown": 5
+  },
+  "gate_inventory_scope": "13 named checks accumulated from review 3494a2c; not programme total",
+  "gate_ledger": [
+    {
+      "evidence": "source/check_prereg.py; audit.prereg_metadata",
+      "gate": "check_prereg pinned-claim consistency",
+      "id": "G1",
+      "negative_control": "7,629 to 7,628 in the distinct-decisions cell",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "pinned documentary claims only; not statistical validity",
+      "status": "demonstrated_can_disagree"
+    },
+    {
+      "evidence": "source/tolerances.py; analytic five-fold example",
+      "gate": "required_n closed-form examples as a confidence guarantee",
+      "id": "G2",
+      "negative_control": "correlated cross-fit losses leave every formula check unchanged",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "can test evaluation of a formula; cannot establish its assumptions",
+      "status": "cannot_certify_claimed_target"
+    },
+    {
+      "evidence": "source/carrier_ablation.py; audit.carrier_fixture",
+      "gate": "carrier removal acceptance including preserved action",
+      "id": "G3",
+      "negative_control": "20 notes in ten groups are reported fully ablated; no action identity check",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "producer script is a screening diagnostic, not the promised acceptance gate",
+      "status": "cannot_certify_claimed_target"
+    },
+    {
+      "evidence": "source/capture.py; capture_metadata_fixture",
+      "gate": "capture writer actual width and precision",
+      "id": "G9",
+      "negative_control": "spy reports width 64 and promoted float32; writer stamps width 1 and native",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "direct cell-label mutations fail, but actual callback path is not checked",
+      "status": "cannot_certify_claimed_target"
+    },
+    {
+      "evidence": "source/capture.py; capture_metadata_fixture",
+      "gate": "capture input identity as exact consumed tokens",
+      "id": "G10",
+      "latest_receipt": "WSA-COVERAGE-REVIEW-2026-09-10/check.json:capture",
+      "negative_control": "different token IDs with identical messages are accepted",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "message changes do fail; token identity is not bound",
+      "status": "cannot_certify_claimed_target"
+    },
+    {
+      "evidence": "source/capture.py; capture_metadata_fixture",
+      "gate": "capture resume identity and shard integrity",
+      "id": "G11",
+      "latest_receipt": "WSA-COVERAGE-REVIEW-2026-09-10/check.json:capture",
+      "negative_control": "changed checkpoint or prompt; missing or altered shard all skip as done",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "resume trusts task and step plus shard number",
+      "status": "cannot_certify_claimed_target"
+    },
+    {
+      "evidence": "source/workspace-order.md W-3",
+      "gate": "workspace local-mask structural gate",
+      "id": "G4",
+      "negative_control": "not delivered",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "direct attention support only, never all causal paths",
+      "status": "unexecuted_or_unknown"
+    },
+    {
+      "evidence": "source/workspace-order.md W-3",
+      "gate": "checkpoint layer_types versus is_sliding agreement",
+      "id": "G5",
+      "negative_control": "not delivered",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "architecture identity; count is stated but not independently rechecked here",
+      "status": "unexecuted_or_unknown"
+    },
+    {
+      "evidence": "source/workspace-order.md mass floor",
+      "gate": "workspace mass-floor classification",
+      "id": "G6",
+      "negative_control": "not delivered",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "declared 1e-3 retained; tool IDs and boundaries still need fixtures",
+      "status": "unexecuted_or_unknown"
+    },
+    {
+      "evidence": "source/workspace-order.md discipline",
+      "gate": "workspace lens/capture manifest binding and seal",
+      "id": "G7",
+      "negative_control": "not delivered",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "no capture-reader scripts in the reviewed commits",
+      "status": "unexecuted_or_unknown"
+    },
+    {
+      "evidence": "source/workspace-order.md W-2",
+      "gate": "W-2 family permutation and fold exclusion",
+      "id": "G8",
+      "negative_control": "not delivered; constant-family example supplied",
+      "origin_record": "research/records/WSA-WORKSPACE-AND-PREREG-2026-09-10",
+      "origin_review_commit": "3494a2cd597bcbc8183121bb4fc8f63c2f6004b6",
+      "scope": "family split, class support and fit dependencies must be frozen",
+      "status": "unexecuted_or_unknown"
+    },
+    {
+      "evidence": "source/repeat_gate.py; check.json:repeat",
+      "gate": "fresh and saved-map repeat verdict",
+      "id": "G12",
+      "negative_control": "only the second fresh fit disagrees; overall verdict still passes",
+      "scope": "against-saved comparison can reject; within-process failure does not gate",
+      "status": "cannot_certify_claimed_target"
+    },
+    {
+      "evidence": "source/runner.py; source/repeat_gate.py; source/hf_text.py; check.json:checkpoint",
+      "gate": "runner and repeat checkpoint identity",
+      "id": "G13",
+      "negative_control": "same config, different weight-shard digests give identical recorded identity",
+      "scope": "config identity, not full checkpoint identity",
+      "status": "cannot_certify_claimed_target"
+    }
+  ],
+  "repeat": {
+    "against_saved_failures_refused": 2,
+    "basis": "unchanged verdict AST, synthetic nonzero/zero comparison metrics",
+    "cases": {
+      "against_saved_map_L1": {
+        "coverage": {
+          "note": "two layers of the model, one row, the two positions the maps were fitted over; the claim is about those maps and not about the estimator in general",
+          "positions_per_row": 2,
+          "repo_layers_checked": [
+            1,
+            33
+          ],
+          "repo_layers_in_model": 34,
+          "rows": 1
+        },
+        "passes": false
+      },
+      "against_saved_map_L33": {
+        "coverage": {
+          "note": "two layers of the model, one row, the two positions the maps were fitted over; the claim is about those maps and not about the estimator in general",
+          "positions_per_row": 2,
+          "repo_layers_checked": [
+            1,
+            33
+          ],
+          "repo_layers_in_model": 34,
+          "rows": 1
+        },
+        "passes": false
+      },
+      "baseline": {
+        "coverage": {
+          "note": "two layers of the model, one row, the two positions the maps were fitted over; the claim is about those maps and not about the estimator in general",
+          "positions_per_row": 2,
+          "repo_layers_checked": [
+            1,
+            33
+          ],
+          "repo_layers_in_model": 34,
+          "rows": 1
+        },
+        "passes": true
+      },
+      "within_process_L1": {
+        "coverage": {
+          "note": "two layers of the model, one row, the two positions the maps were fitted over; the claim is about those maps and not about the estimator in general",
+          "positions_per_row": 2,
+          "repo_layers_checked": [
+            1,
+            33
+          ],
+          "repo_layers_in_model": 34,
+          "rows": 1
+        },
+        "passes": true
+      },
+      "within_process_L33": {
+        "coverage": {
+          "note": "two layers of the model, one row, the two positions the maps were fitted over; the claim is about those maps and not about the estimator in general",
+          "positions_per_row": 2,
+          "repo_layers_checked": [
+            1,
+            33
+          ],
+          "repo_layers_in_model": 34,
+          "rows": 1
+        },
+        "passes": true
+      }
+    },
+    "device_boundary_or_repeat_executed": false,
+    "ignored_within_process_failures": 2
+  },
+  "source_count": 10,
+  "unexecuted": [
+    "all model forwards and real tensor storage",
+    "real repeat and boundary checks",
+    "ladder archive array validation",
+    "native suites",
+    "workspace or plan-progress capture analysis"
+  ]
+}

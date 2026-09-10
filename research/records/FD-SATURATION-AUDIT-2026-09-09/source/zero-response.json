@@ -1,0 +1,302 @@
+{
+ "rule": "a column is exactly zero iff that direction's response was exactly zero at both selected positions",
+ "per_layer": [
+  {
+   "repo_layer": 1,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 56.14289714437555,
+   "median_col_norm_exact": 272.91527699828487,
+   "frobenius_fd": 3410.392373085757,
+   "frobenius_exact": 18416.83986936708
+  },
+  {
+   "repo_layer": 2,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 52.28120077241741,
+   "median_col_norm_exact": 219.5762645645064,
+   "frobenius_fd": 3270.251757948669,
+   "frobenius_exact": 15317.103193412197
+  },
+  {
+   "repo_layer": 3,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 37.04047068843442,
+   "median_col_norm_exact": 185.01765452963096,
+   "frobenius_fd": 2295.05083504534,
+   "frobenius_exact": 13072.498632529108
+  },
+  {
+   "repo_layer": 4,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 36.3809168740474,
+   "median_col_norm_exact": 151.8536084076799,
+   "frobenius_fd": 2305.1001231628193,
+   "frobenius_exact": 10630.527489589176
+  },
+  {
+   "repo_layer": 5,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 20.782298191274748,
+   "median_col_norm_exact": 139.39364893687076,
+   "frobenius_fd": 1285.3712585912283,
+   "frobenius_exact": 9832.538328353514
+  },
+  {
+   "repo_layer": 6,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 16.809367990821677,
+   "median_col_norm_exact": 111.5597990322324,
+   "frobenius_fd": 1053.99794829537,
+   "frobenius_exact": 8217.266232842981
+  },
+  {
+   "repo_layer": 7,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 16.684695407389164,
+   "median_col_norm_exact": 77.69048887273354,
+   "frobenius_fd": 1037.3946386515618,
+   "frobenius_exact": 5587.941858994581
+  },
+  {
+   "repo_layer": 8,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 11.989865201445717,
+   "median_col_norm_exact": 54.108517709558896,
+   "frobenius_fd": 735.9722027711664,
+   "frobenius_exact": 3617.771513297618
+  },
+  {
+   "repo_layer": 9,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 8.664794810913435,
+   "median_col_norm_exact": 42.13930017675651,
+   "frobenius_fd": 515.9241993301739,
+   "frobenius_exact": 2750.5878334669296
+  },
+  {
+   "repo_layer": 10,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 7.338008794637833,
+   "median_col_norm_exact": 29.427628776825394,
+   "frobenius_fd": 439.5876597617938,
+   "frobenius_exact": 1790.624660787997
+  },
+  {
+   "repo_layer": 11,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 5.294595846235562,
+   "median_col_norm_exact": 19.461916903773755,
+   "frobenius_fd": 314.40127862014157,
+   "frobenius_exact": 1204.1776551927749
+  },
+  {
+   "repo_layer": 12,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 3.9899174274335194,
+   "median_col_norm_exact": 12.084045138380834,
+   "frobenius_fd": 244.22602583445698,
+   "frobenius_exact": 724.7940465276412
+  },
+  {
+   "repo_layer": 13,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 3.3365746961377454,
+   "median_col_norm_exact": 10.694120622531226,
+   "frobenius_fd": 209.0615628634653,
+   "frobenius_exact": 654.3103935477812
+  },
+  {
+   "repo_layer": 14,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 3.28450389579507,
+   "median_col_norm_exact": 8.764171914738824,
+   "frobenius_fd": 209.37880006648476,
+   "frobenius_exact": 550.0162916986477
+  },
+  {
+   "repo_layer": 15,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 3.2838763649191476,
+   "median_col_norm_exact": 7.70186735417323,
+   "frobenius_fd": 205.29337247784395,
+   "frobenius_exact": 506.2082593780081
+  },
+  {
+   "repo_layer": 16,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 3.01115536576773,
+   "median_col_norm_exact": 5.875585652482975,
+   "frobenius_fd": 189.73766403128266,
+   "frobenius_exact": 414.18448554775244
+  },
+  {
+   "repo_layer": 17,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 2.7824305688973485,
+   "median_col_norm_exact": 4.800855226374412,
+   "frobenius_fd": 175.0794937501262,
+   "frobenius_exact": 367.4599024359874
+  },
+  {
+   "repo_layer": 18,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 2.304352721324177,
+   "median_col_norm_exact": 3.4247974616822106,
+   "frobenius_fd": 151.07519061433308,
+   "frobenius_exact": 301.3654041817493
+  },
+  {
+   "repo_layer": 19,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 2.1950693431666903,
+   "median_col_norm_exact": 3.0036392925408486,
+   "frobenius_fd": 145.07462161525166,
+   "frobenius_exact": 276.611422996834
+  },
+  {
+   "repo_layer": 20,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 2.009006073358177,
+   "median_col_norm_exact": 2.6455642077839947,
+   "frobenius_fd": 135.97973164746728,
+   "frobenius_exact": 256.8132291098965
+  },
+  {
+   "repo_layer": 21,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 1.9350867161350624,
+   "median_col_norm_exact": 2.29794885968127,
+   "frobenius_fd": 131.05718321043096,
+   "frobenius_exact": 243.0715678106883
+  },
+  {
+   "repo_layer": 22,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 1.8573872493202885,
+   "median_col_norm_exact": 1.9983184066547137,
+   "frobenius_fd": 125.96659719187487,
+   "frobenius_exact": 225.24497047427946
+  },
+  {
+   "repo_layer": 23,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 1.8067367010141995,
+   "median_col_norm_exact": 1.9867298320951639,
+   "frobenius_fd": 118.69741509878489,
+   "frobenius_exact": 224.6707798445572
+  },
+  {
+   "repo_layer": 24,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 1.6079162853824696,
+   "median_col_norm_exact": 1.6611199809097221,
+   "frobenius_fd": 108.90918925622911,
+   "frobenius_exact": 194.1220340722551
+  },
+  {
+   "repo_layer": 25,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 1.5343869789010753,
+   "median_col_norm_exact": 1.5760852212097833,
+   "frobenius_fd": 102.76899025338192,
+   "frobenius_exact": 183.62363284453647
+  },
+  {
+   "repo_layer": 26,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 1.4332889192333618,
+   "median_col_norm_exact": 1.4965563340462342,
+   "frobenius_fd": 94.91201445145451,
+   "frobenius_exact": 177.31588446548383
+  },
+  {
+   "repo_layer": 27,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 1.3517371484152623,
+   "median_col_norm_exact": 1.41085094783369,
+   "frobenius_fd": 87.98770185600249,
+   "frobenius_exact": 169.86877040300436
+  },
+  {
+   "repo_layer": 28,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 1.2935129908912852,
+   "median_col_norm_exact": 1.3636086358770276,
+   "frobenius_fd": 81.52855777371147,
+   "frobenius_exact": 163.98356964187772
+  },
+  {
+   "repo_layer": 29,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 1.2588567259484704,
+   "median_col_norm_exact": 1.331348062995919,
+   "frobenius_fd": 76.03830841058574,
+   "frobenius_exact": 167.4388041871306
+  },
+  {
+   "repo_layer": 30,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 1.2178842085066401,
+   "median_col_norm_exact": 1.2677114757808599,
+   "frobenius_fd": 71.51023531629929,
+   "frobenius_exact": 132.86703314113132
+  },
+  {
+   "repo_layer": 31,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 1.1717288398424273,
+   "median_col_norm_exact": 1.2126579741852077,
+   "frobenius_fd": 67.57608630329942,
+   "frobenius_exact": 107.82427567226311
+  },
+  {
+   "repo_layer": 32,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 1.1390295392146181,
+   "median_col_norm_exact": 1.183557178976772,
+   "frobenius_fd": 64.94688453834816,
+   "frobenius_exact": 105.16044277437364
+  },
+  {
+   "repo_layer": 33,
+   "zero_columns": 0,
+   "fraction_zero": 0.0,
+   "median_col_norm_fd": 1.072423820205509,
+   "median_col_norm_exact": 1.089302125885406,
+   "frobenius_fd": 58.48389122065175,
+   "frobenius_exact": 77.3699939367796
+  }
+ ]
+}

@@ -98,7 +98,7 @@ def render_tools(tools: list[dict[str, Any]] = TOOL_SPECS) -> str:
 
 
 def system_prompt(
-    tools: list[dict[str, Any]] = TOOL_SPECS, *, spec: "ModelSpec | None" = None
+    tools: list[dict[str, Any]] = TOOL_SPECS, *, spec: ModelSpec | None = None
 ) -> str:
     """Rules, turn format, the rendered tool list, and the model's own observation convention.
 

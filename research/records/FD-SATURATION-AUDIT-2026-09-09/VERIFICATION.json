@@ -1,0 +1,23 @@
+{
+  "status": "passed",
+  "basis": "file-only-verification",
+  "python": "3.13.1 (v3.13.1:06714517797, Dec  3 2024, 14:00:22) [Clang 15.0.0 (clang-1500.3.9.4)]",
+  "checks": [
+    "all four pinned input hashes and sizes verified",
+    "recorded layer conventions joined exactly",
+    "tie-aware ranks and positive/negative correlation known answers",
+    "linear shared-scale counterexample yields negative-one correlations",
+    "nonzero rounded-map columns coexist with severe component loss",
+    "aggregate cancellation refutes converse zero-response rule",
+    "analysis JSON and CSV identical after independent rerun",
+    "analysis/plot direct imports contain no model packages"
+  ],
+  "source_summary_values_recomputed": true,
+  "large_maps_recomputed": false,
+  "model_execution": false,
+  "outputs_sha256": {
+    "analysis.json": "4c7d1ee5874fb152d18ace47e4be2cbb74e9d84c756ac3904b520b17733296ac",
+    "layers.csv": "bf10c912ab8843dcac34727f23298e9bb3f3cd1292c70f4297af1b04401e5ac1"
+  },
+  "figure_qa": "PNG visually inspected; titles, units, observed/synthetic distinction and provenance legible; adjusted L25 label to avoid marks."
+}

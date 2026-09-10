@@ -1,0 +1,665 @@
+"""G-2(b): MLX against a ported backend, as a tolerance rather than an identity.
+
+Free-running token-for-token reproduction across backends is struck from the acceptance
+gates, and the reason is arithmetic rather than defeatism. One flipped argmax separates two
+trajectories completely, ties in bfloat16 against a 262,208-entry vocabulary are common, and
+over two thousand tokens the probability of zero flips is effectively zero. A gate nobody can
+pass teaches nothing. Exact reproduction is therefore asked of one backend against itself
+within one build and device, which is a determinism test, and the cross-backend question is
+asked as four tolerance statistics instead.
+
+**What this module measures, and what the records can support.**
+
+``teacher_forced_agreement`` feeds the recorded prompt and the recorded emitted prefix, so a
+disagreement at one position cannot cascade into the next. Every position is then an
+independent comparison against the recorded argmax, which free-running comparison is not.
+
+``confidence_violations`` applies the hard rule. Layer 34 is the model's own softmax, so the
+recorded probability of an emitted token is the probability of the greedy choice. **A flip
+where that probability was at least 0.99 fails the run outright**: quantisation does not move
+an argmax that confident, so such a flip is a mask, position, entry or norm defect. In the
+stage-two corpus 4,199 of 5,245 emissions clear that bar, so the rule covers four fifths of
+the decisions rather than a corner of them.
+
+``divergence_indices`` reports where free running first parts company, with a floor, because
+the distribution of that index is informative even though its tail is not a gate.
+
+``top_k_jaccard`` compares the recorded layer-34 top-k identity set against a fresh one. It
+needs token ids only, which is the whole reason it is usable here.
+
+**KL against the recorded distributions is not computable and this module does not offer it.**
+The records store the top-k token *ids* at layer 34 and the probability of the emitted token,
+and never a distribution. A KL needs both sides in full. :func:`symmetric_kl` therefore exists
+for a live-against-live comparison, where both backends are loaded and both distributions are
+in hand, and it refuses to pretend a recorded side exists. This is a correction to the order
+rather than a gap in the implementation.
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+
+__all__ = [
+    "AgreementReport",
+    "ToleranceReport",
+    "run_tolerance",
+    "teacher_forced_run",
+    "torch_forward_rows",
+    "DivergenceProfile",
+    "JaccardReport",
+    "confidence_violations",
+    "divergence_indices",
+    "symmetric_kl",
+    "teacher_forced_agreement",
+    "top_k_jaccard",
+]
+
+#: A flip at or above this recorded probability is a defect and not a rounding difference.
+HARD_CONFIDENCE = 0.99
+
+#: A disagreement is a **tie** when the reference's own top-two gap is within this many units of
+#: last place of the dtype its logits are stored in. Ruled 2026-09-10 after the gate fired
+#: twenty-four times and found nothing: below this the reference is itself settling a coin toss,
+#: so which side the port lands is not information about the port.
+TIE_ULPS = 2
+
+
+class NotADefectTest(RuntimeError):
+    """Raised when a comparison is asked for a verdict it is not entitled to give."""
+
+
+@dataclass(frozen=True)
+class Reference:
+    """What the port is being compared against, and whether that is a defect test at all.
+
+    A confident flip is evidence of a defect only when the reference runs the **same precision**
+    as the port. Against a differently quantised recording the check measures quantisation: the
+    recorded probability is the quantised model's confidence in its own preference and does not
+    bound what the port will do. This programme established that empirically -- twenty-four
+    confident flips against a 4-bit recording, of which twenty-one were the quantisation and
+    three were ties -- so the type refuses the verdict rather than leaving it to a reader.
+    """
+
+    name: str
+    precision_matched: bool
+
+    def __str__(self) -> str:
+        return self.name
+
+
+#: The stage-two recordings. Not a defect test: it is 4-bit and the port is bfloat16.
+MLX_4BIT = Reference("mlx-4bit", precision_matched=False)
+#: The re-based reference, bfloat16 against bfloat16.
+MLX_BF16 = Reference("mlx-bf16", precision_matched=True)
+
+
+def bf16_ulp(magnitude: float) -> float:
+    """The spacing of bfloat16 near ``magnitude``: 7 mantissa bits, so 2**(exponent - 7)."""
+    if magnitude == 0:
+        return 2.0**-133
+    return 2.0 ** (math.floor(math.log2(abs(magnitude))) - 7)
+
+
+#: Rows ranked per block when reading logits. Small enough that the float32 copy is tens of
+#: megabytes rather than gigabytes; large enough that the loop is not the cost.
+_RANK_ROWS = 256
+
+
+@dataclass(frozen=True)
+class Flip:
+    """One position where the ported argmax differs from the recorded one."""
+
+    turn: int
+    position: int
+    recorded: int
+    produced: int
+    recorded_probability: float | None
+    #: The reference's own top-two gap at this position, in ULPs of its logit dtype. ``None``
+    #: when the reference cannot say, which is every reference that only recorded a token.
+    reference_gap_ulps: float | None = None
+    #: How far the port's own preference moves across its devices at this position, in the same
+    #: ULPs. ``None`` when only one device has been measured.
+    port_spread_ulps: float | None = None
+
+    @property
+    def tie(self) -> bool:
+        """The reference could not tell its own top two apart at the resolution it stores them."""
+        return self.reference_gap_ulps is not None and self.reference_gap_ulps <= TIE_ULPS
+
+    @property
+    def below_resolution(self) -> bool:
+        """The port's own arithmetic moves further than the reference's margin.
+
+        A defect is a claim that the port disagrees with the reference by more than the port's
+        own arithmetic can explain. Where the port's two devices straddle the reference's
+        margin, that claim cannot be made from this position, and calling it a defect would be
+        reading the port's resolution as the port's error. Ruled 2026-09-10 on
+        ``read-0108``/521, where the reference is 3 ULP clear and the port's devices are 5 apart.
+        """
+        return (
+            not self.tie
+            and self.reference_gap_ulps is not None
+            and self.port_spread_ulps is not None
+            and self.reference_gap_ulps <= self.port_spread_ulps
+        )
+
+    @property
+    def confident(self) -> bool:
+        """Whether the *recording* was confident here. Descriptive, never a verdict."""
+        return (
+            self.recorded_probability is not None and self.recorded_probability >= HARD_CONFIDENCE
+        )
+
+    @property
+    def hard(self) -> bool:
+        """A disagreement attributable to the port: not a tie, and not below its resolution.
+
+        The recording's own probability does not appear. It is the *4-bit* model's confidence
+        and it gated this rule until 2026-09-10, which is how a bfloat16-against-bfloat16
+        comparison came to drop a disagreement because a quantised model had been unsure.
+        """
+        return not self.tie and not self.below_resolution
+
+    def describe(self) -> str:
+        probability = (
+            "unrecorded"
+            if self.recorded_probability is None
+            else f"P={self.recorded_probability:.6f}"
+        )
+        severity = "TIE" if self.tie else ("BELOW-RES" if self.below_resolution else "HARD")
+        gap = (
+            ""
+            if self.reference_gap_ulps is None
+            else f", reference gap {self.reference_gap_ulps:.1f} ULP"
+        )
+        if self.port_spread_ulps is not None:
+            gap += f", port spread {self.port_spread_ulps:.1f} ULP"
+        return (
+            f"[{severity}] turn {self.turn} position {self.position}: recorded "
+            f"{self.recorded} ({probability}), produced {self.produced}{gap}"
+        )
+
+
+@dataclass
+class AgreementReport:
+    """Teacher-forced argmax agreement, and every flip that broke it."""
+
+    label: str
+    compared: int
+    agreed: int
+    flips: list[Flip] = field(default_factory=list)
+    unrecorded_probability: int = 0
+    #: What this comparison is against. The default is the stage-two recording, which is not a
+    #: defect test, so a caller that wants a verdict has to say what it compared with.
+    reference: Reference = MLX_4BIT
+
+    @property
+    def rate(self) -> float:
+        return self.agreed / self.compared if self.compared else 0.0
+
+    @property
+    def ties(self) -> list[Flip]:
+        """Disagreements the reference could not tell apart: never a flip, never agreement."""
+        return [flip for flip in self.flips if flip.tie]
+
+    @property
+    def below_resolution(self) -> list[Flip]:
+        """Disagreements the port's own cross-device spread already covers."""
+        return [flip for flip in self.flips if flip.below_resolution]
+
+    @property
+    def confident_disagreements(self) -> list[Flip]:
+        """Disagreements the *recording* was confident about. Descriptive, never a verdict."""
+        return [flip for flip in self.flips if flip.confident]
+
+    @property
+    def hard_flips(self) -> list[Flip]:
+        """Disagreements attributed to the port: not ties, not below its resolution."""
+        return [flip for flip in self.flips if flip.hard]
+
+    def counts(self) -> dict[str, int]:
+        """The four classes, which must add to ``compared``.
+
+        Written as a method with the identity asserted because the line not summing is what
+        exposed a whole class the classifier had no name for: a disagreement outside the tie
+        band that the old confidence gate silently dropped.
+        """
+        out = {
+            "agreed": self.agreed,
+            "ties": len(self.ties),
+            "below_resolution": len(self.below_resolution),
+            "flips": len(self.hard_flips),
+        }
+        total = sum(out.values())
+        if total != self.compared:
+            raise AssertionError(
+                f"the four classes sum to {total} and {self.compared} positions were compared; "
+                "a position with no class is a position nobody will look at"
+            )
+        return out
+
+    @property
+    def passed(self) -> bool:
+        """Whether this run passes, which only a precision-matched comparison may be asked.
+
+        Against a differently quantised reference this raises rather than answering. The
+        alternative is what happened on 2026-09-10: a green or red light from a check that was
+        measuring the reference's quantisation, read by everyone downstream as a statement
+        about the port.
+        """
+        if not self.reference.precision_matched:
+            raise NotADefectTest(
+                f"a comparison against {self.reference} is not a defect test and has no verdict: "
+                f"the reference is not precision-matched with the port, so a disagreement "
+                f"measures the difference between the two precisions. It reports "
+                f"{len(self.confident_disagreements)} confident disagreements as "
+                f"observations. Re-run against a precision-matched reference for a verdict."
+            )
+        return not self.hard_flips
+
+    def describe(self) -> str:
+        if self.reference.precision_matched:
+            lines = [
+                f"{self.label}: {self.agreed}/{self.compared} argmax agree "
+                f"({self.rate:.6f}), {len(self.ties)} ties, "
+                f"{len(self.below_resolution)} below resolution, "
+                f"{len(self.hard_flips)} attributed to the port, against {self.reference}"
+            ]
+        else:
+            lines = [
+                f"{self.label}: {self.agreed}/{self.compared} argmax agree "
+                f"({self.rate:.6f}), {len(self.flips)} flips, "
+                f"{len(self.confident_disagreements)} of them at P >= {HARD_CONFIDENCE}, "
+                f"against {self.reference}"
+            ]
+            lines.append(
+                f"  not a defect test: {self.reference} is not precision-matched with the port, "
+                "so these disagreements measure the two precisions and not the port"
+            )
+        if self.unrecorded_probability:
+            lines.append(
+                f"  {self.unrecorded_probability} compared positions carried no recorded "
+                "probability, so the hard rule could not be applied to them"
+            )
+        # Every flip, not only the gating ones. A run that passes because no flip was confident
+        # is only evidence if the reader can see where the flips actually sat; "0 at P >= 0.99"
+        # on its own cannot be told apart from a threshold nobody came near.
+        #
+        # **Every hard flip prints; only the soft ones are capped.** This was one cap over all
+        # flips in position order, which on the rented card dropped half the gating flips from
+        # the output while showing near-ties that gate nothing: the run said 24 and the log
+        # carried 12, and the positions of the other 12 were recorded nowhere. A cap that can
+        # hide the evidence for the failure it is reporting is the wrong cap.
+        lines.extend(f"  {flip.describe()}" for flip in self.hard_flips)
+        lines.extend(f"  {flip.describe()}" for flip in self.below_resolution)
+        soft = [flip for flip in self.flips if not flip.hard and not flip.below_resolution]
+        lines.extend(f"  {flip.describe()}" for flip in soft[:12])
+        if len(soft) > 12:
+            lines.append(f"  ... and {len(soft) - 12} further soft flips, none of them gating")
+        if len(self.flips) > 12:
+            lines.append(f"  ... and {len(self.flips) - 12} more")
+        return "\n".join(lines)
+
+    @property
+    def flip_confidences(self) -> list[float]:
+        """The recorded probability at each flipped position, for the record."""
+        return [
+            flip.recorded_probability
+            for flip in self.flips
+            if flip.recorded_probability is not None
+        ]
+
+
+@dataclass
+class DivergenceProfile:
+    """Where free running first parts company, per episode."""
+
+    indices: list[int]
+    reproduced: int
+    floor: int
+
+    @property
+    def below_floor(self) -> list[int]:
+        return [index for index in self.indices if index < self.floor]
+
+    @property
+    def passed(self) -> bool:
+        return not self.below_floor
+
+    def percentile(self, fraction: float) -> int | None:
+        if not self.indices:
+            return None
+        ordered = sorted(self.indices)
+        position = min(len(ordered) - 1, max(0, math.ceil(fraction * len(ordered)) - 1))
+        return ordered[position]
+
+    def describe(self) -> str:
+        if not self.indices:
+            return f"no episode diverged; {self.reproduced} reproduced outright"
+        return (
+            f"{len(self.indices)} episodes diverged, {self.reproduced} did not; "
+            f"first-divergence index min={min(self.indices)} "
+            f"p50={self.percentile(0.5)} max={max(self.indices)}; "
+            f"{len(self.below_floor)} below the floor of {self.floor}"
+        )
+
+
+@dataclass
+class JaccardReport:
+    """Top-k identity overlap between the recorded layer-34 set and a fresh one."""
+
+    label: str
+    scores: list[float]
+    k: int
+
+    @property
+    def mean(self) -> float:
+        return sum(self.scores) / len(self.scores) if self.scores else 0.0
+
+    def percentile(self, fraction: float) -> float | None:
+        if not self.scores:
+            return None
+        ordered = sorted(self.scores)
+        position = min(len(ordered) - 1, max(0, math.ceil(fraction * len(ordered)) - 1))
+        return ordered[position]
+
+    def describe(self) -> str:
+        if not self.scores:
+            return f"{self.label}: no positions compared"
+        return (
+            f"{self.label}: top-{self.k} Jaccard mean {self.mean:.4f}, "
+            f"p01 {self.percentile(0.01):.4f}, p50 {self.percentile(0.5):.4f}, "
+            f"worst {min(self.scores):.4f}, over {len(self.scores)} positions"
+        )
+
+
+def teacher_forced_agreement(
+    episode,
+    produced_argmax: dict[tuple[int, int], int],
+    *,
+    reference: Reference = MLX_4BIT,
+    readings: dict[tuple[int, int], tuple[int, float | None]] | None = None,
+    spreads: dict[tuple[int, int], float] | None = None,
+) -> AgreementReport:
+    """Compare a ported argmax against the reference's at every emitted position.
+
+    ``produced_argmax`` is keyed by ``(turn index, emitted position)`` and holds the argmax the
+    ported backend produced when fed the recorded prefix up to that position. Teacher forcing is
+    what makes each position an independent comparison; under free running one flip decides
+    everything after it and the count stops meaning anything.
+
+    ``readings`` re-bases the comparison. Without it the expected token is the stage-two
+    recording's, which is 4-bit and therefore not a defect test. With it the expected token and
+    the tie gap both come from the precision-matched reference, and a position the reference has
+    no answer for is not compared rather than silently compared against the old one.
+    """
+    report = AgreementReport(label=episode.label, compared=0, agreed=0, reference=reference)
+    for turn in episode.turns:
+        for emission in turn.emissions:
+            key = (turn.index, emission.position)
+            if key not in produced_argmax:
+                continue
+            reading = None if readings is None else readings.get(key)
+            if readings is not None and reading is None:
+                continue
+            expected = emission.token_id if reading is None else reading[0]
+            gap = None if reading is None else reading[1]
+            spread = None if spreads is None else spreads.get(key)
+            report.compared += 1
+            produced = produced_argmax[key]
+            probability = turn.emitted_confidence(emission.position)
+            if probability is None:
+                report.unrecorded_probability += 1
+            if produced == expected:
+                report.agreed += 1
+            else:
+                report.flips.append(
+                    Flip(
+                        turn=turn.index,
+                        position=emission.position,
+                        recorded=expected,
+                        produced=produced,
+                        recorded_probability=probability,
+                        reference_gap_ulps=gap,
+                        port_spread_ulps=spread,
+                    )
+                )
+    return report
+
+
+def confidence_violations(report: AgreementReport) -> list[Flip]:
+    """The flips that fail the run outright. One of these is enough."""
+    return report.hard_flips
+
+
+def divergence_indices(results: Sequence, *, floor: int) -> DivergenceProfile:
+    """First-divergence index per episode from free-running reproduction.
+
+    ``floor`` is the point below which a divergence stops being arithmetic drift. An episode
+    that parts company in its first handful of tokens did not drift there.
+    """
+    indices: list[int] = []
+    reproduced = 0
+    for result in results:
+        divergence = result.first_divergence
+        if divergence is None:
+            reproduced += 1
+        else:
+            indices.append(divergence.index)
+    return DivergenceProfile(indices=indices, reproduced=reproduced, floor=floor)
+
+
+def top_k_jaccard(
+    episode, produced_top: dict[tuple[int, int], Sequence[int]], *, k: int = 5
+) -> JaccardReport:
+    """Identity overlap between the recorded layer-34 top-k and a produced one.
+
+    Uses token ids only, which is why it is available at all: the records carry the top-k ids
+    and never their probabilities.
+    """
+    scores: list[float] = []
+    for turn in episode.turns:
+        for emission in turn.emissions:
+            key = (turn.index, emission.position)
+            if key not in produced_top:
+                continue
+            recorded = set(turn.final_top(emission.position - 1)[:k])
+            produced = set(list(produced_top[key])[:k])
+            if not recorded and not produced:
+                continue
+            union = recorded | produced
+            scores.append(len(recorded & produced) / len(union) if union else 0.0)
+    return JaccardReport(label=episode.label, scores=scores, k=k)
+
+
+def symmetric_kl(left: Sequence[float], right: Sequence[float]) -> float:
+    """Jensen-Shannon divergence between two full distributions, in nats.
+
+    **Live against live only.** The stage-two records store the top-k token ids at layer 34 and
+    the probability of the emitted token, never a distribution, so there is no recorded side to
+    take a divergence against. Passing a top-k slice here would compute a real number about a
+    truncated object and that is the error this programme has already made once.
+    """
+    if len(left) != len(right):
+        raise ValueError(f"distributions differ in support: {len(left)} against {len(right)}")
+    if not left:
+        raise ValueError("a divergence needs a distribution, not an empty sequence")
+    total_left = sum(left)
+    total_right = sum(right)
+    if not (
+        math.isclose(total_left, 1.0, abs_tol=1e-3) and math.isclose(total_right, 1.0, abs_tol=1e-3)
+    ):
+        raise ValueError(
+            f"both sides must be full normalised distributions; sums are {total_left:.6f} and "
+            f"{total_right:.6f}. A top-k slice is not a distribution."
+        )
+
+    def _kl(p: Sequence[float], q: Sequence[float]) -> float:
+        return sum(
+            value * math.log(value / other)
+            for value, other in zip(p, q, strict=True)
+            if value > 0.0 and other > 0.0
+        )
+
+    mean = [0.5 * (a + b) for a, b in zip(left, right, strict=True)]
+    return 0.5 * _kl(left, mean) + 0.5 * _kl(right, mean)
+
+
+# --- the runner -----------------------------------------------------------------------------
+
+
+@dataclass
+class ToleranceReport:
+    """Every G-2(b) statistic for one corpus, and whether the run passed."""
+
+    agreement: AgreementReport
+    jaccard: JaccardReport
+    divergence: DivergenceProfile | None
+
+    @property
+    def passed(self) -> bool:
+        """Only the hard rule and the divergence floor gate. The rest is reported."""
+        if not self.agreement.passed:
+            return False
+        return self.divergence is None or self.divergence.passed
+
+    def describe(self) -> str:
+        lines = [self.agreement.describe(), self.jaccard.describe()]
+        if self.divergence is not None:
+            lines.append(self.divergence.describe())
+        else:
+            lines.append("free-running divergence not measured in this run")
+        return "\n".join(lines)
+
+
+def teacher_forced_run(episode, forward, *, top_k: int = 5):
+    """Read every deciding position of an episode with the recorded prefix in front of it.
+
+    Teacher forcing here is **one forward per turn, not one per token**. Feeding the whole
+    recorded sequence and reading the argmax at each position gives exactly the prediction that
+    position would have made with the recorded prefix ahead of it, because attention is causal.
+    Running it as *n* separate generations would cost *n* times as much for the same numbers.
+
+    ``forward`` takes a token id sequence and returns one ``(argmax, top_k ids)`` row per input
+    position. The row count is checked against the sequence length rather than assumed: an
+    off-by-one there would shift every comparison by one position and still produce a plausible
+    agreement rate, which is the failure this programme has already paid for once.
+    """
+    produced_argmax: dict[tuple[int, int], int] = {}
+    produced_top: dict[tuple[int, int], tuple[int, ...]] = {}
+    for turn in episode.turns:
+        sequence = list(turn.prompt_ids) + list(turn.token_ids)
+        rows = forward(sequence)
+        if len(rows) != len(sequence):
+            raise ValueError(
+                f"forward returned {len(rows)} rows for {len(sequence)} positions in turn "
+                f"{turn.index}; the join would be shifted and still look plausible"
+            )
+        for emission in turn.emissions:
+            argmax, top = rows[emission.position - 1]
+            produced_argmax[(turn.index, emission.position)] = int(argmax)
+            produced_top[(turn.index, emission.position)] = tuple(int(t) for t in top)
+    return produced_argmax, produced_top
+
+
+def load_reference(path) -> tuple[Reference, dict[str, dict[tuple[int, int], tuple[int, float]]]]:
+    """Read the precision-matched reference written by ``scripts/mlx_reference.py``.
+
+    Returns the reference descriptor and, per episode label, a ``(turn, position)`` map to the
+    reference's own token and its top-two gap in ULPs. The descriptor comes from the file rather
+    than from the caller, so a file that does not declare itself precision-matched cannot be
+    used to obtain a verdict.
+    """
+    import json
+    from pathlib import Path
+
+    payload = json.loads(Path(path).read_text())
+    name = payload.get("reference")
+    if name != MLX_BF16.name:
+        raise ValueError(
+            f"reference file declares {name!r}; this loader knows {MLX_BF16.name!r}, and a "
+            "reference whose precision is not known cannot be read as a defect test"
+        )
+    readings: dict[str, dict[tuple[int, int], tuple[int, float]]] = {}
+    for label, rows in payload["episodes"].items():
+        readings[label] = {
+            (row["turn"], row["position"]): (row["token"], row["gap_ulps"]) for row in rows
+        }
+    return MLX_BF16, readings
+
+
+def run_tolerance(
+    episode,
+    forward,
+    *,
+    top_k: int = 5,
+    free_running: Sequence | None = None,
+    floor: int = 16,
+    decoding: object = "greedy",
+    reference: Reference = MLX_4BIT,
+    readings: dict[tuple[int, int], tuple[int, float | None]] | None = None,
+    spreads: dict[tuple[int, int], float] | None = None,
+) -> ToleranceReport:
+    """The G-2(b) statistics for one episode, from a teacher-forced pass over its records.
+
+    Greedy only: teacher forcing reads the recorded trajectory, which was made greedy, and a
+    sampled comparison against it would compare a draw with an argmax. The sampled mode is
+    refused by name before anything is read.
+    """
+    from local_llm_lab.pipeline.sampled_decode import require_greedy
+
+    require_greedy(decoding, where="the tolerance runner (G-2b)")
+    produced_argmax, produced_top = teacher_forced_run(episode, forward, top_k=top_k)
+    return ToleranceReport(
+        agreement=teacher_forced_agreement(
+            episode,
+            produced_argmax,
+            reference=reference,
+            readings=readings,
+            spreads=spreads,
+        ),
+        jaccard=top_k_jaccard(episode, produced_top, k=top_k),
+        divergence=None if free_running is None else divergence_indices(free_running, floor=floor),
+    )
+
+
+def torch_forward_rows(model, view, *, top_k: int = 5):
+    """A ``forward`` for :func:`teacher_forced_run` backed by a loaded torch model.
+
+    Chunked with the same partition generation uses, so a teacher-forced read and a generated
+    one see the same forward shapes and a difference between them cannot be the chunking.
+
+    UNEXECUTED: no torch architecture view exists to run this against yet.
+    """
+    import torch
+
+    from local_llm_lab.forward import prefill_passes
+    from local_llm_lab.pipeline.runner import _forward_logits, pin_torch_determinism
+
+    def forward(sequence):
+        pin_torch_determinism()
+        cache = view.make_cache()
+        rows: list[tuple[int, tuple[int, ...]]] = []
+        with torch.no_grad():
+            for chunk in prefill_passes(list(sequence)):
+                logits = _forward_logits(model, view, chunk.input_ids, cache)
+                # Rank in row blocks, never whole-tensor. A full 2,048-token chunk against a
+                # 262,208-entry vocabulary is 1.07 GB in bfloat16 and 2.15 GB the instant it is
+                # cast to float32, on top of 7.3 GiB of weights inside a 10.656 GiB cap. The
+                # cast is still needed -- ties in bfloat16 at this vocabulary size are common
+                # and the decode loop resolves them in float32 -- so it happens per block and
+                # the block is dropped.
+                for start in range(0, logits.shape[1], _RANK_ROWS):
+                    block = logits[0, start : start + _RANK_ROWS].float()
+                    top = block.topk(top_k, dim=-1).indices
+                    rows.extend(
+                        (int(top[local, 0]), tuple(int(value) for value in top[local]))
+                        for local in range(top.shape[0])
+                    )
+                    del block, top
+                del logits
+        return rows
+
+    return forward

@@ -1,0 +1,844 @@
+{
+  "artifact_identity_counterexample": {
+    "basis": "two-dimensional synthetic lens stand-ins; JSON hashes identify fixture matrix bytes, not NPZ files",
+    "delta_h": [
+      0.0,
+      1.0
+    ],
+    "different_nu_control": {
+      "outcome": "refused",
+      "reason": "refusing a cross-path reading at layer 1: the lens was fitted in float32 and the capture is bfloat16. at layer 1, displacing the anchor moved the sampled scalar derivatives by a median 1.035116 of their own size in float32 (native 0.470689), over 18 projections in one draw, worst 35.1951. That is a sampled directional sensitivity, not a condition number, and a median does not settle a layer. a pairing is registered at layer 1, but it measured a different pair -- nu_sha256: measured '58fce4673c17a9b81451e67386b71bf700f5dd8431ac87140c364732d1a43d67', this reading '2749453cf260bf8cecf87376a68b86ecdce5c3265ea71bcf74d1958425206d82'. Until this pair is measured the difference is not an annotation on the reading but potentially the whole of it (WS-D, the float32 displacement control). Measure it: a paired comparison at that layer, at this reading's own positions and context: the same readout through the same lens on a capture from each path"
+    },
+    "h": [
+      100.0,
+      1.0
+    ],
+    "hook_alignment_outcomes": {
+      "A": {
+        "outcome": "accepted",
+        "result": 1
+      },
+      "B": {
+        "outcome": "accepted",
+        "result": 1
+      }
+    },
+    "matrix_json_sha256": {
+      "A": "cdbd024319bd09bdf1004c0eb69e3ed4a2880745862994e65337f3b531ee1987",
+      "B": "75cbd6536399826be0c8d10eac9115d8ac4c8e3ffd0bdeb3161c03e42e2cd931"
+    },
+    "matrix_values": {
+      "A": [
+        [
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.001
+        ]
+      ],
+      "B": [
+        [
+          0.001,
+          0.0
+        ],
+        [
+          0.0,
+          1.0
+        ]
+      ]
+    },
+    "relative_readout_change": {
+      "A": 9.9999999995e-06,
+      "B": 0.9950371902099893
+    },
+    "shared_nu_sha256": "58fce4673c17a9b81451e67386b71bf700f5dd8431ac87140c364732d1a43d67"
+  },
+  "basis": "metadata fixture replay and elementary matrix example; no model measurements",
+  "declared_field_mutations": [
+    {
+      "field": "fit_dtype",
+      "outcome": "refused",
+      "reason": "a pairing is registered at layer 1, but it measured a different pair -- fit_dtype: measured 'float32', this reading 'float32-changed'"
+    },
+    {
+      "field": "fit_width",
+      "outcome": "refused",
+      "reason": "a pairing is registered at layer 1, but it measured a different pair -- fit_width: measured 1, this reading 2"
+    },
+    {
+      "field": "capture_dtype",
+      "outcome": "refused",
+      "reason": "a pairing is registered at layer 1, but it measured a different pair -- capture_dtype: measured 'bfloat16', this reading 'bfloat16-changed'"
+    },
+    {
+      "field": "capture_width",
+      "outcome": "refused",
+      "reason": "a pairing is registered at layer 1, but it measured a different pair -- capture_width: measured 1, this reading 2"
+    },
+    {
+      "field": "lens_side",
+      "outcome": "refused",
+      "reason": "a pairing is registered at layer 1, but it measured a different pair -- lens_side: measured 'fit', this reading 'fit-changed'"
+    },
+    {
+      "field": "nu_sha256",
+      "outcome": "refused",
+      "reason": "a pairing is registered at layer 1, but it measured a different pair -- nu_sha256: measured '58fce4673c17a9b81451e67386b71bf700f5dd8431ac87140c364732d1a43d67', this reading '58fce4673c17a9b81451e67386b71bf700f5dd8431ac87140c364732d1a43d67-changed'"
+    },
+    {
+      "field": "positions",
+      "outcome": "refused",
+      "reason": "a pairing is registered at layer 1, but it measured a different pair -- positions: measured [8, 127], this reading [8, 127, 'changed']"
+    },
+    {
+      "field": "reduction",
+      "outcome": "refused",
+      "reason": "a pairing is registered at layer 1, but it measured a different pair -- reduction: measured 'one position at a time', this reading 'one position at a time-changed'"
+    },
+    {
+      "field": "endpoint",
+      "outcome": "refused",
+      "reason": "a pairing is registered at layer 1, but it measured a different pair -- endpoint: measured 'synthetic residual endpoint', this reading 'synthetic residual endpoint-changed'"
+    },
+    {
+      "field": "context_tokens",
+      "outcome": "refused",
+      "reason": "a pairing is registered at layer 1, but it measured a different pair -- context_tokens: measured 128, this reading 129"
+    }
+  ],
+  "empty_pairing_table": {
+    "outcome": "refused",
+    "reason": "refusing a cross-path reading at layer 1: the lens was fitted in float32 and the capture is bfloat16. at layer 1, displacing the anchor moved the sampled scalar derivatives by a median 1.035116 of their own size in float32 (native 0.470689), over 18 projections in one draw, worst 35.1951. That is a sampled directional sensitivity, not a condition number, and a median does not settle a layer. no cross-path pairing is registered at layer 1 of 'google/gemma-3-4b-it'. Until this pair is measured the difference is not an annotation on the reading but potentially the whole of it (WS-D, the float32 displacement control). Measure it: a paired comparison at that layer, at this reading's own positions and context: the same readout through the same lens on a capture from each path"
+  },
+  "front_door_controls": {
+    "capture_precision": {
+      "outcome": "refused",
+      "reason": "refusing a cross-path reading at layer 1: the lens was fitted in float32 and the capture is float16. at layer 1, displacing the anchor moved the sampled scalar derivatives by a median 1.035116 of their own size in float32 (native 0.470689), over 18 projections in one draw, worst 35.1951. That is a sampled directional sensitivity, not a condition number, and a median does not settle a layer. a pairing is registered at layer 1, but it measured a different pair -- capture_dtype: measured 'bfloat16', this reading 'float16'. Until this pair is measured the difference is not an annotation on the reading but potentially the whole of it (WS-D, the float32 displacement control). Measure it: a paired comparison at that layer, at this reading's own positions and context: the same readout through the same lens on a capture from each path"
+    },
+    "capture_width": {
+      "outcome": "refused",
+      "reason": "refusing a cross-path reading at layer 1: the lens was fitted in float32 and the capture is bfloat16; the lens was fitted at forward width 1 and the capture is at width 64. at layer 1, displacing the anchor moved the sampled scalar derivatives by a median 1.035116 of their own size in float32 (native 0.470689), over 18 projections in one draw, worst 35.1951. That is a sampled directional sensitivity, not a condition number, and a median does not settle a layer. a pairing is registered at layer 1, but it measured a different pair -- capture_width: measured 1, this reading 64. Until this pair is measured the difference is not an annotation on the reading but potentially the whole of it (WS-D, the float32 displacement control). Measure it: a paired comparison at that layer, at this reading's own positions and context: the same readout through the same lens on a capture from each path"
+    },
+    "context": {
+      "outcome": "refused",
+      "reason": "refusing a cross-path reading at layer 1: the lens was fitted in float32 and the capture is bfloat16. at layer 1, displacing the anchor moved the sampled scalar derivatives by a median 1.035116 of their own size in float32 (native 0.470689), over 18 projections in one draw, worst 35.1951. That is a sampled directional sensitivity, not a condition number, and a median does not settle a layer. a pairing is registered at layer 1, but it measured a different pair -- context_tokens: measured 128, this reading 1400. Until this pair is measured the difference is not an annotation on the reading but potentially the whole of it (WS-D, the float32 displacement control). Measure it: a paired comparison at that layer, at this reading's own positions and context: the same readout through the same lens on a capture from each path"
+    },
+    "missing_reading": {
+      "outcome": "refused",
+      "reason": "refusing a cross-path reading at layer 1: the lens was fitted in float32 and the capture is bfloat16. at layer 1, displacing the anchor moved the sampled scalar derivatives by a median 1.035116 of their own size in float32 (native 0.470689), over 18 projections in one draw, worst 35.1951. That is a sampled directional sensitivity, not a condition number, and a median does not settle a layer. the reading does not declare ['positions', 'reduction', 'endpoint', 'context_tokens'], and an undeclared field cannot match a measured one; the caller supplies its own provenance. Until this pair is measured the difference is not an annotation on the reading but potentially the whole of it (WS-D, the float32 displacement control). Measure it: a paired comparison at that layer, at this reading's own positions and context: the same readout through the same lens on a capture from each path"
+    },
+    "neighbor": {
+      "outcome": "refused",
+      "reason": "refusing a cross-path reading at layer 17: the lens was fitted in float32 and the capture is bfloat16. at layer 17, displacing the anchor moved the sampled scalar derivatives by a median 0.696514 of their own size in float32 (native 0.585164), over 18 projections in one draw, worst 4.1596. That is a sampled directional sensitivity, not a condition number, and a median does not settle a layer. no cross-path pairing is registered at layer 17 of 'google/gemma-3-4b-it'. Until this pair is measured the difference is not an annotation on the reading but potentially the whole of it (WS-D, the float32 displacement control). Measure it: a paired comparison at that layer, at this reading's own positions and context: the same readout through the same lens on a capture from each path"
+    }
+  },
+  "matching_pairing": {
+    "outcome": "accepted",
+    "result": {
+      "anchor_batch": 1,
+      "capture_batch": 1,
+      "capture_dtype": "bfloat16",
+      "crossing": [
+        "the lens was fitted in float32 and the capture is bfloat16"
+      ],
+      "declared_by_registry": "float32",
+      "fit_dtype": "float32",
+      "forward_batch": 1,
+      "layer": 1,
+      "path_term": {
+        "base": "google/gemma-3-4b-it",
+        "basis": "synthetic fixture; not measured",
+        "layer": 1,
+        "measured": true,
+        "pair": {
+          "capture_dtype": "bfloat16",
+          "capture_width": 1,
+          "context_tokens": 128,
+          "endpoint": "synthetic residual endpoint",
+          "fit_dtype": "float32",
+          "fit_width": 1,
+          "lens_side": "fit",
+          "nu_sha256": "58fce4673c17a9b81451e67386b71bf700f5dd8431ac87140c364732d1a43d67",
+          "positions": [
+            8,
+            127
+          ],
+          "reduction": "one position at a time"
+        },
+        "relative": 0.004
+      },
+      "proposed_pair": {
+        "capture_dtype": "bfloat16",
+        "capture_width": 1,
+        "context_tokens": 128,
+        "endpoint": "synthetic residual endpoint",
+        "fit_dtype": "float32",
+        "fit_width": 1,
+        "lens_side": "fit",
+        "nu_sha256": "58fce4673c17a9b81451e67386b71bf700f5dd8431ac87140c364732d1a43d67",
+        "positions": [
+          8,
+          127
+        ],
+        "reduction": "one position at a time"
+      },
+      "status": "declared"
+    }
+  },
+  "missing_field_refusals": [
+    "fit_dtype",
+    "fit_width",
+    "capture_dtype",
+    "capture_width",
+    "lens_side",
+    "nu_sha256",
+    "positions",
+    "reduction",
+    "endpoint",
+    "context_tokens"
+  ],
+  "no_capture": {
+    "outcome": "accepted",
+    "result": {
+      "anchor_batch": 1,
+      "capture_batch": null,
+      "capture_dtype": null,
+      "declared_by_registry": "float32",
+      "fit_dtype": "float32",
+      "forward_batch": 1,
+      "layer": 1,
+      "status": "declared"
+    }
+  },
+  "numeric_cells": [
+    {
+      "computed_rounded": 1.035116,
+      "group": "sampled_displacement",
+      "layer": 1,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "median",
+      "recorded": 1.035116
+    },
+    {
+      "computed_rounded": 0.0144,
+      "group": "sampled_displacement",
+      "layer": 1,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "min",
+      "recorded": 0.0144
+    },
+    {
+      "computed_rounded": 35.1951,
+      "group": "sampled_displacement",
+      "layer": 1,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "max",
+      "recorded": 35.1951
+    },
+    {
+      "computed_rounded": 18,
+      "group": "sampled_displacement",
+      "layer": 1,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "count",
+      "recorded": 18
+    },
+    {
+      "computed_rounded": 0.470689,
+      "group": "sampled_displacement",
+      "layer": 1,
+      "matches": true,
+      "phase": "native",
+      "quantity": "median",
+      "recorded": 0.470689
+    },
+    {
+      "computed_rounded": 0.0916,
+      "group": "sampled_displacement",
+      "layer": 1,
+      "matches": true,
+      "phase": "native",
+      "quantity": "min",
+      "recorded": 0.0916
+    },
+    {
+      "computed_rounded": 28.9111,
+      "group": "sampled_displacement",
+      "layer": 1,
+      "matches": true,
+      "phase": "native",
+      "quantity": "max",
+      "recorded": 28.9111
+    },
+    {
+      "computed_rounded": 18,
+      "group": "sampled_displacement",
+      "layer": 1,
+      "matches": true,
+      "phase": "native",
+      "quantity": "count",
+      "recorded": 18
+    },
+    {
+      "computed_rounded": 0.748732,
+      "group": "equal_norm_random_displacement",
+      "layer": 1,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "median",
+      "recorded": 0.748732
+    },
+    {
+      "computed_rounded": 0.0978,
+      "group": "equal_norm_random_displacement",
+      "layer": 1,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "min",
+      "recorded": 0.0978
+    },
+    {
+      "computed_rounded": 27.1956,
+      "group": "equal_norm_random_displacement",
+      "layer": 1,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "max",
+      "recorded": 27.1956
+    },
+    {
+      "computed_rounded": 18,
+      "group": "equal_norm_random_displacement",
+      "layer": 1,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "count",
+      "recorded": 18
+    },
+    {
+      "computed_rounded": 1.005847,
+      "group": "equal_norm_random_displacement",
+      "layer": 1,
+      "matches": true,
+      "phase": "native",
+      "quantity": "median",
+      "recorded": 1.005847
+    },
+    {
+      "computed_rounded": 0.1812,
+      "group": "equal_norm_random_displacement",
+      "layer": 1,
+      "matches": true,
+      "phase": "native",
+      "quantity": "min",
+      "recorded": 0.1812
+    },
+    {
+      "computed_rounded": 7.8444,
+      "group": "equal_norm_random_displacement",
+      "layer": 1,
+      "matches": true,
+      "phase": "native",
+      "quantity": "max",
+      "recorded": 7.8444
+    },
+    {
+      "computed_rounded": 18,
+      "group": "equal_norm_random_displacement",
+      "layer": 1,
+      "matches": true,
+      "phase": "native",
+      "quantity": "count",
+      "recorded": 18
+    },
+    {
+      "computed_rounded": 0.536735,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "layer": 1,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "median",
+      "recorded": 0.536735
+    },
+    {
+      "computed_rounded": 0.0589,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "layer": 1,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "min",
+      "recorded": 0.0589
+    },
+    {
+      "computed_rounded": 24.4398,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "layer": 1,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "max",
+      "recorded": 24.4398
+    },
+    {
+      "computed_rounded": 18,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "layer": 1,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "count",
+      "recorded": 18
+    },
+    {
+      "computed_rounded": 0.696514,
+      "group": "sampled_displacement",
+      "layer": 17,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "median",
+      "recorded": 0.696514
+    },
+    {
+      "computed_rounded": 0.0846,
+      "group": "sampled_displacement",
+      "layer": 17,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "min",
+      "recorded": 0.0846
+    },
+    {
+      "computed_rounded": 4.1596,
+      "group": "sampled_displacement",
+      "layer": 17,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "max",
+      "recorded": 4.1596
+    },
+    {
+      "computed_rounded": 18,
+      "group": "sampled_displacement",
+      "layer": 17,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "count",
+      "recorded": 18
+    },
+    {
+      "computed_rounded": 0.585164,
+      "group": "sampled_displacement",
+      "layer": 17,
+      "matches": true,
+      "phase": "native",
+      "quantity": "median",
+      "recorded": 0.585164
+    },
+    {
+      "computed_rounded": 0.044,
+      "group": "sampled_displacement",
+      "layer": 17,
+      "matches": true,
+      "phase": "native",
+      "quantity": "min",
+      "recorded": 0.044
+    },
+    {
+      "computed_rounded": 2.3206,
+      "group": "sampled_displacement",
+      "layer": 17,
+      "matches": true,
+      "phase": "native",
+      "quantity": "max",
+      "recorded": 2.3206
+    },
+    {
+      "computed_rounded": 18,
+      "group": "sampled_displacement",
+      "layer": 17,
+      "matches": true,
+      "phase": "native",
+      "quantity": "count",
+      "recorded": 18
+    },
+    {
+      "computed_rounded": 1.277339,
+      "group": "equal_norm_random_displacement",
+      "layer": 17,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "median",
+      "recorded": 1.277339
+    },
+    {
+      "computed_rounded": 0.0403,
+      "group": "equal_norm_random_displacement",
+      "layer": 17,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "min",
+      "recorded": 0.0403
+    },
+    {
+      "computed_rounded": 37.9555,
+      "group": "equal_norm_random_displacement",
+      "layer": 17,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "max",
+      "recorded": 37.9555
+    },
+    {
+      "computed_rounded": 18,
+      "group": "equal_norm_random_displacement",
+      "layer": 17,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "count",
+      "recorded": 18
+    },
+    {
+      "computed_rounded": 1.56008,
+      "group": "equal_norm_random_displacement",
+      "layer": 17,
+      "matches": true,
+      "phase": "native",
+      "quantity": "median",
+      "recorded": 1.56008
+    },
+    {
+      "computed_rounded": 0.0685,
+      "group": "equal_norm_random_displacement",
+      "layer": 17,
+      "matches": true,
+      "phase": "native",
+      "quantity": "min",
+      "recorded": 0.0685
+    },
+    {
+      "computed_rounded": 6.6172,
+      "group": "equal_norm_random_displacement",
+      "layer": 17,
+      "matches": true,
+      "phase": "native",
+      "quantity": "max",
+      "recorded": 6.6172
+    },
+    {
+      "computed_rounded": 18,
+      "group": "equal_norm_random_displacement",
+      "layer": 17,
+      "matches": true,
+      "phase": "native",
+      "quantity": "count",
+      "recorded": 18
+    },
+    {
+      "computed_rounded": 0.252133,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "layer": 17,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "median",
+      "recorded": 0.252133
+    },
+    {
+      "computed_rounded": 0.0032,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "layer": 17,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "min",
+      "recorded": 0.0032
+    },
+    {
+      "computed_rounded": 14.5372,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "layer": 17,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "max",
+      "recorded": 14.5372
+    },
+    {
+      "computed_rounded": 18,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "layer": 17,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "count",
+      "recorded": 18
+    },
+    {
+      "computed_rounded": 0.125179,
+      "group": "sampled_displacement",
+      "layer": 33,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "median",
+      "recorded": 0.125179
+    },
+    {
+      "computed_rounded": 0.01,
+      "group": "sampled_displacement",
+      "layer": 33,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "min",
+      "recorded": 0.01
+    },
+    {
+      "computed_rounded": 91.8969,
+      "group": "sampled_displacement",
+      "layer": 33,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "max",
+      "recorded": 91.8969
+    },
+    {
+      "computed_rounded": 18,
+      "group": "sampled_displacement",
+      "layer": 33,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "count",
+      "recorded": 18
+    },
+    {
+      "computed_rounded": 0.119927,
+      "group": "sampled_displacement",
+      "layer": 33,
+      "matches": true,
+      "phase": "native",
+      "quantity": "median",
+      "recorded": 0.119927
+    },
+    {
+      "computed_rounded": 0.0052,
+      "group": "sampled_displacement",
+      "layer": 33,
+      "matches": true,
+      "phase": "native",
+      "quantity": "min",
+      "recorded": 0.0052
+    },
+    {
+      "computed_rounded": 7.0,
+      "group": "sampled_displacement",
+      "layer": 33,
+      "matches": true,
+      "phase": "native",
+      "quantity": "max",
+      "recorded": 7.0
+    },
+    {
+      "computed_rounded": 18,
+      "group": "sampled_displacement",
+      "layer": 33,
+      "matches": true,
+      "phase": "native",
+      "quantity": "count",
+      "recorded": 18
+    },
+    {
+      "computed_rounded": 0.299125,
+      "group": "equal_norm_random_displacement",
+      "layer": 33,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "median",
+      "recorded": 0.299125
+    },
+    {
+      "computed_rounded": 0.0053,
+      "group": "equal_norm_random_displacement",
+      "layer": 33,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "min",
+      "recorded": 0.0053
+    },
+    {
+      "computed_rounded": 26.8376,
+      "group": "equal_norm_random_displacement",
+      "layer": 33,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "max",
+      "recorded": 26.8376
+    },
+    {
+      "computed_rounded": 18,
+      "group": "equal_norm_random_displacement",
+      "layer": 33,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "count",
+      "recorded": 18
+    },
+    {
+      "computed_rounded": 0.312953,
+      "group": "equal_norm_random_displacement",
+      "layer": 33,
+      "matches": true,
+      "phase": "native",
+      "quantity": "median",
+      "recorded": 0.312953
+    },
+    {
+      "computed_rounded": 0.0104,
+      "group": "equal_norm_random_displacement",
+      "layer": 33,
+      "matches": true,
+      "phase": "native",
+      "quantity": "min",
+      "recorded": 0.0104
+    },
+    {
+      "computed_rounded": 2.2667,
+      "group": "equal_norm_random_displacement",
+      "layer": 33,
+      "matches": true,
+      "phase": "native",
+      "quantity": "max",
+      "recorded": 2.2667
+    },
+    {
+      "computed_rounded": 18,
+      "group": "equal_norm_random_displacement",
+      "layer": 33,
+      "matches": true,
+      "phase": "native",
+      "quantity": "count",
+      "recorded": 18
+    },
+    {
+      "computed_rounded": 0.048705,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "layer": 33,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "median",
+      "recorded": 0.048705
+    },
+    {
+      "computed_rounded": 0.0002,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "layer": 33,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "min",
+      "recorded": 0.0002
+    },
+    {
+      "computed_rounded": 12.4548,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "layer": 33,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "max",
+      "recorded": 12.4548
+    },
+    {
+      "computed_rounded": 18,
+      "group": "native_anchor_read_in_the_float32_tail",
+      "layer": 33,
+      "matches": true,
+      "phase": "float32",
+      "quantity": "count",
+      "recorded": 18
+    }
+  ],
+  "order_commit": "035d3e6d848ec846b5fdb270704e7ca1aa66e80f",
+  "package_imports_attempted": [
+    "__future__"
+  ],
+  "same_path": {
+    "outcome": "accepted",
+    "result": {
+      "anchor_batch": 1,
+      "capture_batch": 1,
+      "capture_dtype": "float32",
+      "declared_by_registry": "float32",
+      "fit_dtype": "float32",
+      "forward_batch": 1,
+      "layer": 1,
+      "status": "declared"
+    }
+  },
+  "schema_mutations": [
+    {
+      "outcome": "refused",
+      "path": [
+        "amplification_ratio"
+      ],
+      "reason": "anchor_sensitivity.json: 'google/gemma-3-4b-it' carries undeclared ['amplification_ratio']; a quantity this record does not name is a quantity nobody ruled on"
+    },
+    {
+      "outcome": "refused",
+      "path": [
+        "layers",
+        "1",
+        "amplification_ratio"
+      ],
+      "reason": "anchor_sensitivity.json: google/gemma-3-4b-it.layers[1] carries undeclared ['amplification_ratio']; a quantity this record does not name is a quantity nobody ruled on"
+    },
+    {
+      "outcome": "refused",
+      "path": [
+        "layers",
+        "1",
+        "sampled_displacement",
+        "amplification_ratio"
+      ],
+      "reason": "anchor_sensitivity.json: google/gemma-3-4b-it.layers[1].sampled_displacement carries undeclared ['amplification_ratio']; a quantity this record does not name is a quantity nobody ruled on"
+    },
+    {
+      "outcome": "refused",
+      "path": [
+        "layers",
+        "1",
+        "sampled_displacement",
+        "float32",
+        "amplification_ratio"
+      ],
+      "reason": "anchor_sensitivity.json: google/gemma-3-4b-it.layers[1].sampled_displacement.float32 carries undeclared ['amplification_ratio']; a quantity this record does not name is a quantity nobody ruled on"
+    },
+    {
+      "outcome": "refused",
+      "path": [
+        "layers",
+        "1",
+        "equal_norm_random_displacement",
+        "native",
+        "amplification_ratio"
+      ],
+      "reason": "anchor_sensitivity.json: google/gemma-3-4b-it.layers[1].equal_norm_random_displacement.native carries undeclared ['amplification_ratio']; a quantity this record does not name is a quantity nobody ruled on"
+    },
+    {
+      "outcome": "refused",
+      "path": [
+        "layers",
+        "1",
+        "native_anchor_read_in_the_float32_tail",
+        "amplification_ratio"
+      ],
+      "reason": "anchor_sensitivity.json: google/gemma-3-4b-it.layers[1].native_anchor_read_in_the_float32_tail carries undeclared ['amplification_ratio']; a quantity this record does not name is a quantity nobody ruled on"
+    }
+  ],
+  "schema_version": 1,
+  "source_commit": "38c6e488bd0478920d8802608cd4876b392b30bb",
+  "sources_verified": 7,
+  "unexecuted": [
+    "model forwards",
+    "checkpoint load",
+    "native pytest",
+    "real A2",
+    "real pairing registration"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "basis": "measured-here",
+  "ladder_prediction": {
+    "1": "the ladder's median relative error at this k on eighteen scalar checks",
+    "33": "the ladder's median relative error at this k on eighteen scalar checks"
+  },
+  "note": "the scalar ladder and the full map measure different aggregates; agreement between them is evidence, disagreement is a finding, and neither is assumed",
+  "worst_relative_difference": {
+    "1": 0.004847986291516893,
+    "33": 0.0028639612301082336
+  }
+}

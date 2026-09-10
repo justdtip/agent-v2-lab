@@ -500,7 +500,7 @@ def test_a_missing_reading_row_is_caught_by_the_turn_s_own_forwarded_count():
     assert join_spans(events).rank_rows == 24, "the intact record joins"
 
     readings = [i for i, event in enumerate(events) if event.get("kind") == "reading"]
-    for dropped, where in ((readings[-1], "the censored tail"), (readings[0], "the head")):
+    for dropped, _where in ((readings[-1], "the censored tail"), (readings[0], "the head")):
         thinned = [event for i, event in enumerate(events) if i != dropped]
         with pytest.raises(SpanJoinError, match="forwarded_count"):
             join_spans(thinned)

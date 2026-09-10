@@ -25,7 +25,7 @@ import contextlib
 import importlib
 import math
 from collections.abc import Callable, Iterator
-from typing import Any, Optional
+from typing import Any
 
 import mlx.core as mx
 from mlx_lm.models.gated_delta import _gated_delta_step_ops
@@ -95,8 +95,8 @@ def gated_delta_chunked_ops(
     v: mx.array,
     g: mx.array,
     beta: mx.array,
-    state: Optional[mx.array] = None,
-    mask: Optional[mx.array] = None,
+    state: mx.array | None = None,
+    mask: mx.array | None = None,
     *,
     chunk: int,
 ) -> tuple[mx.array, mx.array]:

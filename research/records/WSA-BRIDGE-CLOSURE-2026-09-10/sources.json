@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "source_commit": "a2c877e65f3ce1079af5bb5cc01b060e87184024",
+  "order_commit": "93f227f791478ac7f38a78db5c9b97e6dcdb194e",
+  "integration_commit": "06535be5a2c372dd36f9cf002c43fa630fdd6cc7",
+  "reviewer_parent": "c55752fa855ace440a311ca997b27949b7ece84b",
+  "sources": [
+    {
+      "commit": "a2c877e65f3ce1079af5bb5cc01b060e87184024",
+      "repository_path": "src/local_llm_lab/probes/sae_bridge.py",
+      "snapshot": "source/sae_bridge.py",
+      "sha256": "cfce7e2203b5f32a6ecbf7e51b2e680a476ef35cd5dd0d2cecc750b2648ebb6c",
+      "bytes": 57873
+    },
+    {
+      "commit": "a2c877e65f3ce1079af5bb5cc01b060e87184024",
+      "repository_path": "src/local_llm_lab/probes/anchor_sensitivity.json",
+      "snapshot": "source/anchor_sensitivity.json",
+      "sha256": "91a5b2f76aa7f2a5fda3f9690d93de6e5ac57d28036b933257e68280a1738e04",
+      "bytes": 4144
+    },
+    {
+      "commit": "a2c877e65f3ce1079af5bb5cc01b060e87184024",
+      "repository_path": "tests/test_sae_bridge.py",
+      "snapshot": "source/test_sae_bridge.py",
+      "sha256": "bc768f9c659666809bb6ad25f4afb8cad896e311836c6ad7b7d6748278d561c5",
+      "bytes": 48166
+    },
+    {
+      "commit": "93f227f791478ac7f38a78db5c9b97e6dcdb194e",
+      "repository_path": "design_specifications/pending/SAE-J-BRIDGE-ORDER-2026-09-08.md",
+      "snapshot": "source/order.md",
+      "sha256": "4843a49b776469871799b4dfac082cc87b7070a4a932359973ef6889e714634f",
+      "bytes": 43340
+    },
+    {
+      "commit": "c55752fa855ace440a311ca997b27949b7ece84b",
+      "repository_path": "research/records/WSA-BRIDGE-FIX-REVIEW-2026-09-10/analyze.py",
+      "snapshot": "source/previous-replay.py",
+      "sha256": "73cf2282fd6c409477e4014856dc969a49cc83fe2fc95a8869fce7853e3f0208",
+      "bytes": 11961
+    }
+  ]
+}

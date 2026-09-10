@@ -1,0 +1,31 @@
+{
+  "source_commit": "13bce4e573b2765263d7fa98e1d417a3f9712475",
+  "basis": "derived-from-device-record",
+  "model_execution": false,
+  "files": [
+    {
+      "repository_path": "research/records/WSD-GOLDEN-4B-2026-09-09/README.md",
+      "local_path": "source/README.md",
+      "sha256": "0b561e2277ec1ced826749158a5b38527589cbaa92c5446e97ea514fe7c90fe0",
+      "bytes": 20844
+    },
+    {
+      "repository_path": "research/records/WSD-GOLDEN-4B-2026-09-09/zero_response.as-run.py",
+      "local_path": "source/zero_response.as-run.py",
+      "sha256": "60438ace62ac24a4e2b9465d8bc63d2e3bcbf12357b60b6e5f676e702bc92947",
+      "bytes": 1977
+    },
+    {
+      "repository_path": "research/records/WSD-GOLDEN-4B-2026-09-09/artefacts/zero-response.json",
+      "local_path": "source/zero-response.json",
+      "sha256": "6b12aa6c53dcc094e9d576a03b736cf3589334e8b8de629602b9f138ee95ebb6",
+      "bytes": 8301
+    },
+    {
+      "repository_path": "research/records/WSD-GOLDEN-4B-2026-09-09/artefacts/nu-finite-difference.json",
+      "local_path": "source/nu-finite-difference.json",
+      "sha256": "76f937d71f6246bd203cf8b49da45a10bbccac2e32e28d07b592bb38c7bddcdf",
+      "bytes": 8077
+    }
+  ]
+}

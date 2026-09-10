@@ -150,7 +150,7 @@ def test_gradients_match_the_reference_loop(chunk: int, vectorised: bool) -> Non
         argnums=(0, 1, 2, 3, 4),
     )(*arguments)
 
-    for expected, actual in zip(reference, chunked):
+    for expected, actual in zip(reference, chunked, strict=True):
         assert expected.shape == actual.shape
         assert mx.allclose(actual, expected, rtol=1e-6, atol=1e-6).item()
 
@@ -291,9 +291,8 @@ def test_the_installer_restores_the_binding_when_the_body_raises() -> None:
     module = importlib.import_module("mlx_lm.models.gated_delta")
     original = module.gated_delta_ops
 
-    with pytest.raises(RuntimeError, match="training blew up"):
-        with gdc.install_chunked_gated_delta(8):
-            raise RuntimeError("training blew up")
+    with pytest.raises(RuntimeError, match="training blew up"), gdc.install_chunked_gated_delta(8):
+        raise RuntimeError("training blew up")
 
     assert module.gated_delta_ops is original
 

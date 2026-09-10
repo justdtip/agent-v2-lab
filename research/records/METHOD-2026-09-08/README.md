@@ -935,6 +935,29 @@ it was computed over.
   one row and the two positions it covered, since "the exact estimator reproduces itself" read without
   them is a claim about the estimator rather than about two maps.
 
+And two lines the week added after the entry was written, each from breaking the rule above it.
+
+**The rule is applied when a type is designed, not when a summary is audited.** I wrote the coverage
+rule and then broke it twice within the hour in new code. Auditing a finished summary catches the
+summary you are looking at; designing the return value catches the ones you have not written.
+
+**A field describing what happened is written by whoever observed it, never by whoever checks it.**
+The sixth rule does not reach this one and neither does the fifth: the type was wide enough and every
+field was populated. The capture writer set the batch width, the anchor width and the arithmetic path
+from its own constants and then asserted they equalled those constants, so a pass that ran at another
+width or on a promoted path was recorded as conforming. The value flowed from the checker into the
+record instead of from the world into the checker, and the record then agreed with the check by
+construction. That is not a scope defect but a **direction** one, and it is invisible to a fixture
+that supplies a conforming input, which is every fixture anyone writes first.
+
+**An eighth, found the next day, which sharpens why the family is invisible.** A helper named
+`paired_bootstrap_lower_bound` called the independent-arm bootstrap, so it drew a resampling index
+per arm and threw away the pairing it is named for. The name asserted a property the code did not
+have — and the interval it returns is **usually wider, so it does not read as an error**. That is the
+sentence to keep. A verifier that fails loudly gets fixed; a verifier that fails *conservatively*
+gets trusted, cited, and built on, because a wider interval looks like caution rather than a
+different comparison altogether.
+
 And the diagnostic that found six of the seven: **ask what the check would say if the thing it guards
 were broken, and then break it.** Every one of these answered "pass".
 

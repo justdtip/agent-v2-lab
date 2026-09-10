@@ -88,6 +88,8 @@ _NUMERIC_TOKEN_SEPARATORS = frozenset(",;=()[]{}'\"| \t\n\r-")
 _SANCTIONED_SOURCE_PATHS = frozenset(
     {
         "src/local_llm_lab/arch.py",
+        # The same architecture policy, extracted for the MLX and torch views to share.
+        "src/local_llm_lab/arch_base.py",
         "src/local_llm_lab/models.py",
     }
 )
@@ -506,6 +508,8 @@ def test_banned_model_scanner_discovers_repository_wide_modern_sources() -> None
     assert root / "src/local_llm_lab/pipeline/jlens.py" in paths
     assert root / "research/jspace_sweep.py" in paths
     assert root / "src/local_llm_lab/arch.py" not in paths
+    assert root / "src/local_llm_lab/arch_base.py" not in paths
+    assert root / "src/local_llm_lab/arch_torch.py" in paths
 
 
 def test_banned_model_constants_are_absent_from_run_configuration() -> None:

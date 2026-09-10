@@ -268,7 +268,7 @@ def test_non_json_safe_values_are_stringified_and_never_raise(tmp_path: Path) ->
 
     log, out, _ = _open(tmp_path, [0.0])
     try:
-        log.info("odd", where=tmp_path, tags={"a", "a"}, thing=_Opaque())
+        log.info("odd", where=tmp_path, tags={"a"}, thing=_Opaque())
         event = _events(log)[1]
         assert event["fields"]["where"] == str(tmp_path)
         assert event["fields"]["thing"] == "<opaque>"
@@ -502,12 +502,11 @@ def test_context_manager_closes_ok(tmp_path: Path) -> None:
 
 def test_context_manager_records_the_error_and_propagates(tmp_path: Path) -> None:
     out, err = io.StringIO(), io.StringIO()
-    with pytest.raises(ValueError, match="boom"):
-        with RunLog.open(
-            tmp_path / "run", name="train", stdout=out, stderr=err, clock=_Clock([0.0])
-        ) as log:
-            paths = log.paths
-            raise ValueError("boom")
+    with pytest.raises(ValueError, match="boom"), RunLog.open(
+        tmp_path / "run", name="train", stdout=out, stderr=err, clock=_Clock([0.0])
+    ) as log:
+        paths = log.paths
+        raise ValueError("boom")
     end = json.loads(paths["events"].read_text().splitlines()[-1])
     assert end["kind"] == "end"
     assert end["status"] == "error"

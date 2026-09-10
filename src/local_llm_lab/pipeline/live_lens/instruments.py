@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -98,11 +98,16 @@ class LensIdentity:
     base: str
     num_layers: int
     training: dict | None = None
+    # Endpoint metadata belongs to the loaded instrument. Existing callers identifying only the
+    # model still load it, while consumers must explicitly require it before using an endpoint.
+    endpoint: str | None = field(default=None, compare=False)
 
     def as_dict(self) -> dict:
         recorded: dict = {"base": self.base, "num_layers": int(self.num_layers)}
         if self.training is not None:
             recorded["training"] = self.training
+        if self.endpoint is not None:
+            recorded["endpoint"] = self.endpoint
         return recorded
 
     @classmethod
@@ -128,7 +133,12 @@ class LensIdentity:
             raise LensIdentityError("lens identity training must be a mapping or absent")
         if isinstance(layers, bool) or not isinstance(layers, int) or layers < 1:
             raise LensIdentityError("lens identity num_layers must be a positive integer")
-        return cls(base=resolve_base(base), num_layers=layers, training=training or None)
+        endpoint = value.get("endpoint")
+        if endpoint is not None and endpoint != "identity":
+            raise LensIdentityError("lens identity endpoint must be 'identity' or absent")
+        return cls(
+            base=resolve_base(base), num_layers=layers, training=training or None, endpoint=endpoint
+        )
 
     def describe(self) -> str:
         trained = "base" if self.training is None else f"trained: {sorted(self.training)}"
@@ -291,6 +301,11 @@ class LensMaps:
         maps = {}
         with np.load(path, allow_pickle=False) as archive:
             stamped = _stamped_identity(path, archive, sha)
+            if identity.endpoint is not None and stamped.endpoint != identity.endpoint:
+                raise LensIdentityError(
+                    f"lens endpoint {stamped.endpoint!r} differs from the requested "
+                    f"endpoint {identity.endpoint!r}"
+                )
             if stamped != identity:
                 raise LensIdentityError(
                     f"lens {path.name} was fitted on {stamped.describe()}, and it is being "

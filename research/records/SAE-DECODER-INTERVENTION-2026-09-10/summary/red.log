@@ -1,0 +1,19 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__ test_summary_is_exact_reduction_of_full_counterexample_and_preserves_edit ___
+
+    def test_summary_is_exact_reduction_of_full_counterexample_and_preserves_edit():
+        encoder, decoder, bias = dictionary()
+        h = torch.tensor([1.5, 1.5, 4.0])
+        records, outputs = {}, {}
+        for mode in ("full", "summary"):
+>           edit = SAEIntervention(
+                encoder, decoder, bias, features=(0,), target_values=torch.tensor([3.0]),
+                diagnostic=mode,
+            )
+E           TypeError: SAEIntervention.__init__() got an unexpected keyword argument 'diagnostic'
+
+tests/test_sae_intervention.py:260: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_sae_intervention.py::test_summary_is_exact_reduction_of_full_counterexample_and_preserves_edit
+1 failed in 0.08s

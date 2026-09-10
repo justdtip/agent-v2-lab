@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.035" timestamp="2026-09-09T15:31:33.030414+10:00" hostname="daniel.tipton-Mac"><testcase classname="tests.test_sae_intervention" name="test_reused_encoder_output_buffer_cannot_rewrite_before_diagnostic" time="0.003"><failure message="assert [5.0] == [1.0]&#10;  &#10;  At index 0 diff: 5.0 != 1.0&#10;  Use -v to get more diff">def test_reused_encoder_output_buffer_cannot_rewrite_before_diagnostic():
+        encoder, decoder, bias = dictionary()
+        buffer = torch.empty(2)
+    
+        def buffered_encoder(h):
+            buffer.copy_(encoder(h))
+            return buffer
+    
+        edit = SAEIntervention(
+            buffered_encoder, decoder, bias, features=(0,), target_values=torch.tensor([3.0])
+        )
+        edit(torch.tensor([1.5, 1.5, 4.0]))
+        diagnostic = edit.diagnostic_record()
+&gt;       assert diagnostic["before"] == [1.0]
+E       assert [5.0] == [1.0]
+E         
+E         At index 0 diff: 5.0 != 1.0
+E         Use -v to get more diff
+
+tests/test_sae_intervention.py:188: AssertionError</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,201 @@
+{
+  "basis": "computed from pinned producer-branch records; no new device execution",
+  "calibration": {
+    "cross_width_entries_failed": {
+      "basis": "computed from pinned producer-branch records; no new device execution",
+      "value": 12
+    },
+    "distinct_zero_step_source_interventions": {
+      "basis": "computed from pinned producer-branch records; no new device execution",
+      "value": 3
+    },
+    "full_derivative_protocol_status": "unexecuted",
+    "hook_is_implicated_field_always_false": {
+      "basis": "computed from pinned producer-branch records; no new device execution",
+      "value": true
+    },
+    "native_by_width": {
+      "256": {
+        "differing_layers": {
+          "basis": "computed from pinned producer-branch records; no new device execution",
+          "value": 34
+        },
+        "first_layer_MAE": {
+          "basis": "computed from pinned producer-branch records; no new device execution",
+          "value": 0.007991934195160866
+        },
+        "target_layer_MAE": {
+          "basis": "computed from pinned producer-branch records; no new device execution",
+          "value": 42.04023361206055
+        },
+        "units": "absolute residual activation units, not a percentage"
+      },
+      "64": {
+        "differing_layers": {
+          "basis": "computed from pinned producer-branch records; no new device execution",
+          "value": 34
+        },
+        "first_layer_MAE": {
+          "basis": "computed from pinned producer-branch records; no new device execution",
+          "value": 0.009062369354069233
+        },
+        "target_layer_MAE": {
+          "basis": "computed from pinned producer-branch records; no new device execution",
+          "value": 76.4317855834961
+        },
+        "units": "absolute residual activation units, not a percentage"
+      }
+    },
+    "width_one_entries_passed": {
+      "basis": "computed from pinned producer-branch records; no new device execution",
+      "value": 6
+    }
+  },
+  "confidence_review": {
+    "E1_test_decisions": {
+      "episodes": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 240
+      },
+      "interpretation": "arithmetic illustration for independently sampled bounded episode means; not an estimated effective sample size or validated confidence bound",
+      "inverse_squared_episode_weights": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 169.72342019369682
+      },
+      "observations": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 1781
+      },
+      "sum_squared_episode_counts": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 18689
+      }
+    },
+    "E2_ordinary_train": {
+      "episodes": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 840
+      },
+      "interpretation": "arithmetic illustration for independently sampled bounded episode means; not an estimated effective sample size or validated confidence bound",
+      "inverse_squared_episode_weights": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 549.6533385093168
+      },
+      "observations": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 4122
+      },
+      "sum_squared_episode_counts": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 30912
+      }
+    },
+    "approved_epsilon_arithmetic_only": {
+      "0.04": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 3859
+      },
+      "0.06": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 1715
+      },
+      "0.11": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 511
+      }
+    },
+    "approved_tolerances_modified": false,
+    "dependence_counterexample": {
+      "actual_mean_variance": {
+        "basis": "analytic Bernoulli(1/2) counterexample; not model data",
+        "value": 0.25
+      },
+      "basis_note": "analytic Bernoulli(1/2) illustration; not model data",
+      "false_independent_row_variance": {
+        "basis": "analytic Bernoulli(1/2) counterexample; not model data",
+        "value": 0.03125
+      },
+      "identical_rows_per_episode": {
+        "basis": "analytic Bernoulli(1/2) counterexample; not model data",
+        "value": 8
+      },
+      "independent_episodes": {
+        "basis": "analytic Bernoulli(1/2) counterexample; not model data",
+        "value": 1
+      }
+    }
+  },
+  "corpus": {
+    "capture_set_file_sha256": "98c78f1674902575ba87135edcfec409d3e82c6331e155a3ab7da6d22b731a4d",
+    "capture_set_logical_triples_sha256": "1a7cfbdd4e21fc203eafbcc3ec50b96afcb214c169f21c7ba968ca83dfc9709a",
+    "corrective_episodes": {
+      "basis": "computed from pinned producer-branch records; no new device execution",
+      "value": 553
+    },
+    "decisions": {
+      "basis": "computed from pinned producer-branch records; no new device execution",
+      "value": 7629
+    },
+    "decisions_per_split": {
+      "test": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 1781
+      },
+      "train": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 5515
+      },
+      "valid": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 333
+      }
+    },
+    "episodes": {
+      "basis": "computed from pinned producer-branch records; no new device execution",
+      "value": 1128
+    },
+    "transitions": {
+      "corrective_contiguous": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 244
+      },
+      "corrective_gap": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 309
+      },
+      "ordinary": {
+        "basis": "computed from pinned producer-branch records; no new device execution",
+        "value": 5948
+      }
+    },
+    "transitions_per_split": {
+      "test": {
+        "ordinary": {
+          "basis": "computed from pinned producer-branch records; no new device execution",
+          "value": 1541
+        }
+      },
+      "train": {
+        "corrective_contiguous": {
+          "basis": "computed from pinned producer-branch records; no new device execution",
+          "value": 244
+        },
+        "corrective_gap": {
+          "basis": "computed from pinned producer-branch records; no new device execution",
+          "value": 309
+        },
+        "ordinary": {
+          "basis": "computed from pinned producer-branch records; no new device execution",
+          "value": 4122
+        }
+      },
+      "valid": {
+        "ordinary": {
+          "basis": "computed from pinned producer-branch records; no new device execution",
+          "value": 285
+        }
+      }
+    }
+  },
+  "model_execution": false
+}

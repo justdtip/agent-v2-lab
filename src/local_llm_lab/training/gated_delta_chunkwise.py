@@ -103,11 +103,10 @@ model that nothing checks against measurements is the defect this work repaired.
 from __future__ import annotations
 
 import contextlib
+import functools
 import importlib
 from collections.abc import Callable, Iterator
-from typing import Any, Optional
-
-import functools
+from typing import Any
 
 import mlx.core as mx
 
@@ -149,7 +148,7 @@ def _validated_chunk(chunk: int) -> int:
     return chunk
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _causal_masks(chunk: int) -> tuple[mx.array, mx.array]:
     """``i >= j`` and ``i > j`` over a chunk, as constants of the chunk length alone.
 
@@ -165,7 +164,7 @@ def _causal_masks(chunk: int) -> tuple[mx.array, mx.array]:
     return masks
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _identity(chunk: int, dtype: mx.Dtype) -> mx.array:
     """``mx.eye(chunk, dtype)`` as a cached constant (same reason as ``_causal_masks``)."""
     identity = mx.eye(chunk, dtype=dtype)
@@ -173,7 +172,7 @@ def _identity(chunk: int, dtype: mx.Dtype) -> mx.array:
     return identity
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _doubling_masks(chunk: int) -> tuple[mx.array, ...]:
     """One mask per level of the blockwise forward substitution (module docstring).
 
@@ -296,8 +295,8 @@ def gated_delta_chunkwise_ops(
     v: mx.array,
     g: mx.array,
     beta: mx.array,
-    state: Optional[mx.array] = None,
-    mask: Optional[mx.array] = None,
+    state: mx.array | None = None,
+    mask: mx.array | None = None,
     *,
     chunk: int,
 ) -> tuple[mx.array, mx.array]:

@@ -1,0 +1,27 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+______ test_reused_encoder_output_buffer_cannot_rewrite_before_diagnostic ______
+
+    def test_reused_encoder_output_buffer_cannot_rewrite_before_diagnostic():
+        encoder, decoder, bias = dictionary()
+        buffer = torch.empty(2)
+    
+        def buffered_encoder(h):
+            buffer.copy_(encoder(h))
+            return buffer
+    
+        edit = SAEIntervention(
+            buffered_encoder, decoder, bias, features=(0,), target_values=torch.tensor([3.0])
+        )
+        edit(torch.tensor([1.5, 1.5, 4.0]))
+        diagnostic = edit.diagnostic_record()
+>       assert diagnostic["before"] == [1.0]
+E       assert [5.0] == [1.0]
+E         
+E         At index 0 diff: 5.0 != 1.0
+E         Use -v to get more diff
+
+tests/test_sae_intervention.py:188: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_sae_intervention.py::test_reused_encoder_output_buffer_cannot_rewrite_before_diagnostic
+1 failed in 0.35s

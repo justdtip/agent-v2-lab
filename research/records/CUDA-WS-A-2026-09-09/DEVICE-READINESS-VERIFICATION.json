@@ -1,0 +1,553 @@
+{
+  "number_schema": "value-basis-v1",
+  "source_commit": "68b1ede1e34515c0479805563c367ba99e6b4ea5",
+  "estimator_source_commit": "08a87fb96c07bd1e155be4c97c0cac8aae276cf0",
+  "order_commit": "6ab3318",
+  "checkpoint_sha256": null,
+  "checkpoint_material": "Seeded tiny HF CPU fixtures only. No real checkpoint loaded; transient snapshots are recreated by the hash-bound test definitions.",
+  "device_description": {
+    "backend": "torch",
+    "device": "cpu",
+    "python": "3.13.7",
+    "torch": "2.14.0",
+    "transformers": "5.16.1",
+    "pytest": "9.1.1",
+    "cuda": "unexecuted",
+    "mps": "unexecuted",
+    "native_mlx_modules": [],
+    "reading_kind": "verification environment metadata; fixture pinning is defined in the tests, not a real device gate reading"
+  },
+  "source_root": "/Users/daniel.tipton/worktrees/cuda-torch-seam",
+  "source_sha256": {
+    "src/local_llm_lab/torch_jacobian.py": "cfd6e78e71ad5b12b021f40b54fff93ddd08962f7aaa76afe56acbd1442d16fd",
+    "src/local_llm_lab/arch_torch.py": "9c3cfe3094baed8d094fa0355622a8866ecef145dc6bafd63a1cd18aaa701908",
+    "src/local_llm_lab/torch_capture.py": "0c4a9dec2fc133f68999ccd7d82806a78475c85a9de074d8f218f85a35572396",
+    "src/local_llm_lab/device.py": "0ac377cd969303d968e50beac7282fc32b25c180240054903c323e9e3fcef5a8",
+    "src/local_llm_lab/hf_text.py": "806f869fc7062b5123d3668498e8cbc0b4eb71fcd6d4677b24714a2d3a452528",
+    "src/local_llm_lab/upstream_ref.py": "86065216341be1008107aec093946c5b29dbd3f28f47a846042947657824c07f",
+    "tests/torch/test_torch_jacobian.py": "fedecbf9bbfd21ddb5d9bc1bbc7e67eef999953ecd0692c4261b45231d64f297",
+    "research/acceptance/torch_seam.py": "471033a30722525c92eba844db1d7fefeab553ecfe5ab8bb6a6ffbaaeaa8585b",
+    "research/acceptance/gate_records.py": "088b15ea8b6c2ede5121586cbf8bb1b0752fb63f4bd6c4965126308bfb9ba7ec",
+    "research/records/CUDA-WS-A-2026-09-09/cpu_gates.py": "776804537c8e47b6f9012c97adfc467f975796d3b4219c9a43dd9d9219470c38",
+    "research/records/CUDA-WS-A-2026-09-09/test_cpu_gates.py": "cded9e921c9fdc81c0b9ca289822135b205e47cf0ee6eca61d579aee6d61086f"
+  },
+  "tests": {
+    "tests": {
+      "value": 261,
+      "basis": "measured-here"
+    },
+    "failures": {
+      "value": 0,
+      "basis": "measured-here"
+    },
+    "errors": {
+      "value": 0,
+      "basis": "measured-here"
+    },
+    "skipped": {
+      "value": 0,
+      "basis": "measured-here"
+    },
+    "passed": {
+      "value": 261,
+      "basis": "measured-here"
+    }
+  },
+  "elapsed_seconds": {
+    "value": 46.844,
+    "basis": "measured-here"
+  },
+  "box_state": {
+    "utc": "2026-09-09T03:44:15.387138+00:00",
+    "cpu_percent_1s": {
+      "value": 11.7,
+      "basis": "measured-here"
+    },
+    "load_average": [
+      {
+        "value": 5.52685546875,
+        "basis": "measured-here"
+      },
+      {
+        "value": 5.83349609375,
+        "basis": "measured-here"
+      },
+      {
+        "value": 6.21875,
+        "basis": "measured-here"
+      }
+    ],
+    "logical_cpus": {
+      "value": 12,
+      "basis": "measured-here"
+    },
+    "window": "None",
+    "lock": "None",
+    "interpretation": "pre-run snapshot; continuous host idleness is not established",
+    "scope": "tiny CPU fixtures and source checks; native MLX imports blocked"
+  },
+  "test_scope": [
+    "tests/torch/test_torch_jacobian.py",
+    "research/records/CUDA-WS-A-2026-09-09/test_cpu_gates.py",
+    "tests/test_arch_torch.py",
+    "tests/test_torch_capture.py",
+    "tests/test_hf_text.py",
+    "tests/test_upstream_ref.py",
+    "tests/test_torch_upstream_imports.py",
+    "tests/test_gate_records.py",
+    "tests/test_repository_rules.py"
+  ],
+  "evidence_sha256": {
+    "device-gates-red.log": "e0dc8ba50a60e3b1a04fbcb0c297a6fd162cc06a5a8fce8d44902f82602cefbd",
+    "device-gates-tests-01.log": "85b9b6bfc61813a6b4c308b2d2098f3db5440dc59a02cde903f576726f9c6a76",
+    "device-gates-tests-01.xml": "ce407d20d2a7360cbd3d7760c182b1af370496f4247e75d5e333d771afb36ca4",
+    "device-gates-tests-02.log": "1b546c30c85781543812a8690983a99a657389b64e47db119965ae8ef2c4d32e",
+    "device-gates-tests-02.xml": "6c264beea0cacdb4eda6c2a14da4821dbcb62b2c1e00ddf1cddcb7b1e4cf692a",
+    "graph-once-red.log": "0dd522bf4abd9adc7ccb86177971bade317681086deca20e6e5d110b65b8f076",
+    "graph-once-tests-01.log": "87dbe867ba5a6ae0422d1b88740751ee4a1e9b2ebee695bdbbd30794769d07b8",
+    "graph-once-tests-01.xml": "031dbcebf56a89a19cb8a7442a95d1b8b3b3cd8d401e2e25b3d92cb217cb1209",
+    "graph-once-tests-02.log": "13956a6eaae88a24cd3e6398588d30107313bbf7d06ff08cb2d2ae58668791cc",
+    "graph-once-tests-02.xml": "dfdffda0e3dbee721417024a9113a670df9d3f95558c25a04b63152e851c3a95",
+    "graph-once-tests-03.log": "267db99738f138cd2cf34c53e1001f72826a971b343f1a831e02016817af7cc6",
+    "graph-once-tests-03.xml": "840ea0f6337a16ee1e7abe97afa6a182eff88002050945a7877ebe1b995c8edd",
+    "integrated-fixtures-01-box-state.json": "5066dd76e471f236d159d561a974804d5829742bb918824cb95267adb351b14e",
+    "integrated-fixtures-01.log": "68c7dab9837978a54707c58f01352c502365a51846232c63a29a48ae6073af79",
+    "integrated-fixtures-01.xml": "c080120b755378bb5e28c268733d8e3a04e00c523f5722aacb8673ec746a9725",
+    "integrated-fixtures-02-box-state.json": "2bc7bd62ffd76db481a45f67df724016c0b3eedc9cce1de595947cb68a3a335e",
+    "integrated-fixtures-02.log": "5ee8f961ef07c408c15c48369cdeae8333ecec01e15f309b3f4803fb1329d5ea",
+    "integrated-fixtures-02.xml": "db4da3620278f1faee9175940f442bbafdee0054bfb44bdaf3ffb49b89a590ba",
+    "resume-resource-red.log": "8b6c2375f6a7b15df02ad8bb6d71da942664d256093ffe2faad9f106db96ae60"
+  },
+  "jacobian": {
+    "JACOBIAN_EXACTNESS": [
+      {
+        "atol": {
+          "value": 1.1920928955078125e-07,
+          "basis": "measured-here"
+        },
+        "attention": "eager",
+        "errors_by_layer": {
+          "0": {
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "1": {
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "2": {
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "3": {
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "4": {
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          }
+        },
+        "rtol": {
+          "value": 1.1920928955078125e-07,
+          "basis": "measured-here"
+        },
+        "source_blocks": [
+          {
+            "value": 0,
+            "basis": "measured-here"
+          },
+          {
+            "value": 1,
+            "basis": "measured-here"
+          },
+          {
+            "value": 2,
+            "basis": "measured-here"
+          },
+          {
+            "value": 3,
+            "basis": "measured-here"
+          },
+          {
+            "value": 4,
+            "basis": "measured-here"
+          }
+        ],
+        "target_block": {
+          "value": 5,
+          "basis": "measured-here"
+        },
+        "tokens": {
+          "value": 64,
+          "basis": "measured-here"
+        }
+      },
+      {
+        "atol": {
+          "value": 1.1920928955078125e-07,
+          "basis": "measured-here"
+        },
+        "attention": "sdpa",
+        "errors_by_layer": {
+          "0": {
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "1": {
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "2": {
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "3": {
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "4": {
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          }
+        },
+        "rtol": {
+          "value": 1.1920928955078125e-07,
+          "basis": "measured-here"
+        },
+        "source_blocks": [
+          {
+            "value": 0,
+            "basis": "measured-here"
+          },
+          {
+            "value": 1,
+            "basis": "measured-here"
+          },
+          {
+            "value": 2,
+            "basis": "measured-here"
+          },
+          {
+            "value": 3,
+            "basis": "measured-here"
+          },
+          {
+            "value": 4,
+            "basis": "measured-here"
+          }
+        ],
+        "target_block": {
+          "value": 5,
+          "basis": "measured-here"
+        },
+        "tokens": {
+          "value": 64,
+          "basis": "measured-here"
+        }
+      }
+    ],
+    "JACOBIAN_TIMING": [
+      {
+        "attention": "eager",
+        "batched_seconds": [
+          {
+            "value": 0.018060500005958602,
+            "basis": "measured-here"
+          },
+          {
+            "value": 0.017428500024834648,
+            "basis": "measured-here"
+          },
+          {
+            "value": 0.017359624995151535,
+            "basis": "measured-here"
+          }
+        ],
+        "best_of": {
+          "value": 3,
+          "basis": "measured-here"
+        },
+        "blocks": {
+          "value": 6,
+          "basis": "measured-here"
+        },
+        "dim_batch": {
+          "value": 16,
+          "basis": "measured-here"
+        },
+        "errors_by_layer": {
+          "1": {
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "3": {
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          }
+        },
+        "sequential_over_batched": {
+          "value": 2.9757963109538053,
+          "basis": "measured-here"
+        },
+        "sequential_seconds": [
+          {
+            "value": 0.05464991700137034,
+            "basis": "measured-here"
+          },
+          {
+            "value": 0.05250587500631809,
+            "basis": "measured-here"
+          },
+          {
+            "value": 0.05165870802011341,
+            "basis": "measured-here"
+          }
+        ],
+        "source_blocks": [
+          {
+            "value": 1,
+            "basis": "measured-here"
+          },
+          {
+            "value": 3,
+            "basis": "measured-here"
+          }
+        ],
+        "target_block": {
+          "value": 4,
+          "basis": "measured-here"
+        },
+        "tokens": {
+          "value": 48,
+          "basis": "measured-here"
+        },
+        "width": {
+          "value": 64,
+          "basis": "measured-here"
+        }
+      },
+      {
+        "attention": "sdpa",
+        "batched_seconds": [
+          {
+            "value": 0.02101862500421703,
+            "basis": "measured-here"
+          },
+          {
+            "value": 0.0197220410045702,
+            "basis": "measured-here"
+          },
+          {
+            "value": 0.019728083978407085,
+            "basis": "measured-here"
+          }
+        ],
+        "best_of": {
+          "value": 3,
+          "basis": "measured-here"
+        },
+        "blocks": {
+          "value": 6,
+          "basis": "measured-here"
+        },
+        "dim_batch": {
+          "value": 16,
+          "basis": "measured-here"
+        },
+        "errors_by_layer": {
+          "1": {
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          },
+          "3": {
+            "max_abs": {
+              "value": 0.0,
+              "basis": "measured-here"
+            },
+            "max_norm_relative": {
+              "value": 0.0,
+              "basis": "measured-here"
+            }
+          }
+        },
+        "sequential_over_batched": {
+          "value": 2.692338789976366,
+          "basis": "measured-here"
+        },
+        "sequential_seconds": [
+          {
+            "value": 0.054013874992961064,
+            "basis": "measured-here"
+          },
+          {
+            "value": 0.05519829198601656,
+            "basis": "measured-here"
+          },
+          {
+            "value": 0.05309841601410881,
+            "basis": "measured-here"
+          }
+        ],
+        "source_blocks": [
+          {
+            "value": 1,
+            "basis": "measured-here"
+          },
+          {
+            "value": 3,
+            "basis": "measured-here"
+          }
+        ],
+        "target_block": {
+          "value": 4,
+          "basis": "measured-here"
+        },
+        "tokens": {
+          "value": 48,
+          "basis": "measured-here"
+        },
+        "width": {
+          "value": 64,
+          "basis": "measured-here"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "atol": {
+      "value": 1.1920928955078125e-07,
+      "basis": "expected"
+    },
+    "rtol": {
+      "value": 1.1920928955078125e-07,
+      "basis": "expected"
+    },
+    "minimum_sequential_over_batched": {
+      "value": 1,
+      "basis": "expected"
+    },
+    "native_bf16_seam_max_abs": {
+      "value": 0.0,
+      "basis": "expected"
+    },
+    "float32_loaded_per_layer_relative_bound": {
+      "value": 0.001,
+      "basis": "expected"
+    }
+  },
+  "evidence_limits": [
+    "Timing ratios passed on an active laptop; they are not device-performance projections.",
+    "Exactness covers every source block of the six-block fixture, not every block of Gemma 4B.",
+    "Actual tiny serialized models exercise both precision measurements at both lengths. Orchestration tests also use stub phase/memory readings for failure/resume checks, not resource measurement.",
+    "No CUDA execution, device allocator peak, full checkpoint seam gate, decoder identity/readout band or long-context model-scale memory result is claimed.",
+    "Source files were tested before the source commit and verified byte-for-byte against its committed blobs."
+  ],
+  "red_to_green": [
+    {
+      "evidence": "graph-once-red.log",
+      "result": "Expected missing-module failure before implementation."
+    },
+    {
+      "evidence": "graph-once-tests-02.log",
+      "result": "Retained-exception tests found remaining tensor locals; fixed, passed run03 and integrated run02."
+    },
+    {
+      "evidence": "device-gates-tests-01.log",
+      "result": "Two numeric wrapper failures; fixed before later passing runs."
+    },
+    {
+      "evidence": "resume-resource-red.log",
+      "result": "Missing original memory was accepted; now refused and only that unit reruns."
+    },
+    {
+      "evidence": "integrated-fixtures-01.log",
+      "result": "Verification wrapper rejected a package-presence probe during collection: no product tests ran and no MLX loaded. Actual-import guard used successfully in run02."
+    }
+  ],
+  "verification": {
+    "ruff": "pass",
+    "git_diff_check": "Source/code/docs/JSON pass. Verbatim failing pytest logs/XML contain their original trailing whitespace; retained unchanged to preserve the hashed evidence.",
+    "independent_source_review": "findings corrected and centrally tested",
+    "full_repository_suite": "unexecuted; affected CPU fixtures and repository rules only"
+  },
+  "next_execution": "rented device only, FIRST-HOUR-CHECKLIST.md; heartbeat disabled"
+}

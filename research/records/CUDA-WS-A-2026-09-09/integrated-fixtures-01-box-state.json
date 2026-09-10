@@ -1,0 +1,14 @@
+{
+  "utc": "2026-09-09T03:43:16.884806+00:00",
+  "cpu_percent_1s": 20.5,
+  "load_average": [
+    6.1533203125,
+    5.9541015625,
+    6.28662109375
+  ],
+  "logical_cpus": 12,
+  "window": "None",
+  "lock": "None",
+  "interpretation": "pre-run snapshot; continuous host idleness is not established",
+  "scope": "tiny CPU fixtures and source checks; native MLX imports blocked"
+}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="1" failures="0" skipped="0" tests="1" time="0.055" timestamp="2026-09-09T15:25:18.650706+10:00" hostname="daniel.tipton-Mac"><testcase classname="" name="tests.test_sae_intervention" time="0.000"><error message="collection failure">ImportError while importing test module '/Users/daniel.tipton/worktrees/cuda-torch-seam/tests/test_sae_intervention.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_sae_intervention.py:8: in &lt;module&gt;
+    from local_llm_lab.sae_intervention import SAEIntervention  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+research/records/SAE-DECODER-INTERVENTION-2026-09-10/verify.py:36: in guarded_import
+    return original_import(name, *pos, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   ModuleNotFoundError: No module named 'local_llm_lab.sae_intervention'</error></testcase></testsuite></testsuites>

@@ -1,0 +1,54 @@
+{
+  "declared": {
+    "candidate_estimator": "finite-difference",
+    "finite_difference_epsilon": {
+      "0": {
+        "max": 0.09921077728271485,
+        "mean": 0.09921077728271485,
+        "min": 0.09921077728271485
+      }
+    },
+    "fixture_residual": null,
+    "reference_estimator": "upstream-exact-autograd",
+    "storage_dtypes": [
+      "float32"
+    ],
+    "storage_floor_relative": 5.960464477539063e-08
+  },
+  "finding": {
+    "at_or_below_storage_floor": false,
+    "per_layer": [
+      {
+        "at_or_below_storage_floor": false,
+        "cosine": 0.9999906704284479,
+        "layer": 1,
+        "max_abs": 301.7705078125,
+        "reference_norm": 117568.45209176648,
+        "relative_difference": 0.004847986291516893
+      }
+    ],
+    "reading_if_at_floor": "indistinguishable at storage precision, which is not agreement",
+    "threshold": null,
+    "threshold_note": "no pass threshold exists for the finding (plan \u00a716.13). The estimator difference is the measurement; a threshold set before it would be a prediction.",
+    "worst_relative_difference": 0.004847986291516893
+  },
+  "gates": {
+    "controls_separate": {
+      "transposed": {
+        "margin_over_finding": 291.7080030908359,
+        "separates": true,
+        "worst_relative_difference": 1.4141964001101401
+      }
+    },
+    "exact_reproduces_itself": {
+      "expected": 0.0,
+      "measured": 0.0,
+      "state": "passed"
+    },
+    "layer_shifted_control": {
+      "available": false,
+      "reason": "a single-layer map has no other layer to shift to; the per-layer step this ladder implies makes a multi-layer finite-difference fit a different object, since one epsilon_scale no longer describes it"
+    }
+  },
+  "schema_version": 1
+}

@@ -1,0 +1,110 @@
+
+JACOBIAN_EXACTNESS {"atol": 1.1920928955078125e-07, "attention": "eager", "errors_by_layer": {"0": {"max_abs": 0.0, "max_norm_relative": 0.0}, "1": {"max_abs": 0.0, "max_norm_relative": 0.0}, "2": {"max_abs": 0.0, "max_norm_relative": 0.0}, "3": {"max_abs": 0.0, "max_norm_relative": 0.0}, "4": {"max_abs": 0.0, "max_norm_relative": 0.0}}, "rtol": 1.1920928955078125e-07, "source_blocks": [0, 1, 2, 3, 4], "target_block": 5, "tokens": 64}
+.
+JACOBIAN_EXACTNESS {"atol": 1.1920928955078125e-07, "attention": "sdpa", "errors_by_layer": {"0": {"max_abs": 0.0, "max_norm_relative": 0.0}, "1": {"max_abs": 0.0, "max_norm_relative": 0.0}, "2": {"max_abs": 0.0, "max_norm_relative": 0.0}, "3": {"max_abs": 0.0, "max_norm_relative": 0.0}, "4": {"max_abs": 0.0, "max_norm_relative": 0.0}}, "rtol": 1.1920928955078125e-07, "source_blocks": [0, 1, 2, 3, 4], "target_block": 5, "tokens": 64}
+.............................
+JACOBIAN_TIMING {"attention": "eager", "batched_seconds": [0.018372833001194522, 0.017603709013201296, 0.017229916993528605], "best_of": 3, "blocks": 6, "dim_batch": 16, "errors_by_layer": {"1": {"max_abs": 0.0, "max_norm_relative": 0.0}, "3": {"max_abs": 0.0, "max_norm_relative": 0.0}}, "sequential_over_batched": 3.005554699722021, "sequential_seconds": [0.05302774999290705, 0.05178545799572021, 0.05373949999921024], "source_blocks": [1, 3], "target_block": 4, "tokens": 48, "width": 64}
+.
+JACOBIAN_TIMING {"attention": "sdpa", "batched_seconds": [0.019672416994581, 0.019701625016750768, 0.019636207987787202], "best_of": 3, "blocks": 6, "dim_batch": 16, "errors_by_layer": {"1": {"max_abs": 0.0, "max_norm_relative": 0.0}, "3": {"max_abs": 0.0, "max_norm_relative": 0.0}}, "sequential_over_batched": 2.7684423092237407, "sequential_seconds": [0.05552216700743884, 0.05436170898610726, 0.05672270801733248], "source_blocks": [1, 3], "target_block": 4, "tokens": 48, "width": 64}
+....FF.                                   [100%]
+=================================== FAILURES ===================================
+_ test_retained_exception_releases_only_the_estimators_owned_tensor_locals[backward] _
+
+estimator = <function jacobian_for_prompt_vjp at 0x111c76700>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10b3b0050>
+failure = 'backward'
+
+    @pytest.mark.parametrize("failure", ["backward", "nonfinite_result"])
+    def test_retained_exception_releases_only_the_estimators_owned_tensor_locals(
+        estimator, monkeypatch, failure
+    ):
+        """An exception may remain logged. Its estimator frame must not retain our tape/workspace.
+    
+        Deeper torch and caller frames can retain their own references; this test deliberately makes
+        no assertion about those. The caller-supplied model itself remains live and unchanged.
+        """
+        model = make_model()
+        gradient = torch.autograd.grad
+    
+        def fail(*args, **kwargs):
+            if failure == "backward":
+                raise RuntimeError("retained fixture backward exception")
+            values = gradient(*args, **kwargs)
+            return tuple(value * float("nan") for value in values)
+    
+        monkeypatch.setattr(torch.autograd, "grad", fail)
+        with pytest.raises(RuntimeError) as caught:
+            estimator(model, PROMPT, [1, 3], target_layer=4, dim_batch=7)
+        traceback = caught.value.__traceback__  # Deliberately retain the exception and its frames.
+        owned_frame = None
+        while traceback is not None:
+            if traceback.tb_frame.f_code is estimator.__code__:
+                owned_frame = traceback.tb_frame
+                break
+            traceback = traceback.tb_next
+        assert owned_frame is not None
+        owned_locals = owned_frame.f_locals
+        retained = [
+            path for name, value in owned_locals.items() if name != "model"
+            for path in tensor_paths(value, name)
+        ]
+>       assert retained == [], f"estimator exception frame retained owned tensors: {retained}"
+E       AssertionError: estimator exception frame retained owned tensors: ['ids', 'mask', 'positions', 'maps[1]', 'maps[3]', 'target_positions', 'source_positions[0]', 'source_positions[1]', 'row_indices']
+E       assert ['ids', 'mask...sitions', ...] == []
+E         
+E         Left contains 9 more items, first extra item: 'ids'
+E         Use -v to get more diff
+
+tests/torch/test_torch_jacobian.py:451: AssertionError
+_ test_retained_exception_releases_only_the_estimators_owned_tensor_locals[nonfinite_result] _
+
+estimator = <function jacobian_for_prompt_vjp at 0x111c76700>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10b3b1a90>
+failure = 'nonfinite_result'
+
+    @pytest.mark.parametrize("failure", ["backward", "nonfinite_result"])
+    def test_retained_exception_releases_only_the_estimators_owned_tensor_locals(
+        estimator, monkeypatch, failure
+    ):
+        """An exception may remain logged. Its estimator frame must not retain our tape/workspace.
+    
+        Deeper torch and caller frames can retain their own references; this test deliberately makes
+        no assertion about those. The caller-supplied model itself remains live and unchanged.
+        """
+        model = make_model()
+        gradient = torch.autograd.grad
+    
+        def fail(*args, **kwargs):
+            if failure == "backward":
+                raise RuntimeError("retained fixture backward exception")
+            values = gradient(*args, **kwargs)
+            return tuple(value * float("nan") for value in values)
+    
+        monkeypatch.setattr(torch.autograd, "grad", fail)
+        with pytest.raises(RuntimeError) as caught:
+            estimator(model, PROMPT, [1, 3], target_layer=4, dim_batch=7)
+        traceback = caught.value.__traceback__  # Deliberately retain the exception and its frames.
+        owned_frame = None
+        while traceback is not None:
+            if traceback.tb_frame.f_code is estimator.__code__:
+                owned_frame = traceback.tb_frame
+                break
+            traceback = traceback.tb_next
+        assert owned_frame is not None
+        owned_locals = owned_frame.f_locals
+        retained = [
+            path for name, value in owned_locals.items() if name != "model"
+            for path in tensor_paths(value, name)
+        ]
+>       assert retained == [], f"estimator exception frame retained owned tensors: {retained}"
+E       AssertionError: estimator exception frame retained owned tensors: ['ids', 'mask', 'positions', 'maps[1]', 'maps[3]', 'target_positions', 'source_positions[0]', 'source_positions[1]', 'row_indices', 'chosen']
+E       assert ['ids', 'mask...sitions', ...] == []
+E         
+E         Left contains 10 more items, first extra item: 'ids'
+E         Use -v to get more diff
+
+tests/torch/test_torch_jacobian.py:451: AssertionError
+=========================== short test summary info ============================
+FAILED tests/torch/test_torch_jacobian.py::test_retained_exception_releases_only_the_estimators_owned_tensor_locals[backward]
+FAILED tests/torch/test_torch_jacobian.py::test_retained_exception_releases_only_the_estimators_owned_tensor_locals[nonfinite_result]
+2 failed, 36 passed in 5.50s

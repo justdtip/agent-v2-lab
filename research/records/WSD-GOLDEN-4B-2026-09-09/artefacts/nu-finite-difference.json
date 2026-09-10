@@ -1,0 +1,339 @@
+{
+  "corpus": {
+    "manifest": "/workspace/lens-corpus/prose-gemma3-4b-cuda-bf16.json",
+    "max_seq_len": 128,
+    "n_prompts": 1,
+    "rows": [
+      39
+    ],
+    "split": "held"
+  },
+  "decoder_depth": 34,
+  "endpoint": {
+    "note": "upstream's target is the block output before the final norm; unembed supplies the norm, so it is not HF hidden_states[-1]",
+    "source_layers_repo": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33
+    ],
+    "source_layers_upstream": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32
+    ],
+    "target_is_pre_final_norm": true,
+    "target_layer_repo": 34,
+    "target_layer_upstream": 33
+  },
+  "estimator": "finite-difference",
+  "pair_weighting": {
+    "n_prompts": 1,
+    "n_skipped": 0,
+    "note": "equal per-prompt weighting makes the corpus length distribution part of the estimator; upstream's fit() weights the same way",
+    "per_prompt": "equal weight per prompt regardless of n_valid_positions",
+    "skipped": [],
+    "source_target_pairs": "causal, p' >= p, within the selected set"
+  },
+  "position_weighting": {
+    "direction_batch": 256,
+    "max_seq_len": 128,
+    "n_valid_positions": {
+      "max": 2,
+      "min": 2,
+      "total": 2
+    },
+    "probe": [
+      {
+        "contiguous": false,
+        "first": 8,
+        "last": 127,
+        "runs": [
+          [
+            8,
+            9
+          ],
+          [
+            127,
+            128
+          ]
+        ],
+        "selected": 2,
+        "seq_len": 128
+      }
+    ],
+    "readout_warning": "this lens was fitted at the max_seq_len recorded here; upstream's readout defaults (HFLensModel.encode and JacobianLens.apply, both 512) are larger than its fit default (128) and neither warns, so a readout beyond the fitted length is extrapolation and must be passed explicitly",
+    "rule": "explicit selector",
+    "scale_warning": "J scales with the number of selected target positions, so fits at different max_seq_len or different band widths are not comparable in magnitude",
+    "seq_len": {
+      "max": 128,
+      "min": 128
+    },
+    "sha256": "d87659d5f941da46fd8c387767cab4bc898e7ad7150963ff40ce5515c4083e79",
+    "skip_first": null,
+    "source_and_target_tied": true,
+    "source_reduction": "mean over selected source positions",
+    "target_reduction": "sum over selected target positions, not normalised",
+    "upstream_default_path": false
+  },
+  "precision": {
+    "attn_implementation": null,
+    "backward_accumulation_dtype": "float64",
+    "blocks_measured": 34,
+    "capture_dtype": "native",
+    "device": "cuda",
+    "devices_observed": [
+      "cuda"
+    ],
+    "dtype": "bfloat16",
+    "dtypes_observed": [
+      "bfloat16"
+    ],
+    "note": "no autograd graph is built: this estimator differences forward passes, so the accumulation dtype describes the running sum rather than a backward pass",
+    "requires_grad": false
+  },
+  "schema_version": 1,
+  "upstream": {
+    "capture_dtype": "native",
+    "commit": "581d398613e5602a5af361e1c34d3a92ea82ba8e",
+    "commit_matches_expected": true,
+    "difference": "central",
+    "direction_basis": "full standard basis",
+    "epsilon_per_layer": {
+      "0": {
+        "max": 101.567939453125,
+        "mean": 101.567939453125,
+        "min": 101.567939453125
+      },
+      "1": {
+        "max": 108.12462890625,
+        "mean": 108.12462890625,
+        "min": 108.12462890625
+      },
+      "10": {
+        "max": 1406.00140625,
+        "mean": 1406.00140625,
+        "min": 1406.00140625
+      },
+      "11": {
+        "max": 1807.92390625,
+        "mean": 1807.92390625,
+        "min": 1807.92390625
+      },
+      "12": {
+        "max": 2002.1976562500001,
+        "mean": 2002.1976562500001,
+        "min": 2002.1976562500001
+      },
+      "13": {
+        "max": 2148.4146875,
+        "mean": 2148.4146875,
+        "min": 2148.4146875
+      },
+      "14": {
+        "max": 2360.43625,
+        "mean": 2360.43625,
+        "min": 2360.43625
+      },
+      "15": {
+        "max": 2627.25875,
+        "mean": 2627.25875,
+        "min": 2627.25875
+      },
+      "16": {
+        "max": 3011.375,
+        "mean": 3011.375,
+        "min": 3011.375
+      },
+      "17": {
+        "max": 3178.854375,
+        "mean": 3178.854375,
+        "min": 3178.854375
+      },
+      "18": {
+        "max": 3327.3093750000003,
+        "mean": 3327.3093750000003,
+        "min": 3327.3093750000003
+      },
+      "19": {
+        "max": 3509.9353125000002,
+        "mean": 3509.9353125000002,
+        "min": 3509.9353125000002
+      },
+      "2": {
+        "max": 139.979990234375,
+        "mean": 139.979990234375,
+        "min": 139.979990234375
+      },
+      "20": {
+        "max": 3662.8296875,
+        "mean": 3662.8296875,
+        "min": 3662.8296875
+      },
+      "21": {
+        "max": 3851.0593750000003,
+        "mean": 3851.0593750000003,
+        "min": 3851.0593750000003
+      },
+      "22": {
+        "max": 4111.6196875000005,
+        "mean": 4111.6196875000005,
+        "min": 4111.6196875000005
+      },
+      "23": {
+        "max": 4138.290625,
+        "mean": 4138.290625,
+        "min": 4138.290625
+      },
+      "24": {
+        "max": 4343.8228125000005,
+        "mean": 4343.8228125000005,
+        "min": 4343.8228125000005
+      },
+      "25": {
+        "max": 4681.2265625,
+        "mean": 4681.2265625,
+        "min": 4681.2265625
+      },
+      "26": {
+        "max": 5122.1140625,
+        "mean": 5122.1140625,
+        "min": 5122.1140625
+      },
+      "27": {
+        "max": 5640.636875,
+        "mean": 5640.636875,
+        "min": 5640.636875
+      },
+      "28": {
+        "max": 6635.25125,
+        "mean": 6635.25125,
+        "min": 6635.25125
+      },
+      "29": {
+        "max": 6952.855625,
+        "mean": 6952.855625,
+        "min": 6952.855625
+      },
+      "3": {
+        "max": 142.251630859375,
+        "mean": 142.251630859375,
+        "min": 142.251630859375
+      },
+      "30": {
+        "max": 7504.82,
+        "mean": 7504.82,
+        "min": 7504.82
+      },
+      "31": {
+        "max": 7693.88,
+        "mean": 7693.88,
+        "min": 7693.88
+      },
+      "32": {
+        "max": 8817.745,
+        "mean": 8817.745,
+        "min": 8817.745
+      },
+      "4": {
+        "max": 283.35013671875,
+        "mean": 283.35013671875,
+        "min": 283.35013671875
+      },
+      "5": {
+        "max": 349.55359375,
+        "mean": 349.55359375,
+        "min": 349.55359375
+      },
+      "6": {
+        "max": 395.45761718750003,
+        "mean": 395.45761718750003,
+        "min": 395.45761718750003
+      },
+      "7": {
+        "max": 528.959453125,
+        "mean": 528.959453125,
+        "min": 528.959453125
+      },
+      "8": {
+        "max": 769.13609375,
+        "mean": 769.13609375,
+        "min": 769.13609375
+      },
+      "9": {
+        "max": 925.345859375,
+        "mean": 925.345859375,
+        "min": 925.345859375
+      }
+    },
+    "epsilon_rule": "epsilon_scale * ||source residual, full sequence|| / ||direction|| (unit basis)",
+    "epsilon_scale": 0.01,
+    "estimator": "finite-difference",
+    "estimator_implementation": "local_llm_lab.pipeline.lens_fitting.finite_difference",
+    "expected_commit": "581d398613e5602a5af361e1c34d3a92ea82ba8e",
+    "licence": "Apache-2.0",
+    "path": "/workspace/agent-v2-lab/.venv/lib/python3.13/site-packages",
+    "repository": "neuronpedia/jacobian-lens",
+    "retired_when": "this estimator exists to produce the golden comparison's second operand once; it is not a fitting path the programme keeps",
+    "vendored": false
+  }
+}

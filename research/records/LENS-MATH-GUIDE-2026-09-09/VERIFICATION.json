@@ -1,0 +1,34 @@
+{
+  "status": "passed",
+  "basis": "document-and-illustrative-mathematics-verification",
+  "pages": 18,
+  "bookmarks": 18,
+  "external_links": [
+    "https://optimization-online.org/wp-content/uploads/2021/10/8633.pdf",
+    "https://doi.org/10.1002/widm.1555",
+    "https://docs.pytorch.org/docs/main/notes/numerical_accuracy.html",
+    "https://github.com/justdtip/agent-v2-lab/tree/558d424/research/records/FD-NUMERICS-2026-09-09",
+    "https://github.com/justdtip/agent-v2-lab/tree/6983d8e/research/records/FD-SATURATION-AUDIT-2026-09-09"
+  ],
+  "page_size_points": [
+    420,
+    780
+  ],
+  "body_font_points": 13.2,
+  "pdf_bytes": 519502,
+  "pdf_sha256": "ab82542d419b09119ebfd416d4b2779dbbdb9542a7bb68c5b96248eacdccc993",
+  "checks": [
+    "page count and bookmarks",
+    "all expected titles and page footers",
+    "HTTPS reference links",
+    "no replacement or black-square text glyphs",
+    "strict content/footer separation",
+    "reaction-rate example using exact rational arithmetic",
+    "central-difference formula using exact rational arithmetic",
+    "rounded readout example",
+    "global RMS multiplier and bf16 spacing"
+  ],
+  "visual_qa": "All 18 pages inspected in rendered contact sheets; repaired equation asset collision and inspected page 8 again at higher resolution.",
+  "independent_review": "Mathematical manuscript review passed; its direction-notation and layer-label clarifications were applied.",
+  "model_execution": false
+}

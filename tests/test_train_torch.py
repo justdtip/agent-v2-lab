@@ -1,0 +1,316 @@
+"""The `train` stage's torch branch, end to end behind the device shim.
+
+Builds a real (tiny) checkpoint on disk and real rendered rows, so the path under test is the one a
+run takes: `device.backend()` dispatches, `device.pin()` runs before the model loads, the manifest
+carries the determinism reading and every departure, and the cadence is the converted one.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+torch = pytest.importorskip("torch")
+pytest.importorskip("transformers")
+
+from local_llm_lab import device, runlock  # noqa: E402
+from local_llm_lab.pipeline.train_torch import MANIFEST_NAME  # noqa: E402
+
+#: `models/` is git-ignored and exists once, in the primary checkout, so a worktree resolving
+#: against its own root finds nothing. `primary_checkout_root()` is the git-derived primary and is
+#: what the registry now resolves checkpoints against -- deliberately *not*
+#: `$AGENT_V2_BOX_STATE_DIR`, which redirects the lock and the window and would point a checkpoint
+#: into a scratch directory that does not hold one.
+TOKENIZER_SOURCE = runlock.primary_checkout_root() / "models" / "gemma-3-4b-it-bf16"
+
+
+@pytest.fixture
+def tiny_checkpoint(tmp_path: Path):
+    """A Gemma 3 whose vocabulary matches the real tokenizer, so real rows tokenize into it."""
+    from transformers import AutoTokenizer, Gemma3ForCausalLM, Gemma3TextConfig
+
+    if not (TOKENIZER_SOURCE / "tokenizer.json").is_file():
+        pytest.skip(f"no tokenizer at {TOKENIZER_SOURCE}")
+    tokenizer = AutoTokenizer.from_pretrained(str(TOKENIZER_SOURCE))
+
+    torch.manual_seed(0)
+    model = Gemma3ForCausalLM(
+        Gemma3TextConfig(
+            vocab_size=len(tokenizer), hidden_size=16, intermediate_size=32, num_hidden_layers=4,
+            num_attention_heads=2, num_key_value_heads=1, head_dim=8, sliding_window=8,
+            rms_norm_eps=1e-6, use_cache=False,
+        )
+    ).to(torch.bfloat16)
+    where = tmp_path / "checkpoint"
+    model.save_pretrained(where)
+    tokenizer.save_pretrained(where)
+    return where
+
+
+def _dataset(directory: Path, rows: int) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    for split, count in (("train", rows), ("valid", 4)):
+        with (directory / f"{split}.jsonl").open("w", encoding="utf-8") as handle:
+            for index in range(count):
+                handle.write(json.dumps({
+                    "prompt": f"user asks about item {index}. ",
+                    "completion": f"the answer for item {index} is {index * 7}.",
+                }) + "\n")
+    (directory / "manifest.json").write_text("{}", encoding="utf-8")
+    return directory
+
+
+def _config(checkpoint: Path, data: Path, output: Path) -> dict:
+    return {
+        "model": "tiny-gemma3",
+        "data": str(data),
+        "output": output,
+        "seed": 20260902,
+        "train": {
+            # mlx-lm units: 8 micro-batches at accumulation 2 is 4 optimizer steps.
+            "iters": 8,
+            "iters_unit": "batches",
+            "grad_accumulation_steps": 2,
+            "batch_size": 1,
+            "learning_rate": 1e-4,
+            "max_seq_length": 128,
+            "val_batches": 0,
+            "steps_per_report": 2,
+            "steps_per_eval": 8,
+            "save_every": 4,
+            "lora_layers": 2,
+            "rank": 16,
+            "scale": 32.0,
+            "gated_delta_chunk": 64,
+        },
+    }
+
+
+def test_the_stage_dispatches_to_torch_and_records_what_it_did(
+    tiny_checkpoint: Path, tmp_path: Path, monkeypatch
+) -> None:
+    import local_llm_lab.models as models
+    from local_llm_lab.pipeline import cli
+
+    monkeypatch.setenv("LLL_BACKEND", "torch")
+    assert device.backend() == "torch"
+    monkeypatch.setattr(
+        models, "load_model_spec",
+        lambda name: SimpleNamespace(name=name, hf_id=str(tiny_checkpoint)),
+    )
+
+    output = tmp_path / "run"
+    config = _config(tiny_checkpoint, _dataset(tmp_path / "rendered", rows=8), output)
+
+    cli.stage_train(config, iters=None)  # the CLI entry, so the branch itself is under test
+
+    manifest = json.loads((output / MANIFEST_NAME).read_text())
+    assert manifest["backend"] == "torch"
+
+    # The cadence is the converted one: 8 micro-batches at accumulation 2 is 4 optimizer steps.
+    assert manifest["recipe"]["source_iters"] == 8
+    assert manifest["recipe"]["source_units"] == "batches"
+    assert manifest["recipe"]["max_steps"] == 4
+    assert manifest["recipe"]["save_steps"] == 2
+    assert manifest["result"]["global_step"] == 4
+
+    # device.pin ran, and what it returned is a reading rather than an echo of the request.
+    assert isinstance(manifest["determinism"], dict) and manifest["determinism"]
+    assert manifest["device"] == device.select()
+
+    # Only the top two blocks train, and only they were upcast.
+    assert 0 < manifest["parameters"]["trainable"] < manifest["parameters"]["total"]
+    assert manifest["parameters"]["upcast_to_float32"] == manifest["parameters"]["trainable"]
+
+    # Every way this run is not the MLX run of the same config is carried, not absorbed.
+    departures = " | ".join(manifest["departures_from_the_mlx_record"])
+    assert "num_items_in_batch" in departures
+    assert "length-sorts" in departures
+    assert "rank" in departures
+    assert "gated_delta_chunk" in departures
+
+    assert (output / "checkpoints" / "checkpoint-4" / "model.safetensors").is_file()
+
+
+def test_the_mlx_backend_does_not_reach_the_torch_branch(monkeypatch) -> None:
+    """The laptop's path must be the one it always was, reached by the same code."""
+    monkeypatch.setenv("LLL_BACKEND", "mlx")
+    assert device.backend() == "mlx"
+
+    from local_llm_lab.pipeline import cli
+
+    called = False
+
+    def _fail(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("the torch branch was entered on the mlx backend")
+
+    monkeypatch.setattr("local_llm_lab.pipeline.train_torch.stage_train_torch", _fail)
+    # It proceeds into the MLX path, which fails on a bare config. The type is not the point;
+    # what is asserted is that the torch branch was not the thing that ran.
+    with pytest.raises((KeyError, ValueError, TypeError, FileNotFoundError, OSError)):
+        cli.stage_train({"train": {}, "model": "x", "output": Path("/nonexistent")}, iters=None)
+    assert not called
+
+
+def test_the_run_records_what_its_distribution_has_been_measured_at() -> None:
+    """This replaced a refusal, and it replaced it with a number rather than with silence.
+
+    The stage used to reject any multi-process run: FSDP2 being *configured* and the joined path
+    being *measured* were two claims, and only the second licenses a sharded run. The second now
+    exists. What it does not license is silence about scale -- two gloo processes on CPU is what was
+    measured, and a run at a scale nobody has checked must say so in its own record rather than
+    looking like one that was.
+    """
+    from local_llm_lab.pipeline.train_torch import VALIDATED_DISTRIBUTION, describe_distribution
+
+    single = describe_distribution(1)
+    assert single["strategy"] == "plain single-process"
+    assert describe_distribution(4)["strategy"] == "fsdp2"
+
+    # The number, carried rather than asserted in prose.
+    assert VALIDATED_DISTRIBUTION["grad_step0_worst_relative"] < 1e-6
+    assert VALIDATED_DISTRIBUTION["value_final_worst_relative"] == 0.0
+    # And what it is not: the manifest says so in the same breath.
+    assert "NCCL" in VALIDATED_DISTRIBUTION["not_measured"]
+    assert "two gloo processes" in VALIDATED_DISTRIBUTION["arms"]
+    # The exact value agreement is explained rather than claimed as tighter evidence.
+    assert "ulp" in VALIDATED_DISTRIBUTION["note"]
+
+
+def test_fsdp_is_configured_only_above_world_size_one() -> None:
+    """World size one is not an FSDP rung: it silently zeros some gradients (pytorch #144045)."""
+    from transformers import Gemma3ForCausalLM, Gemma3TextConfig
+
+    from local_llm_lab.pipeline.train_torch import decoder_layer_class_name, fsdp_arguments
+    from local_llm_lab.training.torch_full import wrap_with_chunked_loss
+
+    model = wrap_with_chunked_loss(
+        Gemma3ForCausalLM(
+            Gemma3TextConfig(
+                vocab_size=32, hidden_size=16, intermediate_size=32, num_hidden_layers=2,
+                num_attention_heads=2, num_key_value_heads=1, head_dim=8, sliding_window=8,
+            )
+        ),
+        chunk_size=4,
+    )
+
+    assert fsdp_arguments(model, world_size=1) == {}
+
+    config = fsdp_arguments(model, world_size=2)
+    assert config["fsdp"] == "full_shard"
+    # Version pinned explicitly: it is upstream's default today, and a default that moves under a
+    # recorded run is a difference nothing would report.
+    assert config["fsdp_config"]["version"] == 2
+    assert config["fsdp_config"]["state_dict_type"] == "FULL_STATE_DICT"
+    # The block class is read off the model, not written in source, so this file does not go
+    # quietly wrong on the next architecture.
+    assert config["fsdp_config"]["transformer_layer_cls_to_wrap"] == ["Gemma3DecoderLayer"]
+    assert decoder_layer_class_name(model) == "Gemma3DecoderLayer"
+
+
+def test_the_block_class_is_read_through_whatever_is_wrapping_the_model() -> None:
+    """`Trainer` wraps what it is handed, and what it is handed is already our wrapper."""
+    from transformers import Gemma3ForCausalLM, Gemma3TextConfig
+
+    from local_llm_lab.pipeline.train_torch import decoder_layer_class_name
+    from local_llm_lab.training.torch_full import wrap_with_chunked_loss
+
+    inner = Gemma3ForCausalLM(
+        Gemma3TextConfig(
+            vocab_size=32, hidden_size=16, intermediate_size=32, num_hidden_layers=2,
+            num_attention_heads=2, num_key_value_heads=1, head_dim=8, sliding_window=8,
+        )
+    )
+    wrapped = wrap_with_chunked_loss(inner, chunk_size=4)
+
+    class _Distributed(torch.nn.Module):
+        def __init__(self, module):
+            super().__init__()
+            self.module = module
+
+    assert decoder_layer_class_name(inner) == "Gemma3DecoderLayer"
+    assert decoder_layer_class_name(wrapped) == "Gemma3DecoderLayer"
+    assert decoder_layer_class_name(_Distributed(wrapped)) == "Gemma3DecoderLayer"
+
+
+@pytest.fixture
+def wrapper_checkpoint(tmp_path: Path):
+    """A checkpoint shaped the way every real registry entry is: the multimodal wrapper.
+
+    This closes a blind spot rather than adding coverage. Every other fixture here builds from
+    `Gemma3TextConfig`, which saves `architectures: ['Gemma3ForCausalLM']` -- a shape no published
+    Gemma 3 checkpoint has, including this repository's own text-only conversion. A stand-in that
+    differs from the real artefact in exactly the way that matters is not a test of the loader.
+    """
+    from transformers import AutoTokenizer, Gemma3Config, Gemma3ForConditionalGeneration
+
+    if not (TOKENIZER_SOURCE / "tokenizer.json").is_file():
+        pytest.skip(f"no tokenizer at {TOKENIZER_SOURCE}")
+    tokenizer = AutoTokenizer.from_pretrained(str(TOKENIZER_SOURCE))
+
+    torch.manual_seed(0)
+    config = Gemma3Config(
+        text_config=dict(
+            vocab_size=len(tokenizer), hidden_size=16, intermediate_size=32, num_hidden_layers=4,
+            num_attention_heads=2, num_key_value_heads=1, head_dim=8, sliding_window=8,
+            rms_norm_eps=1e-6, use_cache=False,
+        ),
+        vision_config=dict(
+            hidden_size=16, intermediate_size=32, num_hidden_layers=2, num_attention_heads=2,
+            image_size=16, patch_size=8, num_channels=3,
+        ),
+    )
+    model = Gemma3ForConditionalGeneration(config).to(torch.bfloat16)
+    where = tmp_path / "wrapper"
+    model.save_pretrained(where)
+    tokenizer.save_pretrained(where)
+    return where
+
+
+def test_the_stage_trains_the_text_tower_out_of_a_multimodal_checkpoint(
+    wrapper_checkpoint: Path, tmp_path: Path, monkeypatch
+) -> None:
+    """The shape every registry entry actually has, through the whole stage."""
+    import local_llm_lab.models as models
+    from local_llm_lab.pipeline import cli
+
+    monkeypatch.setenv("LLL_BACKEND", "torch")
+    monkeypatch.setattr(
+        models, "load_model_spec",
+        lambda name: SimpleNamespace(name=name, hf_id=str(wrapper_checkpoint)),
+    )
+
+    output = tmp_path / "run"
+    config = _config(wrapper_checkpoint, _dataset(tmp_path / "rendered", rows=8), output)
+    cli.stage_train(config, iters=None)
+
+    manifest = json.loads((output / MANIFEST_NAME).read_text())
+    # The vision tower is gone: what trained is the text tower alone.
+    assert manifest["load"]["wrapper"] is True
+    assert manifest["result"]["global_step"] == 4
+    assert 0 < manifest["parameters"]["trainable"] < manifest["parameters"]["total"]
+
+    # Reloaded through the fail-closed loader, NOT `from_pretrained`. This assertion was written
+    # with `from_pretrained` first and it passed on a checkpoint whose every weight was missing:
+    # missing keys are a warning there, and the tensors come back freshly initialised. "It loads"
+    # is not a check unless the loader refuses something.
+    from local_llm_lab.hf_text import load_text_causal_lm
+
+    reloaded, report = load_text_causal_lm(output / "checkpoints" / "checkpoint-4", device="cpu")
+    assert report["wrapper"] is False, "the trained checkpoint is a text tower, not a wrapper"
+    assert not hasattr(reloaded.model, "vision_tower")
+
+    # The keys must be the model's own, not the source checkpoint's. `save_pretrained` defaults to
+    # re-applying the reverse of the loader's `key_mapping`, which writes `language_model.*` names
+    # beside a plain text config.
+    from safetensors import safe_open
+
+    with safe_open(str(output / "checkpoints" / "checkpoint-4" / "model.safetensors"), "pt") as h:
+        names = list(h.keys())
+    assert names, "empty checkpoint"
+    assert not any(name.startswith("language_model.") for name in names), sorted(names)[:3]

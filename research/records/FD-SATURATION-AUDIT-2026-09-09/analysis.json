@@ -1,0 +1,196 @@
+{
+  "source_commit": "13bce4e573b2765263d7fa98e1d417a3f9712475",
+  "scope": "reproduction of summary statistics and logical counterexamples; no mechanism identified",
+  "saved_zero_columns": {
+    "value": 0,
+    "basis": "derived-from-device-record"
+  },
+  "preceding_layer_rms_proxy": {
+    "value": 77938.59105342218,
+    "basis": "derived-from-device-record"
+  },
+  "spearman": {
+    "value": -0.8716577540106952,
+    "basis": "derived-from-device-record"
+  },
+  "pearson_logs": {
+    "value": -0.9270698880834866,
+    "basis": "derived-from-device-record"
+  },
+  "excursion_over_proxy_range": {
+    "value": [
+      0.08784139982261788,
+      0.5067734603633626
+    ],
+    "basis": "derived-from-device-record"
+  },
+  "shared_exact_size_log_correlation": {
+    "value": 0.9945246338234731,
+    "basis": "derived-from-device-record"
+  },
+  "downward_compression_steps": {
+    "value": 12,
+    "basis": "derived-from-device-record"
+  },
+  "opposite_sign_steps": {
+    "value": 9,
+    "basis": "derived-from-device-record"
+  },
+  "exact_ties_among_downward_steps": {
+    "value": 0,
+    "basis": "derived-from-device-record"
+  },
+  "downward_steps": [
+    {
+      "from_repo_layer": 2,
+      "to_repo_layer": 3,
+      "delta_excursion": 0.027677782244078186,
+      "delta_compression": -0.03793999164482306,
+      "opposite_sign": true,
+      "exact_tie": false,
+      "basis": "derived-from-device-record"
+    },
+    {
+      "from_repo_layer": 4,
+      "to_repo_layer": 5,
+      "delta_excursion": 0.22961392801991926,
+      "delta_compression": -0.08611150319927291,
+      "opposite_sign": true,
+      "exact_tie": false,
+      "basis": "derived-from-device-record"
+    },
+    {
+      "from_repo_layer": 5,
+      "to_repo_layer": 6,
+      "delta_excursion": -0.006429174654949743,
+      "delta_compression": -0.002460037324648695,
+      "opposite_sign": false,
+      "exact_tie": false,
+      "basis": "derived-from-device-record"
+    },
+    {
+      "from_repo_layer": 8,
+      "to_repo_layer": 9,
+      "delta_excursion": 0.04862347064574163,
+      "delta_compression": -0.015863766675148272,
+      "opposite_sign": true,
+      "exact_tie": false,
+      "basis": "derived-from-device-record"
+    },
+    {
+      "from_repo_layer": 12,
+      "to_repo_layer": 13,
+      "delta_excursion": -0.005585048920086599,
+      "delta_compression": -0.017444850941594425,
+      "opposite_sign": false,
+      "exact_tie": false,
+      "basis": "derived-from-device-record"
+    },
+    {
+      "from_repo_layer": 22,
+      "to_repo_layer": 23,
+      "delta_excursion": 0.006069325231695705,
+      "delta_compression": -0.030925562286589492,
+      "opposite_sign": true,
+      "exact_tie": false,
+      "basis": "derived-from-device-record"
+    },
+    {
+      "from_repo_layer": 24,
+      "to_repo_layer": 25,
+      "delta_excursion": -0.0003587735585898477,
+      "delta_compression": -0.0013627442315399252,
+      "opposite_sign": false,
+      "exact_tie": false,
+      "basis": "derived-from-device-record"
+    },
+    {
+      "from_repo_layer": 25,
+      "to_repo_layer": 26,
+      "delta_excursion": 0.0020462818576021113,
+      "delta_compression": -0.024401120066822157,
+      "opposite_sign": true,
+      "exact_tie": false,
+      "basis": "derived-from-device-record"
+    },
+    {
+      "from_repo_layer": 26,
+      "to_repo_layer": 27,
+      "delta_excursion": 0.002833259028562421,
+      "delta_compression": -0.01729623357776744,
+      "opposite_sign": true,
+      "exact_tie": false,
+      "basis": "derived-from-device-record"
+    },
+    {
+      "from_repo_layer": 27,
+      "to_repo_layer": 28,
+      "delta_excursion": 0.005967283579545707,
+      "delta_compression": -0.02079939963720079,
+      "opposite_sign": true,
+      "exact_tie": false,
+      "basis": "derived-from-device-record"
+    },
+    {
+      "from_repo_layer": 28,
+      "to_repo_layer": 29,
+      "delta_excursion": 0.014655227008138053,
+      "delta_compression": -0.043049197539998696,
+      "opposite_sign": true,
+      "exact_tie": false,
+      "basis": "derived-from-device-record"
+    },
+    {
+      "from_repo_layer": 31,
+      "to_repo_layer": 32,
+      "delta_excursion": 6.886306627609806e-05,
+      "delta_compression": -0.009126180091747593,
+      "opposite_sign": true,
+      "exact_tie": false,
+      "basis": "derived-from-device-record"
+    }
+  ],
+  "linear_counterexample": {
+    "construction": "F_l(x)=a_l*x; true J_l=a_l*I; erroneous reported G_l=I; fixed epsilon and target scale",
+    "a": {
+      "value": [
+        1.0,
+        4.0,
+        2.0,
+        8.0,
+        3.0,
+        16.0,
+        5.0
+      ],
+      "basis": "synthetic-logical-counterexample"
+    },
+    "spearman": {
+      "value": -1.0,
+      "basis": "synthetic-logical-counterexample"
+    },
+    "pearson_logs": {
+      "value": -1.0,
+      "basis": "synthetic-logical-counterexample"
+    }
+  },
+  "rounding_counterexample": {
+    "construction": "linear F(x)=Jx; diag(J)=1, offdiag(J)=.49; nearest-integer output rounding; x=0,h=1; FD=I",
+    "width": {
+      "value": 256,
+      "basis": "synthetic-logical-counterexample"
+    },
+    "zero_columns": {
+      "value": 0,
+      "basis": "synthetic-logical-counterexample"
+    },
+    "fraction_components_lost": {
+      "value": 0.99609375,
+      "basis": "synthetic-logical-counterexample"
+    },
+    "fd_over_exact_norm": {
+      "value": 0.12676979922728832,
+      "basis": "synthetic-logical-counterexample"
+    }
+  },
+  "verification": "input digests, layer join, rank ties, correlation known answers, linear coupling, rounding and cancellation counterexamples passed"
+}

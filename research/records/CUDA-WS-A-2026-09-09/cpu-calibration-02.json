@@ -1,0 +1,1603 @@
+{
+  "declared_source_commit": "ac8a91eade9f37dcaf053db667a88b395bf52b14",
+  "source_commit": "ac8a91eade9f37dcaf053db667a88b395bf52b14",
+  "script_sha256": "f7ca28bfcded95d30b29cd5c276a2772a7b1755ccca505e33fca152f70c3893f",
+  "scope": "CPU calibration, not complete checkpoint acceptance",
+  "device": "cpu",
+  "weights_dtype": "bfloat16",
+  "diagnostic_dtype": "float32",
+  "attention": "eager",
+  "cap_gib": 10.656005859375,
+  "projected_peak_gib": 9.8,
+  "gates": {
+    "1": {
+      "status": "pass",
+      "num_layers": 34,
+      "hidden_size": 2560,
+      "vocab_size": 262208,
+      "attention_spans": [
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "global",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "global",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "global",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "global",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding",
+        "global",
+        "sliding",
+        "sliding",
+        "sliding",
+        "sliding"
+      ],
+      "upstream_source_blocks": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32
+      ],
+      "upstream_target_block": 33,
+      "source_residuals": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33
+      ],
+      "target_residual": 34,
+      "entry_residual": 0,
+      "expected_from_header_config": {
+        "num_layers": 34,
+        "hidden_size": 2560,
+        "vocab_size": 262208,
+        "attention_spans": [
+          "sliding",
+          "sliding",
+          "sliding",
+          "sliding",
+          "sliding",
+          "global",
+          "sliding",
+          "sliding",
+          "sliding",
+          "sliding",
+          "sliding",
+          "global",
+          "sliding",
+          "sliding",
+          "sliding",
+          "sliding",
+          "sliding",
+          "global",
+          "sliding",
+          "sliding",
+          "sliding",
+          "sliding",
+          "sliding",
+          "global",
+          "sliding",
+          "sliding",
+          "sliding",
+          "sliding",
+          "sliding",
+          "global",
+          "sliding",
+          "sliding",
+          "sliding",
+          "sliding"
+        ]
+      }
+    },
+    "2": {
+      "status": "measured_not_accepted",
+      "reason": "precision comparison and extra negative controls require resolution",
+      "registered_bf16_relative_bound": 0.001,
+      "threshold_changed": false
+    },
+    "3": {
+      "status": "unexecuted",
+      "reason": "ordered after gate 2 acceptance"
+    },
+    "4": {
+      "status": "unexecuted",
+      "reason": "ordered after gate 2 acceptance"
+    }
+  },
+  "memory": [
+    {
+      "phase": "before_load",
+      "rss_bytes": 182681600,
+      "process_peak_bytes": 344899584,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    },
+    {
+      "phase": "after_load",
+      "rss_bytes": 291045376,
+      "process_peak_bytes": 344899584,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    },
+    {
+      "phase": "gate_1_structure",
+      "rss_bytes": 291094528,
+      "process_peak_bytes": 344899584,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    },
+    {
+      "phase": "64/before_normal",
+      "rss_bytes": 291094528,
+      "process_peak_bytes": 344899584,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    },
+    {
+      "phase": "64/normal",
+      "rss_bytes": 6555811840,
+      "process_peak_bytes": 6725304320,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    },
+    {
+      "phase": "64/before_rotary_rounding",
+      "rss_bytes": 6560088064,
+      "process_peak_bytes": 6725304320,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    },
+    {
+      "phase": "64/rotary_rounding",
+      "rss_bytes": 6046728192,
+      "process_peak_bytes": 6725304320,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    },
+    {
+      "phase": "64/before_mask_dispatch_control",
+      "rss_bytes": 6051135488,
+      "process_peak_bytes": 6725304320,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    },
+    {
+      "phase": "64/mask_dispatch_control",
+      "rss_bytes": 7014924288,
+      "process_peak_bytes": 7038189568,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    },
+    {
+      "phase": "1400/before_normal",
+      "rss_bytes": 7018971136,
+      "process_peak_bytes": 7038189568,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    },
+    {
+      "phase": "1400/normal",
+      "rss_bytes": 2745024512,
+      "process_peak_bytes": 7308066816,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    },
+    {
+      "phase": "1400/before_rotary_rounding",
+      "rss_bytes": 2749153280,
+      "process_peak_bytes": 7308066816,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    },
+    {
+      "phase": "1400/rotary_rounding",
+      "rss_bytes": 5705023488,
+      "process_peak_bytes": 7308066816,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    },
+    {
+      "phase": "1400/before_mask_dispatch_control",
+      "rss_bytes": 5709217792,
+      "process_peak_bytes": 7308066816,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    },
+    {
+      "phase": "1400/mask_dispatch_control",
+      "rss_bytes": 5965889536,
+      "process_peak_bytes": 7772422144,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    },
+    {
+      "phase": "complete",
+      "rss_bytes": 5970264064,
+      "process_peak_bytes": 7772422144,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    },
+    {
+      "phase": "final",
+      "rss_bytes": 5970526208,
+      "process_peak_bytes": 7772422144,
+      "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+    }
+  ],
+  "measurements": [
+    {
+      "tokens": 64,
+      "normal": {
+        "status": "measured",
+        "by_layer": {
+          "0": {
+            "max_abs": 0.0,
+            "native_max_abs": 29.25,
+            "max_norm_relative": 0.0
+          },
+          "1": {
+            "max_abs": 5.20184326171875,
+            "native_max_abs": 13120.0,
+            "max_norm_relative": 0.0003964819559236852
+          },
+          "2": {
+            "max_abs": 39.5947265625,
+            "native_max_abs": 14592.0,
+            "max_norm_relative": 0.002713454397101151
+          },
+          "3": {
+            "max_abs": 106.326171875,
+            "native_max_abs": 19968.0,
+            "max_norm_relative": 0.005324828319060497
+          },
+          "4": {
+            "max_abs": 112.595703125,
+            "native_max_abs": 25088.0,
+            "max_norm_relative": 0.004488030258490115
+          },
+          "5": {
+            "max_abs": 196.9375,
+            "native_max_abs": 51200.0,
+            "max_norm_relative": 0.003846435546875
+          },
+          "6": {
+            "max_abs": 293.65625,
+            "native_max_abs": 73216.0,
+            "max_norm_relative": 0.004010820722246503
+          },
+          "7": {
+            "max_abs": 36.96875,
+            "native_max_abs": 88576.0,
+            "max_norm_relative": 0.0004173675713511561
+          },
+          "8": {
+            "max_abs": 53.3388671875,
+            "native_max_abs": 107008.0,
+            "max_norm_relative": 0.0004984568180650045
+          },
+          "9": {
+            "max_abs": 136.0703125,
+            "native_max_abs": 118784.0,
+            "max_norm_relative": 0.0011455272806101832
+          },
+          "10": {
+            "max_abs": 148.25,
+            "native_max_abs": 141312.0,
+            "max_norm_relative": 0.0010490970335144928
+          },
+          "11": {
+            "max_abs": 565.15625,
+            "native_max_abs": 155648.0,
+            "max_norm_relative": 0.003630989476254112
+          },
+          "12": {
+            "max_abs": 325.03125,
+            "native_max_abs": 167936.0,
+            "max_norm_relative": 0.0019354471346227134
+          },
+          "13": {
+            "max_abs": 495.234375,
+            "native_max_abs": 188416.0,
+            "max_norm_relative": 0.0026284093442170515
+          },
+          "14": {
+            "max_abs": 217.447265625,
+            "native_max_abs": 209920.0,
+            "max_norm_relative": 0.0010358577821312882
+          },
+          "15": {
+            "max_abs": 245.1875,
+            "native_max_abs": 235520.0,
+            "max_norm_relative": 0.0010410474694293478
+          },
+          "16": {
+            "max_abs": 638.25,
+            "native_max_abs": 242688.0,
+            "max_norm_relative": 0.002629919897151899
+          },
+          "17": {
+            "max_abs": 216.951171875,
+            "native_max_abs": 246784.0,
+            "max_norm_relative": 0.0008791136049136086
+          },
+          "18": {
+            "max_abs": 280.56640625,
+            "native_max_abs": 262144.0,
+            "max_norm_relative": 0.001070275902748108
+          },
+          "19": {
+            "max_abs": 526.65625,
+            "native_max_abs": 266240.0,
+            "max_norm_relative": 0.001978125939002404
+          },
+          "20": {
+            "max_abs": 684.09375,
+            "native_max_abs": 268288.0,
+            "max_norm_relative": 0.0025498484837189884
+          },
+          "21": {
+            "max_abs": 502.94921875,
+            "native_max_abs": 268288.0,
+            "max_norm_relative": 0.0018746616276165912
+          },
+          "22": {
+            "max_abs": 616.32421875,
+            "native_max_abs": 270336.0,
+            "max_norm_relative": 0.0022798451510342684
+          },
+          "23": {
+            "max_abs": 537.16015625,
+            "native_max_abs": 274432.0,
+            "max_norm_relative": 0.0019573524816712336
+          },
+          "24": {
+            "max_abs": 938.96875,
+            "native_max_abs": 282624.0,
+            "max_norm_relative": 0.003322324891021286
+          },
+          "25": {
+            "max_abs": 1780.75,
+            "native_max_abs": 282624.0,
+            "max_norm_relative": 0.006300774173460145
+          },
+          "26": {
+            "max_abs": 1719.65625,
+            "native_max_abs": 286720.0,
+            "max_norm_relative": 0.0059976850237165175
+          },
+          "27": {
+            "max_abs": 2688.875,
+            "native_max_abs": 286720.0,
+            "max_norm_relative": 0.0093780517578125
+          },
+          "28": {
+            "max_abs": 2319.8125,
+            "native_max_abs": 288768.0,
+            "max_norm_relative": 0.008033481895500887
+          },
+          "29": {
+            "max_abs": 3602.03125,
+            "native_max_abs": 290816.0,
+            "max_norm_relative": 0.012385945924570863
+          },
+          "30": {
+            "max_abs": 2860.34375,
+            "native_max_abs": 294912.0,
+            "max_norm_relative": 0.009698973761664497
+          },
+          "31": {
+            "max_abs": 1721.21875,
+            "native_max_abs": 296960.0,
+            "max_norm_relative": 0.005796129950161638
+          },
+          "32": {
+            "max_abs": 1014.703125,
+            "native_max_abs": 240640.0,
+            "max_norm_relative": 0.004216685193650266
+          },
+          "33": {
+            "max_abs": 1045.96875,
+            "native_max_abs": 212992.0,
+            "max_norm_relative": 0.0049108358529897835
+          },
+          "34": {
+            "max_abs": 1471.306640625,
+            "native_max_abs": 151552.0,
+            "max_norm_relative": 0.00970826277861724
+          }
+        },
+        "retained_residual_bytes": 34406400,
+        "relative_definition": "max(abs(loop-native)) / max(abs(native)); descriptive",
+        "memory_while_retained": {
+          "rss_bytes": 6555385856,
+          "process_peak_bytes": 6725304320,
+          "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+        }
+      },
+      "rotary_rounding": {
+        "status": "measured",
+        "by_attention_kind": {
+          "sliding_attention": {
+            "max_abs": 0.001952826976776123,
+            "observed_dtypes": [
+              "torch.bfloat16",
+              "torch.bfloat16"
+            ]
+          },
+          "full_attention": {
+            "max_abs": 0.001953125,
+            "observed_dtypes": [
+              "torch.bfloat16",
+              "torch.bfloat16"
+            ]
+          }
+        },
+        "max_abs": 0.001953125,
+        "basis": "same model rotary module and positions; fp32 output versus native tables"
+      },
+      "mask_dispatch_control": {
+        "status": "measured",
+        "by_layer": {
+          "0": {
+            "max_abs": 0.0,
+            "native_max_abs": 29.25,
+            "max_norm_relative": 0.0
+          },
+          "1": {
+            "max_abs": 5.20184326171875,
+            "native_max_abs": 13120.0,
+            "max_norm_relative": 0.0003964819559236852
+          },
+          "2": {
+            "max_abs": 39.5947265625,
+            "native_max_abs": 14592.0,
+            "max_norm_relative": 0.002713454397101151
+          },
+          "3": {
+            "max_abs": 106.326171875,
+            "native_max_abs": 19968.0,
+            "max_norm_relative": 0.005324828319060497
+          },
+          "4": {
+            "max_abs": 112.595703125,
+            "native_max_abs": 25088.0,
+            "max_norm_relative": 0.004488030258490115
+          },
+          "5": {
+            "max_abs": 196.9375,
+            "native_max_abs": 51200.0,
+            "max_norm_relative": 0.003846435546875
+          },
+          "6": {
+            "max_abs": 293.65625,
+            "native_max_abs": 73216.0,
+            "max_norm_relative": 0.004010820722246503
+          },
+          "7": {
+            "max_abs": 36.96875,
+            "native_max_abs": 88576.0,
+            "max_norm_relative": 0.0004173675713511561
+          },
+          "8": {
+            "max_abs": 53.3388671875,
+            "native_max_abs": 107008.0,
+            "max_norm_relative": 0.0004984568180650045
+          },
+          "9": {
+            "max_abs": 136.0703125,
+            "native_max_abs": 118784.0,
+            "max_norm_relative": 0.0011455272806101832
+          },
+          "10": {
+            "max_abs": 148.25,
+            "native_max_abs": 141312.0,
+            "max_norm_relative": 0.0010490970335144928
+          },
+          "11": {
+            "max_abs": 565.15625,
+            "native_max_abs": 155648.0,
+            "max_norm_relative": 0.003630989476254112
+          },
+          "12": {
+            "max_abs": 325.03125,
+            "native_max_abs": 167936.0,
+            "max_norm_relative": 0.0019354471346227134
+          },
+          "13": {
+            "max_abs": 495.234375,
+            "native_max_abs": 188416.0,
+            "max_norm_relative": 0.0026284093442170515
+          },
+          "14": {
+            "max_abs": 217.447265625,
+            "native_max_abs": 209920.0,
+            "max_norm_relative": 0.0010358577821312882
+          },
+          "15": {
+            "max_abs": 245.1875,
+            "native_max_abs": 235520.0,
+            "max_norm_relative": 0.0010410474694293478
+          },
+          "16": {
+            "max_abs": 638.25,
+            "native_max_abs": 242688.0,
+            "max_norm_relative": 0.002629919897151899
+          },
+          "17": {
+            "max_abs": 216.951171875,
+            "native_max_abs": 246784.0,
+            "max_norm_relative": 0.0008791136049136086
+          },
+          "18": {
+            "max_abs": 280.56640625,
+            "native_max_abs": 262144.0,
+            "max_norm_relative": 0.001070275902748108
+          },
+          "19": {
+            "max_abs": 526.65625,
+            "native_max_abs": 266240.0,
+            "max_norm_relative": 0.001978125939002404
+          },
+          "20": {
+            "max_abs": 684.09375,
+            "native_max_abs": 268288.0,
+            "max_norm_relative": 0.0025498484837189884
+          },
+          "21": {
+            "max_abs": 502.94921875,
+            "native_max_abs": 268288.0,
+            "max_norm_relative": 0.0018746616276165912
+          },
+          "22": {
+            "max_abs": 616.32421875,
+            "native_max_abs": 270336.0,
+            "max_norm_relative": 0.0022798451510342684
+          },
+          "23": {
+            "max_abs": 537.16015625,
+            "native_max_abs": 274432.0,
+            "max_norm_relative": 0.0019573524816712336
+          },
+          "24": {
+            "max_abs": 938.96875,
+            "native_max_abs": 282624.0,
+            "max_norm_relative": 0.003322324891021286
+          },
+          "25": {
+            "max_abs": 1780.75,
+            "native_max_abs": 282624.0,
+            "max_norm_relative": 0.006300774173460145
+          },
+          "26": {
+            "max_abs": 1719.65625,
+            "native_max_abs": 286720.0,
+            "max_norm_relative": 0.0059976850237165175
+          },
+          "27": {
+            "max_abs": 2688.875,
+            "native_max_abs": 286720.0,
+            "max_norm_relative": 0.0093780517578125
+          },
+          "28": {
+            "max_abs": 2319.8125,
+            "native_max_abs": 288768.0,
+            "max_norm_relative": 0.008033481895500887
+          },
+          "29": {
+            "max_abs": 3602.03125,
+            "native_max_abs": 290816.0,
+            "max_norm_relative": 0.012385945924570863
+          },
+          "30": {
+            "max_abs": 2860.34375,
+            "native_max_abs": 294912.0,
+            "max_norm_relative": 0.009698973761664497
+          },
+          "31": {
+            "max_abs": 1721.21875,
+            "native_max_abs": 296960.0,
+            "max_norm_relative": 0.005796129950161638
+          },
+          "32": {
+            "max_abs": 1014.703125,
+            "native_max_abs": 240640.0,
+            "max_norm_relative": 0.004216685193650266
+          },
+          "33": {
+            "max_abs": 1045.96875,
+            "native_max_abs": 212992.0,
+            "max_norm_relative": 0.0049108358529897835
+          },
+          "34": {
+            "max_abs": 1471.306640625,
+            "native_max_abs": 151552.0,
+            "max_norm_relative": 0.00970826277861724
+          }
+        },
+        "retained_residual_bytes": 34406400,
+        "relative_definition": "max(abs(loop-native)) / max(abs(native)); descriptive",
+        "memory_while_retained": {
+          "rss_bytes": 7014727680,
+          "process_peak_bytes": 7038189568,
+          "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+        }
+      },
+      "controls_unexecuted": [
+        "hook-site off-by-one",
+        "entry-transform omission"
+      ],
+      "interpretation": "native bf16 versus promoted fp32 includes block rounding, not only RoPE"
+    },
+    {
+      "tokens": 1400,
+      "normal": {
+        "status": "measured",
+        "by_layer": {
+          "0": {
+            "max_abs": 0.0,
+            "native_max_abs": 29.25,
+            "max_norm_relative": 0.0
+          },
+          "1": {
+            "max_abs": 48.5595703125,
+            "native_max_abs": 13120.0,
+            "max_norm_relative": 0.0037011867616234756
+          },
+          "2": {
+            "max_abs": 49.224609375,
+            "native_max_abs": 14592.0,
+            "max_norm_relative": 0.003373397024054276
+          },
+          "3": {
+            "max_abs": 106.326171875,
+            "native_max_abs": 19968.0,
+            "max_norm_relative": 0.005324828319060497
+          },
+          "4": {
+            "max_abs": 112.595703125,
+            "native_max_abs": 25088.0,
+            "max_norm_relative": 0.004488030258490115
+          },
+          "5": {
+            "max_abs": 196.9375,
+            "native_max_abs": 51200.0,
+            "max_norm_relative": 0.003846435546875
+          },
+          "6": {
+            "max_abs": 293.65625,
+            "native_max_abs": 73216.0,
+            "max_norm_relative": 0.004010820722246503
+          },
+          "7": {
+            "max_abs": 301.794921875,
+            "native_max_abs": 88576.0,
+            "max_norm_relative": 0.003407186166399476
+          },
+          "8": {
+            "max_abs": 789.4716796875,
+            "native_max_abs": 107008.0,
+            "max_norm_relative": 0.007377688394208844
+          },
+          "9": {
+            "max_abs": 1526.001953125,
+            "native_max_abs": 118784.0,
+            "max_norm_relative": 0.012846864503005455
+          },
+          "10": {
+            "max_abs": 3670.44921875,
+            "native_max_abs": 141312.0,
+            "max_norm_relative": 0.025974080182503963
+          },
+          "11": {
+            "max_abs": 8631.45703125,
+            "native_max_abs": 155648.0,
+            "max_norm_relative": 0.0554549819544742
+          },
+          "12": {
+            "max_abs": 3172.515625,
+            "native_max_abs": 167936.0,
+            "max_norm_relative": 0.018891218231945502
+          },
+          "13": {
+            "max_abs": 2983.80859375,
+            "native_max_abs": 188416.0,
+            "max_norm_relative": 0.015836280325184696
+          },
+          "14": {
+            "max_abs": 4454.609375,
+            "native_max_abs": 209920.0,
+            "max_norm_relative": 0.021220509598894818
+          },
+          "15": {
+            "max_abs": 2548.6875,
+            "native_max_abs": 235520.0,
+            "max_norm_relative": 0.010821533203125
+          },
+          "16": {
+            "max_abs": 3011.15234375,
+            "native_max_abs": 242688.0,
+            "max_norm_relative": 0.012407504053558479
+          },
+          "17": {
+            "max_abs": 3906.134765625,
+            "native_max_abs": 246784.0,
+            "max_norm_relative": 0.01582815241516873
+          },
+          "18": {
+            "max_abs": 3251.541015625,
+            "native_max_abs": 262144.0,
+            "max_norm_relative": 0.012403644621372223
+          },
+          "19": {
+            "max_abs": 5279.591796875,
+            "native_max_abs": 266240.0,
+            "max_norm_relative": 0.01983019755436824
+          },
+          "20": {
+            "max_abs": 4381.83984375,
+            "native_max_abs": 268288.0,
+            "max_norm_relative": 0.01633259722294698
+          },
+          "21": {
+            "max_abs": 3400.8671875,
+            "native_max_abs": 268288.0,
+            "max_norm_relative": 0.012676180774018964
+          },
+          "22": {
+            "max_abs": 5578.203125,
+            "native_max_abs": 270336.0,
+            "max_norm_relative": 0.02063433329264323
+          },
+          "23": {
+            "max_abs": 6651.15625,
+            "native_max_abs": 274432.0,
+            "max_norm_relative": 0.024236081251457556
+          },
+          "24": {
+            "max_abs": 4638.626953125,
+            "native_max_abs": 282624.0,
+            "max_norm_relative": 0.016412714253301205
+          },
+          "25": {
+            "max_abs": 5139.5859375,
+            "native_max_abs": 282624.0,
+            "max_norm_relative": 0.01818524236264436
+          },
+          "26": {
+            "max_abs": 5663.14453125,
+            "native_max_abs": 286720.0,
+            "max_norm_relative": 0.019751480647495816
+          },
+          "27": {
+            "max_abs": 5532.05859375,
+            "native_max_abs": 286720.0,
+            "max_norm_relative": 0.019294289180210658
+          },
+          "28": {
+            "max_abs": 5942.79296875,
+            "native_max_abs": 288768.0,
+            "max_norm_relative": 0.02057981829271249
+          },
+          "29": {
+            "max_abs": 6109.46484375,
+            "native_max_abs": 290816.0,
+            "max_norm_relative": 0.021008007962938766
+          },
+          "30": {
+            "max_abs": 6097.5,
+            "native_max_abs": 294912.0,
+            "max_norm_relative": 0.0206756591796875
+          },
+          "31": {
+            "max_abs": 5064.4453125,
+            "native_max_abs": 296960.0,
+            "max_norm_relative": 0.017054301294787178
+          },
+          "32": {
+            "max_abs": 3883.6640625,
+            "native_max_abs": 240640.0,
+            "max_norm_relative": 0.016138896536319815
+          },
+          "33": {
+            "max_abs": 4068.3203125,
+            "native_max_abs": 212992.0,
+            "max_norm_relative": 0.01910081276526818
+          },
+          "34": {
+            "max_abs": 10459.0,
+            "native_max_abs": 151552.0,
+            "max_norm_relative": 0.06901261613175676
+          }
+        },
+        "retained_residual_bytes": 752640000,
+        "relative_definition": "max(abs(loop-native)) / max(abs(native)); descriptive",
+        "memory_while_retained": {
+          "rss_bytes": 3798827008,
+          "process_peak_bytes": 7308066816,
+          "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+        }
+      },
+      "rotary_rounding": {
+        "status": "measured",
+        "by_attention_kind": {
+          "sliding_attention": {
+            "max_abs": 0.001953125,
+            "observed_dtypes": [
+              "torch.bfloat16",
+              "torch.bfloat16"
+            ]
+          },
+          "full_attention": {
+            "max_abs": 0.001953125,
+            "observed_dtypes": [
+              "torch.bfloat16",
+              "torch.bfloat16"
+            ]
+          }
+        },
+        "max_abs": 0.001953125,
+        "basis": "same model rotary module and positions; fp32 output versus native tables"
+      },
+      "mask_dispatch_control": {
+        "status": "measured",
+        "by_layer": {
+          "0": {
+            "max_abs": 0.0,
+            "native_max_abs": 29.25,
+            "max_norm_relative": 0.0
+          },
+          "1": {
+            "max_abs": 273.77557373046875,
+            "native_max_abs": 13120.0,
+            "max_norm_relative": 0.02086704068067597
+          },
+          "2": {
+            "max_abs": 366.98797607421875,
+            "native_max_abs": 14592.0,
+            "max_norm_relative": 0.02514994353578802
+          },
+          "3": {
+            "max_abs": 808.16015625,
+            "native_max_abs": 19968.0,
+            "max_norm_relative": 0.040472764235276446
+          },
+          "4": {
+            "max_abs": 1133.2283935546875,
+            "native_max_abs": 25088.0,
+            "max_norm_relative": 0.045170136860438755
+          },
+          "5": {
+            "max_abs": 1606.5384521484375,
+            "native_max_abs": 51200.0,
+            "max_norm_relative": 0.03137770414352417
+          },
+          "6": {
+            "max_abs": 1916.978759765625,
+            "native_max_abs": 73216.0,
+            "max_norm_relative": 0.026182511469700954
+          },
+          "7": {
+            "max_abs": 9350.5068359375,
+            "native_max_abs": 88576.0,
+            "max_norm_relative": 0.10556478996497358
+          },
+          "8": {
+            "max_abs": 12962.2607421875,
+            "native_max_abs": 107008.0,
+            "max_norm_relative": 0.12113356704346871
+          },
+          "9": {
+            "max_abs": 13064.3515625,
+            "native_max_abs": 118784.0,
+            "max_norm_relative": 0.1099841019202923
+          },
+          "10": {
+            "max_abs": 24070.263671875,
+            "native_max_abs": 141312.0,
+            "max_norm_relative": 0.1703341801961263
+          },
+          "11": {
+            "max_abs": 9173.169921875,
+            "native_max_abs": 155648.0,
+            "max_norm_relative": 0.058935353630467466
+          },
+          "12": {
+            "max_abs": 9047.67578125,
+            "native_max_abs": 167936.0,
+            "max_norm_relative": 0.053875737073944836
+          },
+          "13": {
+            "max_abs": 9242.5888671875,
+            "native_max_abs": 188416.0,
+            "max_norm_relative": 0.04905416136202605
+          },
+          "14": {
+            "max_abs": 11606.6982421875,
+            "native_max_abs": 209920.0,
+            "max_norm_relative": 0.055291054888469415
+          },
+          "15": {
+            "max_abs": 8581.388671875,
+            "native_max_abs": 235520.0,
+            "max_norm_relative": 0.03643592336903448
+          },
+          "16": {
+            "max_abs": 10242.28515625,
+            "native_max_abs": 242688.0,
+            "max_norm_relative": 0.042203508851900384
+          },
+          "17": {
+            "max_abs": 11873.806640625,
+            "native_max_abs": 246784.0,
+            "max_norm_relative": 0.048114167209482785
+          },
+          "18": {
+            "max_abs": 10911.91015625,
+            "native_max_abs": 262144.0,
+            "max_norm_relative": 0.04162563383579254
+          },
+          "19": {
+            "max_abs": 12523.1328125,
+            "native_max_abs": 266240.0,
+            "max_norm_relative": 0.04703700725848858
+          },
+          "20": {
+            "max_abs": 10164.2421875,
+            "native_max_abs": 268288.0,
+            "max_norm_relative": 0.037885563974162095
+          },
+          "21": {
+            "max_abs": 8648.236328125,
+            "native_max_abs": 268288.0,
+            "max_norm_relative": 0.032234898050322786
+          },
+          "22": {
+            "max_abs": 10007.826171875,
+            "native_max_abs": 270336.0,
+            "max_norm_relative": 0.03701995358322606
+          },
+          "23": {
+            "max_abs": 10155.494140625,
+            "native_max_abs": 274432.0,
+            "max_norm_relative": 0.037005502786209336
+          },
+          "24": {
+            "max_abs": 11050.78515625,
+            "native_max_abs": 282624.0,
+            "max_norm_relative": 0.039100660794023155
+          },
+          "25": {
+            "max_abs": 11965.8828125,
+            "native_max_abs": 282624.0,
+            "max_norm_relative": 0.04233852331189142
+          },
+          "26": {
+            "max_abs": 12936.169921875,
+            "native_max_abs": 286720.0,
+            "max_norm_relative": 0.04511778014046805
+          },
+          "27": {
+            "max_abs": 14050.35546875,
+            "native_max_abs": 286720.0,
+            "max_norm_relative": 0.04900375093732561
+          },
+          "28": {
+            "max_abs": 13532.61328125,
+            "native_max_abs": 288768.0,
+            "max_norm_relative": 0.046863271835002496
+          },
+          "29": {
+            "max_abs": 20016.01953125,
+            "native_max_abs": 290816.0,
+            "max_norm_relative": 0.06882709180805045
+          },
+          "30": {
+            "max_abs": 19016.9453125,
+            "native_max_abs": 294912.0,
+            "max_norm_relative": 0.06448345714145237
+          },
+          "31": {
+            "max_abs": 22596.78125,
+            "native_max_abs": 296960.0,
+            "max_norm_relative": 0.0760936868601832
+          },
+          "32": {
+            "max_abs": 17967.56640625,
+            "native_max_abs": 240640.0,
+            "max_norm_relative": 0.07466575135575965
+          },
+          "33": {
+            "max_abs": 32862.5625,
+            "native_max_abs": 212992.0,
+            "max_norm_relative": 0.15429012592022234
+          },
+          "34": {
+            "max_abs": 81783.2265625,
+            "native_max_abs": 151552.0,
+            "max_norm_relative": 0.5396380553374419
+          }
+        },
+        "retained_residual_bytes": 752640000,
+        "relative_definition": "max(abs(loop-native)) / max(abs(native)); descriptive",
+        "memory_while_retained": {
+          "rss_bytes": 7083556864,
+          "process_peak_bytes": 7772422144,
+          "peak_basis": "fresh-process lifetime high-water mark; CPU counter cannot reset"
+        }
+      },
+      "controls_unexecuted": [
+        "hook-site off-by-one",
+        "entry-transform omission"
+      ],
+      "interpretation": "native bf16 versus promoted fp32 includes block rounding, not only RoPE"
+    }
+  ],
+  "cuda": "unexecuted",
+  "window": {
+    "seat": "codex-ws-a",
+    "holder_pid": 77000,
+    "holder_state": "running",
+    "path": "/Users/daniel.tipton/Desktop/An app/outputs/.box-window.json",
+    "purpose": "WS-A CPU bf16 calibration retry02: batch 1, 64/1400 tokens, projected 9.8 GiB, R47 cap 10.656 GiB; no MLX or CUDA"
+  },
+  "runtime": {
+    "python": "3.13.7",
+    "platform": "Darwin 25.6.0 arm64",
+    "mlx": "0.32.2",
+    "torch": "2.14.0",
+    "transformers": "5.16.1",
+    "pinned": {
+      "seed": 0,
+      "deterministic": true,
+      "attn_implementation": "eager"
+    },
+    "determinism": "pinned",
+    "backend": "torch",
+    "device": "cpu",
+    "cuda_available": false,
+    "device_count": 0,
+    "device_names": [],
+    "deterministic_algorithms": true,
+    "cudnn_deterministic": true,
+    "cudnn_benchmark": false,
+    "tf32_matmul": false,
+    "tf32_cudnn": false,
+    "float32_matmul_precision": "highest",
+    "threads": 1,
+    "CUBLAS_WORKSPACE_CONFIG": ":4096:8"
+  },
+  "resolved_arch_source": "/Users/daniel.tipton/worktrees/cuda-torch-seam/src/local_llm_lab/arch_torch.py",
+  "tokens": {
+    "path": "/Users/daniel.tipton/worktrees/cuda-torch-seam/research/records/CUDA-WS-A-2026-09-09/calibration-token-ids.json",
+    "sha256": "e1f3cc8c46841d1bfad56cb84dbd242783e0e7334ed7d5c3beea60b509394bb0",
+    "selection": "first 64 and first 1400 supplied IDs; no padding or resampling"
+  },
+  "checkpoint": {
+    "path": "/Users/daniel.tipton/Desktop/An app/.cache/huggingface/hub/models--google--gemma-3-4b-it/snapshots/093f9f388b31de276ce2de164bdc2081324b9767",
+    "sha256": {
+      "config.json": "9059f680f4dbd1957f35cb44b9fdd6948f4792db7a7a35ee353ea42e68adf7ff",
+      "model-00001-of-00002.safetensors": "eb5fd5e97ddd07b56778733e9653c07312529cb00980a318fc3e1c4e3b5a8f1f",
+      "model-00002-of-00002.safetensors": "fdde0e5aa5ced0fa203b3d50f4ab78168b7e3a3e08c6349f5cc9326666e1bb13"
+    },
+    "text_bf16_bytes": 7760526336
+  },
+  "loading": {
+    "key_mapping": {
+      "^language_model\\.": ""
+    },
+    "loading_info": {
+      "missing_keys": [],
+      "unexpected_keys": [
+        "multi_modal_projector.mm_input_projection_weight",
+        "multi_modal_projector.mm_soft_emb_norm.weight",
+        "vision_tower.vision_model.embeddings.patch_embedding.bias",
+        "vision_tower.vision_model.embeddings.patch_embedding.weight",
+        "vision_tower.vision_model.embeddings.position_embedding.weight",
+        "vision_tower.vision_model.encoder.layers.0.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.0.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.0.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.0.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.0.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.0.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.0.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.0.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.0.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.0.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.0.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.0.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.0.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.0.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.0.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.0.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.1.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.1.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.1.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.1.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.1.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.1.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.1.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.1.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.1.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.1.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.1.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.1.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.1.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.1.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.1.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.1.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.10.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.10.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.10.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.10.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.10.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.10.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.10.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.10.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.10.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.10.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.10.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.10.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.10.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.10.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.10.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.10.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.11.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.11.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.11.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.11.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.11.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.11.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.11.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.11.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.11.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.11.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.11.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.11.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.11.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.11.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.11.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.11.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.12.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.12.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.12.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.12.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.12.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.12.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.12.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.12.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.12.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.12.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.12.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.12.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.12.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.12.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.12.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.12.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.13.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.13.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.13.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.13.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.13.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.13.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.13.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.13.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.13.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.13.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.13.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.13.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.13.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.13.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.13.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.13.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.14.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.14.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.14.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.14.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.14.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.14.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.14.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.14.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.14.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.14.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.14.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.14.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.14.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.14.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.14.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.14.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.15.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.15.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.15.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.15.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.15.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.15.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.15.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.15.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.15.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.15.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.15.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.15.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.15.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.15.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.15.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.15.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.16.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.16.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.16.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.16.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.16.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.16.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.16.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.16.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.16.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.16.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.16.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.16.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.16.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.16.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.16.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.16.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.17.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.17.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.17.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.17.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.17.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.17.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.17.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.17.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.17.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.17.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.17.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.17.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.17.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.17.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.17.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.17.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.18.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.18.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.18.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.18.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.18.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.18.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.18.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.18.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.18.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.18.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.18.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.18.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.18.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.18.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.18.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.18.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.19.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.19.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.19.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.19.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.19.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.19.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.19.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.19.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.19.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.19.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.19.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.19.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.19.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.19.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.19.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.19.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.2.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.2.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.2.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.2.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.2.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.2.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.2.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.2.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.2.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.2.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.2.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.2.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.2.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.2.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.2.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.2.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.20.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.20.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.20.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.20.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.20.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.20.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.20.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.20.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.20.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.20.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.20.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.20.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.20.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.20.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.20.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.20.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.21.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.21.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.21.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.21.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.21.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.21.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.21.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.21.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.21.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.21.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.21.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.21.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.21.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.21.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.21.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.21.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.22.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.22.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.22.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.22.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.22.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.22.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.22.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.22.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.22.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.22.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.22.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.22.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.22.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.22.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.22.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.22.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.23.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.23.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.23.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.23.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.23.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.23.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.23.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.23.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.23.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.23.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.23.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.23.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.23.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.23.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.23.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.23.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.24.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.24.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.24.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.24.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.24.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.24.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.24.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.24.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.24.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.24.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.24.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.24.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.24.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.24.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.24.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.24.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.25.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.25.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.25.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.25.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.25.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.25.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.25.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.25.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.25.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.25.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.25.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.25.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.25.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.25.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.25.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.25.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.26.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.26.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.26.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.26.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.26.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.26.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.26.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.26.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.26.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.26.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.26.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.26.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.26.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.26.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.26.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.26.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.3.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.3.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.3.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.3.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.3.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.3.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.3.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.3.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.3.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.3.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.3.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.3.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.3.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.3.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.3.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.3.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.4.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.4.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.4.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.4.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.4.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.4.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.4.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.4.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.4.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.4.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.4.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.4.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.4.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.4.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.4.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.4.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.5.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.5.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.5.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.5.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.5.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.5.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.5.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.5.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.5.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.5.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.5.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.5.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.5.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.5.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.5.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.5.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.6.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.6.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.6.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.6.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.6.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.6.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.6.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.6.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.6.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.6.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.6.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.6.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.6.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.6.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.6.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.6.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.7.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.7.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.7.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.7.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.7.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.7.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.7.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.7.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.7.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.7.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.7.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.7.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.7.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.7.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.7.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.7.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.8.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.8.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.8.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.8.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.8.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.8.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.8.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.8.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.8.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.8.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.8.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.8.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.8.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.8.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.8.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.8.self_attn.v_proj.weight",
+        "vision_tower.vision_model.encoder.layers.9.layer_norm1.bias",
+        "vision_tower.vision_model.encoder.layers.9.layer_norm1.weight",
+        "vision_tower.vision_model.encoder.layers.9.layer_norm2.bias",
+        "vision_tower.vision_model.encoder.layers.9.layer_norm2.weight",
+        "vision_tower.vision_model.encoder.layers.9.mlp.fc1.bias",
+        "vision_tower.vision_model.encoder.layers.9.mlp.fc1.weight",
+        "vision_tower.vision_model.encoder.layers.9.mlp.fc2.bias",
+        "vision_tower.vision_model.encoder.layers.9.mlp.fc2.weight",
+        "vision_tower.vision_model.encoder.layers.9.self_attn.k_proj.bias",
+        "vision_tower.vision_model.encoder.layers.9.self_attn.k_proj.weight",
+        "vision_tower.vision_model.encoder.layers.9.self_attn.out_proj.bias",
+        "vision_tower.vision_model.encoder.layers.9.self_attn.out_proj.weight",
+        "vision_tower.vision_model.encoder.layers.9.self_attn.q_proj.bias",
+        "vision_tower.vision_model.encoder.layers.9.self_attn.q_proj.weight",
+        "vision_tower.vision_model.encoder.layers.9.self_attn.v_proj.bias",
+        "vision_tower.vision_model.encoder.layers.9.self_attn.v_proj.weight",
+        "vision_tower.vision_model.post_layernorm.bias",
+        "vision_tower.vision_model.post_layernorm.weight"
+      ],
+      "mismatched_keys": [],
+      "error_msgs": []
+    },
+    "checkpoint_text_tensors": 444,
+    "model_state_tensors": 445,
+    "tied_keys": {
+      "lm_head.weight": "model.embed_tokens.weight"
+    }
+  },
+  "status": "calibrated; acceptance incomplete",
+  "elapsed_seconds": 1785.2026199579996
+}
