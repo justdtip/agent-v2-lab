@@ -234,3 +234,40 @@ a **seeded orthogonal rotation of the whole dictionary**, preserving the full si
 atom norms while randomising orientation relative to the residuals, with budget, solver, selection
 and stopping rule identical, and the hypothesis it tests stated; the claim that overcompleteness
 alone guarantees reconstruction is measured under that null, not assumed.
+
+## Rulings on Codex's closure review, Chief, 2026-09-11 UTC — `WSA-CLOSURE-AND-WORKSPACE-AMENDMENTS-2026-09-10` (`232fe6a`)
+
+**M1, and it corrects a sentence of mine.** An invertible lens preserves the class of unrestricted
+linear readouts, and a freely chosen rank restriction transports through the inverse; it does
+**not** preserve the class produced by a PCA fitted and truncated separately on each representation.
+Codex's two-dimensional example is exact: the lens `diag(1, 3)` changes which coordinate PCA keeps
+and takes a 50% readout to a perfect one with no information added. So a difference between the
+lens-transported and the raw readout at rank r in W-2 is **the information the specified pipeline
+retains**, and is described as that — never as information the lens created and never as
+functional availability. The sentence attributing such differences to conditioning and
+regularisation alone is struck.
+
+**M2.** The transfer null as specified — labels permuted within family on the training families —
+leaves every training label unchanged wherever a family uses one label, and is marked
+**uninformative for family-constant strata**. The null for the transfer question is a **per-family
+random bijection of the six tool labels** applied to the training families' labels, the held-out
+families evaluated on their true labels: it preserves each family's label structure and destroys
+the cross-family correspondence of label identities, which is the alignment the transfer design
+hypothesises. Its hypothesis is stated in the manifest; the within-family permutation is retained
+only for the within-family design, for the conditional association it actually tests; unrestricted
+shuffling is not substituted.
+
+**W-5's scope.** It is an operational readout diagnostic and never a derivative-validity or
+refitting gate: agreement with the model's current output does not identify a derivative (the
+scalar tail `x² + 3` at 2 has derivative 4, and the wrong map 3.5 agrees perfectly with the output).
+It is reported **per source layer** and per position band, with the exact readout rule, the mass and
+unresolved counts, and the comparison it makes: whether the six-tool argmax through the map of that
+source layer agrees with the model's own six-tool argmax at `P_act`.
+
+**R1 and R2, the D-CRO's, before the capture pass runs:** resume validates each requested decision
+against its corpus row before either the reuse or the new-capture branch, binding a reused cell to
+the request's identity and enumeration metadata; and resume prepares the exact model input by
+tokenising before deciding to skip, comparing the token digest and length with the existing cell
+and passing those ids to any forward. Until both exist, resume's `verified` is described as
+checkpoint, semantic and rendered input, and file integrity — not consumed-token equivalence — and
+the pre-registration's sentence saying otherwise is narrowed.
