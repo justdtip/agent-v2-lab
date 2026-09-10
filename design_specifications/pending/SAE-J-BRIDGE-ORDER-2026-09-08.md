@@ -674,3 +674,42 @@ their measured terms, and the domain-of-validity statement for readings beyond p
 example files for the chosen dictionaries, fetched to the card; and the runs (A1 through the new lenses with a
 corrupted-layer control, A2 on the 4B captures, then the 12B). Stage B remains conditional on real A2 evidence
 under the sealed rotation control above.
+
+## Review of T1–T4, Chief, 2026-09-10 (~11:15Z) — `e5898e0`, `6ae9648`, `434bb55`, `c73f4e2` on `codex/sae-j-bridge-admission`
+
+Read: `device_lens_admission.py`, the loader and bridge diffs, the runner's structure and its capture admission, the
+handoff record. Executed on the laptop: the admission, runner, bridge, intervention and live-lens suites (157
+collected, all passing; the large real-artefact test deselected as Codex did; worktree untouched). Executed on the
+card's CPU against the real artefacts, from a copy of the branch's source under `/workspace/chief/saej-admit/`:
+
+- **The real 4B fit admits and loads correctly.** `admit_device_lens` on `out/lens4b-f32` (source archive
+  56c7b49e…, the one the 4B capture recorded) wrote an admitted archive (1c8d2bd7…) and its sidecar; the real
+  `LensMaps.load` returns layers 1 … 33 of 34, every admitted matrix at repository layer k equal to the fit's
+  `J{k}` (no shift), `apply` at 24 equal to `x·J24ᵀ`, and the final layer the identity — the T1 acceptance on
+  the actual instrument, not a fixture.
+- **The new merger reproduces the as-run 12B merge to the bit.** Re-merging c1/c2/c3 into a new directory gives an
+  archive with sha256 e7942f1d6a73…, identical to `out/lens12b-f32/exact-maps.npz` in all 47 matrices, now with
+  the `nu.json` the record promised (chunk declarations, populations 70/70/61, weights 70/201, 70/201, 61/201,
+  widths 16/16/8 as ordered lists). That identity is what lets the 12B capture, whose `loaded` event recorded
+  e7942f1d…, be paired with an admitted lens at all. The re-merged directory then admitted (rc 0) against the 12B
+  checkpoint's hash manifest.
+
+**One finding, provenance, before merge (F1).** The new merger is committed at the record's as-run script path,
+`research/records/WORKSPACE-EXPERIMENTS-2026-09-10/scripts/merge_chunks.py`. On `cuda-migration` that path did not
+exist; on main it holds the script that produced the 12B archive (5c39d626e129, in Provenance). A merge into main
+would overwrite an as-run record script with its successor. Ruled: the new entry point moves to
+`scripts/merge_device_lens_chunks.py` (the admission module already holds the logic), the record's script stays
+as run, and the record's Provenance gains one line naming the successor and the bitwise identity above. Also
+note, not a defect: the admitted artefacts of this review live in a scratch directory on the card; the canonical
+admissions are to be produced by the merged code beside the originals (`out/lens4b-f32/admitted-maps.npz`,
+`out/lens12b-f32-remerged/…`), and the record will cite those.
+
+**Verdict.** T1–T4 accepted; after F1, merge in Codex's order (`e5898e0`, `6ae9648`, `434bb55`, `c73f4e2`) into
+`cuda-migration` and then into main. T2's identity endpoint, T3's two named errors with an explicit budget and no
+admitting default, and T4's admission-before-numerics with a dry run are as ordered. What the Chief now supplies,
+in this order: the positions file for the 4B capture (cells at P_note and P_act, the capture-file hashes, the
+corpus and tokenizer digests, the domain-of-validity statement for positions beyond 126 with the measured
+band figures from W-5); the pairing registrations for the 4B (fit width 32, capture width 1) and the 12B
+(16/16/8 against 1) with their measured terms; the shipped-token example files fetched to the card; then A1
+through both admitted lenses with the corrupted-layer control, and A2 on the 4B capture, on the card after the
+12B W-3b pass.
