@@ -105,9 +105,9 @@ CLAIMS: tuple[tuple[str, str, str, object, str], ...] = (
      r"18,018 positions\*\*, against the 15,776 assumed"),
     # The precondition the whole comparison rests on, pinned to the artefacts that will be read.
     ("identical ids across the two models", "both", "identical_token_ids", 7629,
-     r"identical at \*\*7,629 of 7,629 decisions\*\*"),
+     r"\*\*identical at 7,629 of 7,629 decisions\*\*"),
     ("identical read position", "both", "identical_read_position", 7629,
-     r"read position is identical at\s*$|position is identical at"),
+     r"read position is identical at"),
     ("12B peak reserved", "both", "peak_reserved_gib_12b", 26.453,
      r"\| 12B \| 2\.674 GiB \| \*\*2\.7 GB\*\* \| 42\.2 min \| 331\.6 \(shared\) \| 26\.45"),
     # The cross-fitting folds. The digest is what the seal fixes, so it is pinned to the line that
