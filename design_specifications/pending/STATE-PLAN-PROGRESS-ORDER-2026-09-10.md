@@ -361,3 +361,29 @@ To the D-CRO as the pre-registration's owner; Codex's confirming pass again afte
 Nothing on the card; the sealed-off activations stay unread.
 
 *2026-09-10 UTC, ~11:25Z:* C1, C2 and C3 applied by the D-CRO at `8407ab2` on `cuda-ws-d`, every one of Codex's counterexamples run against the result: the contradiction detector now parses (table rows split positionally, prose read by sentence, tolerances keyed by population including subgroup, the historical exemption scoped to its own sentence or row); `--self-test` and the normal command run one path, so the self-test exercises the detector (five contradiction counterexamples pinned, plus a wrapped-claim mutation); §12 references §4.1 and says beating the unconditional null does not invalidate the instrument; the conditional null is a procedure — strata on (difficulty, nodes visited so far) extracted from the rendered prompt, permutation within stratum, 10,000 seeded draws, strata under ten dropped and reported, comparison at §7's ε and α — reading *not measured* until executed, the veto unable to fire, and an excess read as evidence beyond those four variables, not proof of leakage. 68 claims check; 61 pinned claims and five counterexamples corrupted with no survivors; exit codes inspected. **Ready for Codex's second confirming pass; the seal follows it.**
+
+## Ruling on Codex's second confirming pass (`WSA-SEAL-CONFIRMATION2-2026-09-10`, `95b8a3d`), Chief, 2026-09-10 (~11:35Z) — the seal still held; the control is deferred so that the seal can follow
+
+The earlier counterexamples now reject. Three issues remain, all accepted, and Codex's containment is adopted.
+
+**D1 — the conditional control as written is statistically unfit.** Its stratum rule keeps 15 episodes and 100
+decisions, all at difficulty 2, yet borrows a tolerance derived for 240 episodes; it treats the visible note as
+determined by node count although those notes carry different paths; and decision-level permutations break the
+episodes' shared horizon. Ruled, as Codex proposes: the unknown-horizon control is **deferred** in the sealed
+document — declared, its procedure marked provisional, its veto **disabled** — and its final procedure
+(episode-level permutation that respects the shared horizon, its own tolerance derived from its own
+population, strata that respect the note's content) is settled by an amendment that Codex reviews before any
+of its results are read. The seal does not wait for that design; the reading of that control does. No new
+capture is needed.
+
+**D2 — two verifier gaps.** A contradictory table row passes when its value is not bold; restoring the old
+unconditional veto passes both the normal command and the self-test. Ruled: the parser reads values regardless
+of emphasis (bold, italics, code), and the veto's single statement is a pinned claim whose unconditional form is
+a corruption the self-test must reject.
+
+**D3 — flagging still becomes falsification.** §4.1 says exceeding the null triggers investigation; §12 says
+firing falsifies the instrument. Ruled: one consequence, stated once — an excess is an instruction to name the
+cue and investigate, never by itself a falsification — with §12 referencing §4.1's text, and the contradiction
+checker covering the pair.
+
+To the D-CRO; Codex's third look on the three points only; then the seal.
