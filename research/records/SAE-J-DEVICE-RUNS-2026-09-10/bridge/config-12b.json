@@ -1,0 +1,56 @@
+{
+ "schema_version": 1,
+ "model_base": "google/gemma-3-12b-it",
+ "capture_model": "12b",
+ "checkpoint_sha256": {
+  "config.json": "39172c4124d3470341bbbb25f2926fd97edf68f0fe3a9fa4cde6acb9b7ed2cc6",
+  "model-00001-of-00005.safetensors": "4847447e92599833e8dbaa3067cd201c3bb5c052efa91f11ba891e43234f7832",
+  "model-00002-of-00005.safetensors": "891bd54eed03cba9ee1e705533a02a8217fcc29f356e4a1f53e5fd0d178883ad",
+  "model-00003-of-00005.safetensors": "7cee411d9d57324e50ce064a192cc5a858276d508611b12fc599e0c9767112e0",
+  "model-00004-of-00005.safetensors": "8bc75a29a730c9e743cad013feda3b0991a913fafe787c58a1c6e20afad97723",
+  "model-00005-of-00005.safetensors": "ed14bd4908c98fed9f61e8cd410167e0846de9abd78e0452ab092072e5d9252d"
+ },
+ "lens_sha256": "49001ae6c5505e5b036bcab4288bd4611bbe6a99c305f8a9b15c83408ea9f626",
+ "dictionary_repo": "google/gemma-scope-2-12b-it",
+ "dictionary_folder": "resid_post_all/layer_23_width_16k_l0_small",
+ "error_budget": {
+  "raw_reconstruction_threshold": 0.5,
+  "lens_score_error_threshold": 0.5,
+  "denominator_floor": 1e-06,
+  "near_zero_policy": "refuse"
+ },
+ "a1": {
+  "k": 10,
+  "chunk": 256,
+  "control_layer": 3,
+  "check_features": [
+   61,
+   403,
+   1452,
+   1694,
+   7616,
+   9546,
+   13022,
+   16363
+  ],
+  "two_product_tolerance": 0.001,
+  "maximum_control_overlap": 0.5,
+  "convention_threshold": 0.5
+ },
+ "a2": {
+  "k": 10,
+  "identity_tolerance": 0.001
+ },
+ "declared_basis": {
+  "declared": "Chief, 2026-09-10, before the device A1/A2 runs; every threshold is a refusal condition, none admits by default",
+  "k": "10, the laptop A1's k (SAE-J-BRIDGE-2026-09-09), so overlaps compare with that record",
+  "chunk": "256 features per score chunk, the laptop A1's chunk; memory only, no effect on values",
+  "control_layer": "a strong control from the laptop control curve (overlap@10 with the hooked layer: 0.047 at layer 2 for the 4B); for the 12B the analogous early layer 3; that curve was measured with the hosted bf16 lens and is the declared basis, not a prediction for the float32 device lens",
+  "maximum_control_overlap": "0.5: the laptop curve shows a neighbouring layer shares 0.7-0.8 of top-10 sets, so a control sharing half or more is not a control; 0.5 sits below the neighbour band and far above the strong-control values",
+  "check_features": "the laptop A1's eight named features, indices carried over unchanged to the 12B dictionary as arbitrary indices; the two-products check is a numerical identity, not a semantic choice",
+  "two_product_tolerance": "1e-3 absolute on scores of order 1-40 (laptop top-10 scores 0.26-37.8): float32 chunked accumulation differs at ~1e-5, an orientation error at order 1",
+  "convention_threshold": "0.5, the second amendment's table (laptop: raw arm 0.245, gain arm 0.995)",
+  "error_budget": "raw_reconstruction_threshold 0.5 and lens_score_error_threshold 0.5: a decomposition that leaves half the residual, or half the score, unexplained is not read as a description of the site; denominator_floor 1e-6 against float32 zeros; near-zero refuses. These are refusal lines for out-of-domain agent transcripts whose reconstruction error no one has measured; the run reports the shares whatever they are",
+  "a2.identity_tolerance": "1e-3 relative on the emitted token's score: the identity L h = L b + sum z_i L d_i + L e holds to float32 rounding (~1e-6) when the orientation is right and fails at order 1 when it is wrong"
+ }
+}
