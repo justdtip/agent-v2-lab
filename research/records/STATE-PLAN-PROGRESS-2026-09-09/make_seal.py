@@ -15,7 +15,6 @@ import argparse
 import hashlib
 import json
 import re
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -25,6 +24,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[2] / "src"))
 
 import check_prereg  # noqa: E402
+from local_llm_lab import spawn  # noqa: E402
 import folds as folds_module  # noqa: E402
 from local_llm_lab.pipeline.state_programme.tolerances import required_n  # noqa: E402
 
@@ -106,11 +106,11 @@ def recompute_folds(directory: Path) -> dict:
 
 def blob_at(directory: Path, commit: str, name: str) -> str | None:
     """The digest of one sealed file as that commit has it, so a later commit cannot move it."""
-    rel = subprocess.run(["git", "-C", str(directory), "ls-files", "--full-name", name],
+    rel = spawn.run(["git", "-C", str(directory), "ls-files", "--full-name", name],
                          capture_output=True, text=True, check=True).stdout.strip()
     if not rel:
         return None
-    shown = subprocess.run(["git", "-C", str(directory), "show", f"{commit}:{rel}"],
+    shown = spawn.run(["git", "-C", str(directory), "show", f"{commit}:{rel}"],
                            capture_output=True, check=False)
     if shown.returncode != 0:
         return None
@@ -170,10 +170,10 @@ def build(directory: Path, baseline: str | None = None) -> tuple[dict, list[str]
         if row["n"] < recomputed:
             refusals.append(f"{row['name']}: declared ε {row['epsilon_declared']} is unmet at n = {row['n']}")
 
-    commit = subprocess.run(
+    commit = spawn.run(
         ["git", "-C", str(directory), "rev-parse", "HEAD"],
         capture_output=True, text=True, check=True).stdout.strip()
-    dirty = subprocess.run(
+    dirty = spawn.run(
         ["git", "-C", str(directory), "status", "--porcelain", "--", "."],
         capture_output=True, text=True, check=True).stdout.strip()
     if dirty:
@@ -182,7 +182,7 @@ def build(directory: Path, baseline: str | None = None) -> tuple[dict, list[str]
     if baseline:
         # Resolve to the full object name, so the seal's own digest does not depend on how many
         # characters of the commit someone typed on the command line.
-        resolved = subprocess.run(["git", "-C", str(directory), "rev-parse", "--verify", f"{baseline}^{{commit}}"],
+        resolved = spawn.run(["git", "-C", str(directory), "rev-parse", "--verify", f"{baseline}^{{commit}}"],
                                   capture_output=True, text=True)
         if resolved.returncode != 0:
             raise Refused(f"{baseline!r} does not name a commit in this repository")
