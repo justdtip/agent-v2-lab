@@ -330,3 +330,30 @@ Overnight 2026-09-10/11 (22:04Z–02:20Z), on Daniel's fetch authorisation. What
 | 65k small / medium / big (`resid_post`, L18 only) | 0.089 / 0.62 / 6.9 / 21 / 178 · 0.073 / 0.51 / 6.8 / 69 / 470 · 0.068 / 0.49 / 7.2 / 181 / 526 | | | |
 
 **Reading, on the shares.** *Width at fixed sparsity does nothing*: 262k against 16k at about twenty active features leaves the raw share, the lens-score share and the ratio where they were, at every layer of both models, in and out of domain. *Sparsity buys a little reconstruction*: five to seven times more active features lower the raw share by a tenth to a fifth (4B layer 24: 0.123 → 0.100; 65k at layer 18: 0.064 → 0.055 → 0.050 from small to medium to big) and the lens-score share with it, which is why the 65k-medium and 65k-big runs cross the 0.5 line and rank most action cells — a threshold effect, not a change of kind. *The ratio does not move at all*: 8–11 at 4B layer 18, 5 at layer 24, 11–13 at 12B layer 24, 3.3 at 12B layer 47, whatever the dictionary. That is what §4.3 predicts: the ratio is the readout's gain on the error direction relative to the activation, and every one of these dictionaries leaves an error in the same, less-amplified, part of the space. Whether the wider or denser dictionaries preserve *behaviour* better on the close decisions where §4.2 found the 16k-small reconstruction changing calls is the question the shares cannot answer; the substitution and complete-call tests are running on the lowest-margin sample at layer 18 with the 65k-big, 262k-small and 65k-small dictionaries, and the suite-matched 16k ladder follows, so that suite, width and density are read on behaviour.
+
+### 5.1 The suite-matched 16k ladder, so suite is not read as width
+
+The 65k dictionaries come from the `resid_post` suite; §5's other rows are the all-layer `resid_post_all` suite. The same 16k ladder from `resid_post` at 4B block 17 separates the two (600 cells, the same thresholds; A1 passes on all three: convention 0.27–0.32 raw against 1.00 gain, two products to 4 × 10⁻⁶, the layer-2 control at 0.00):
+
+| `resid_post` 16k at 4B layer 18 | P_note | P_act | in domain (L18) |
+|---|---:|---:|---:|
+| small | 0.065 / 0.70 / 10.8 / 15 / 0 | 0.068 / 0.61 / 9.0 / 18 / 0 | 0.091 / 0.62 / 6.7 / 20 / 168 |
+| medium | 0.057 / 0.57 / 10.1 / 59 / 1 | 0.059 / 0.48 / 8.1 / 59 / 180 | 0.074 / 0.54 / 7.1 / 67 / 383 |
+| big | 0.063 / 0.84 / 13.2 / 130 / 0 | 0.065 / 0.60 / 9.2 / 139 / 1 | 0.080 / 0.61 / 7.5 / 184 / 178 |
+
+At matched width and sparsity the two suites agree to a few thousandths on the raw share (0.068 against 0.070 at the action position) and on the ratio (9.0 against 8.4). Suite is not what the 65k rows measure.
+
+### 5.2 Width and sparsity read on behaviour, not on shares
+
+The shares cannot say whether a wider or denser dictionary preserves what the model does. The substitution and complete-call tests of §4.1–§4.2 were therefore repeated on the 32 lowest-margin action decisions at layer 18 — the only cells where any reconstruction changed a call — with each dictionary in turn ([bridge/width/](bridge/width/)). The same-state arm reproduces every baseline call in every run.
+
+| dictionary | active | raw share | first-token flips | calls changed | random calls changed | angle-matched | KL, median |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 16k small, all-layer suite (the §3–§4 dictionary) | 20 | 0.072 | 9 of 32 | 9 of 32 | 15 of 128 | 13 of 128 | 1.1e-03 |
+| 65k small, `resid_post` suite | 16 | 0.067 | 2 of 32 | 2 of 32 | 19 of 128 | 21 of 128 | 1.3e-03 |
+| 65k big, `resid_post` suite | 132 | 0.056 | 3 of 32 | 3 of 32 | 18 of 128 | 17 of 128 | 4.1e-04 |
+| 262k small, all-layer suite | 20 | 0.066 | 2 of 32 | 2 of 32 | 20 of 128 | 20 of 128 | 6.2e-04 |
+
+**Every alternative dictionary changes fewer calls than the one §4 used, and the random controls are unchanged.** Nine of 32 calls change under the all-layer 16k `l0_small` dictionary; two or three under the 65k small, 65k big and 262k small dictionaries, against 15 to 20 of 128 random draws in every run. But the two that improve most are not the wide or the dense one: the 65k `l0_small` (16 active features) and the 262k `l0_small` (20 active) change two calls each, at the *same* sparsity and nearly the same raw share as the 16k that changes nine. Density (65k `l0_big`, 132 active, raw share 0.056 — the best reconstruction of the four) changes three. So on this sample behavioural robustness does not track width, sparsity, or raw reconstruction error; the four dictionaries differ in which directions they miss, not in how much they miss.
+
+**Held at the size of the sample.** 32 cells, one layer, one model, and cells chosen for small margins. Nine against two is not a difference this design can resolve — under a null that all four dictionaries change calls at the same rate the spread is within what 32 paired draws produce — so the claim is the negative one: **no ordering by width, sparsity or raw share predicts the behavioural result**, which is what the capacity explanation of §5 required and does not get. A larger low-margin sample, and the same test at layer 24 and on the 12B, would be needed to rank dictionaries behaviourally; that is a measurement this record does not make.

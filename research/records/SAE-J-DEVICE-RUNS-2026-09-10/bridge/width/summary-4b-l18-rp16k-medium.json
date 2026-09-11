@@ -1,0 +1,175 @@
+{
+ "status": "complete",
+ "stage": "both",
+ "layer": null,
+ "a1": {
+  "convention": {
+   "raw_overlap": 0.321649169921875,
+   "gain_overlap": 0.9956420898437499,
+   "threshold": 0.5,
+   "conclusion": "shipped file applies the final gain; convention settled, bridge proceeds",
+   "stop": false
+  },
+  "two_products": {
+   "features": [
+    61,
+    403,
+    1452,
+    1694,
+    7616,
+    9546,
+    13022,
+    16363
+   ],
+   "max_absolute_gap": 4.76837158203125e-06,
+   "tolerance": 0.001,
+   "top_token_membership_matches": true,
+   "passed": true
+  },
+  "negative_control": {
+   "layer": 18,
+   "other_layer": 2,
+   "k": 10,
+   "features": 8,
+   "mean_overlap": 0.0,
+   "max_overlap": 0.0,
+   "share_identical": 0.0,
+   "distinguishes": true,
+   "maximum_control_overlap": 0.5,
+   "passed": true
+  },
+  "top_scores": {
+   "n": 163840,
+   "min": 0.600236177444458,
+   "median": 4.0638298988342285,
+   "p90": 10.14660587310791,
+   "max": 85.12123107910156
+  },
+  "distinct_top1_tokens": 10332,
+  "most_common_top1_share": 0.0155029296875
+ },
+ "a2": {
+  "P_act": {
+   "cells": 300,
+   "raw_reconstruction_share": {
+    "n": 300,
+    "min": 0.052890621807127294,
+    "median": 0.058965165893914685,
+    "p90": 0.06423727680081676,
+    "max": 0.07583948436287706
+   },
+   "lens_score_error_share": {
+    "n": 300,
+    "min": 0.4013538623861499,
+    "median": 0.4832885224175697,
+    "p90": 0.5731573260202408,
+    "max": 0.6498306733638589
+   },
+   "score_share_over_raw_share": {
+    "n": 300,
+    "min": 6.502445237936554,
+    "median": 8.061445656308463,
+    "p90": 9.791637833139966,
+    "max": 11.448259417053643
+   },
+   "identity_gap": {
+    "n": 300,
+    "min": 0.0,
+    "median": 1.8189894035458565e-12,
+    "p90": 4.547473508864641e-12,
+    "max": 8.185452315956354e-12
+   },
+   "identity_gap_float32": {
+    "n": 300,
+    "min": 0.0,
+    "median": 0.0009765625,
+    "p90": 0.00244140625,
+    "max": 0.0048828125
+   },
+   "active_features": {
+    "n": 300,
+    "min": 45.0,
+    "median": 59.0,
+    "p90": 69.0,
+    "max": 79.0
+   },
+   "score": {
+    "n": 300,
+    "min": -4967.492264168533,
+    "median": -1725.521644513728,
+    "p90": 4724.2795490565095,
+    "max": 6940.034578588718
+   },
+   "raw_admissible": 300,
+   "ranked": 180,
+   "reasons": {
+    "ranked": 180,
+    "lens score error exceeds its declared threshold: the decomposition describes the dictionary's failure at this position; features are not ranked under it": 120
+   }
+  },
+  "P_note": {
+   "cells": 300,
+   "raw_reconstruction_share": {
+    "n": 300,
+    "min": 0.04836583430362795,
+    "median": 0.05706684128590249,
+    "p90": 0.05879160080677759,
+    "max": 0.0713859543543343
+   },
+   "lens_score_error_share": {
+    "n": 300,
+    "min": 0.4945566676159211,
+    "median": 0.5709758594714289,
+    "p90": 0.6244759478331489,
+    "max": 0.697191593689618
+   },
+   "score_share_over_raw_share": {
+    "n": 300,
+    "min": 8.624607487975704,
+    "median": 10.123824703521366,
+    "p90": 11.054535664597093,
+    "max": 12.813225605809022
+   },
+   "identity_gap": {
+    "n": 300,
+    "min": 0.0,
+    "median": 1.4779288903810084e-12,
+    "p90": 3.637978807091713e-12,
+    "max": 1.1141310096718371e-11
+   },
+   "identity_gap_float32": {
+    "n": 300,
+    "min": 0.0,
+    "median": 0.001220703125,
+    "p90": 0.0028076171875,
+    "max": 0.00634765625
+   },
+   "active_features": {
+    "n": 300,
+    "min": 38.0,
+    "median": 59.0,
+    "p90": 67.0,
+    "max": 77.0
+   },
+   "score": {
+    "n": 300,
+    "min": -3302.3039325463997,
+    "median": 387.5369231618619,
+    "p90": 2635.7646165479296,
+    "max": 5189.729050357059
+   },
+   "raw_admissible": 300,
+   "ranked": 1,
+   "reasons": {
+    "lens score error exceeds its declared threshold: the decomposition describes the dictionary's failure at this position; features are not ranked under it": 299,
+    "ranked": 1
+   }
+  },
+  "error_budget": {
+   "raw_reconstruction_threshold": 0.5,
+   "lens_score_error_threshold": 0.5,
+   "denominator_floor": 1e-06,
+   "near_zero_policy": "refuse"
+  }
+ }
+}
