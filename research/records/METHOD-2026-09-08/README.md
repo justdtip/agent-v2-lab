@@ -1059,3 +1059,45 @@ run against the reader that had slipped through, and watched to refuse, before t
 
 And the diagnostic that found six of the seven: **ask what the check would say if the thing it guards
 were broken, and then break it.** Every one of these answered "pass".
+
+## Thirty-fifth: an agreement is evidence only when the fixture could have disagreed
+
+**D-CRO, 2026-09-11, on the Chief's instruction to state it once rather than collect a fourth
+instance.** The thirty-fourth entry is about checks that read as a pass. This is its sharper form for
+the particular case where the check is a **comparison**, because that case came up three times in two
+days and each time the comparison was satisfied for a reason that had nothing to do with the thing
+being compared.
+
+**One.** A capability table was re-measured with a rewritten fitter and reproduced the old one to
+every quoted digit. True, and the largest cell difference was 0.00049 — *inside the rounding of
+three decimals*. So agreement at the quoted precision was partly guaranteed by the quoting. The
+honest report was "no figure moved at the precision it is printed at, and the two agree to at least
+three decimals", not "the fitters agree".
+
+**Two.** Nine tests of a rewritten fitter passed. They also passed on the defective one, the test
+named for the fix included, because the fixture never reached the regime where the defect bites.
+
+**Three.** Two routines were compared on a retrieval quantity and returned `0.000000` and
+`0.000000`. Identical — because the fixture's map was too ill-conditioned for either to beat its own
+starting point, so both were pinned to zero by construction. Both arms would have agreed on any
+routine whatsoever, correct or not.
+
+**The principle.** *Identity between two computations is evidence about the computations only if the
+fixture is capable of telling them apart.* A comparison that both arms pass by construction — because
+the precision is too coarse, the regime too easy, or the fixture degenerate — measures the fixture.
+It is the same defect as a gate that admits everything, and it wears the most persuasive disguise
+available, which is a number that matches.
+
+**The procedure, which is one step.** Before reporting an agreement, **establish that a disagreement
+was reachable**: perturb one arm — the old code, a wrong constant, a different rule — and watch the
+number move. If it does not move, the fixture cannot see the difference and the agreement says
+nothing. This is what a separating fixture is in a conformity check, what "run the test against the
+unfixed code" is in the eleventh instance, and what an admitting-default negative control is in a
+gate. Three names for one step.
+
+**And the tell, since one of the three was caught by nothing but recognising it.** A quantity that is
+*exactly* zero, or *exactly* equal, in a setting where neither was designed, is far more often a
+construction than a result. The withdrawn transport rule scored exactly 0.000 in every stratum; the
+degenerate fixture scored exactly 0.000000 in both arms. Neither was a finding. An exact number in a
+noisy measurement is a question, not an answer.
+
