@@ -27,6 +27,22 @@ checker. Verified against this seal: thirteen files matched, the baseline re-der
 passing. **No capture is read except through it.** The unknown-horizon control (§4.1) stays deferred
 with its veto disabled; its amendment is a separate reviewed item and the seal does not release it.
 
+## 0.3 Amendment 1 sealed as an addendum, 2026-09-11
+
+`addendum-1.json`, digest **def0b7e92961f4eb8a6a8634aa68eb65f6e4a0e313e0c07f3ab1a0cdf39d8dcd**,
+against baseline `1d93608` — the commit Codex read (PASS, review `6d9d714`). It amends seal
+`998b3bca…` and does not replace it; the parent must still verify or the addendum is void.
+
+It fixes seven files: the amendment, its checker, `measure_gate.py` and its `gate-table.json`,
+`read_e2.py`, the transport rule, and the rule's tests. `make_addendum.py` produced it and, as with
+the parent, recomputes rather than copies: §5's printed capability table must reproduce
+`gate-table.json` to the digit it is printed at, that table must have been measured against this seal
+and this fold assignment, the amendment must pass its own checker, and every sealed file must match
+its bytes at the baseline. All of those hold; the build reports each by name when it does not.
+
+**E2 is still *not measured*.** The addendum fixes the instrument, not a result. Next, in order: §5's
+gate, and only if it passes, the four strata of §4.2 scored once.
+
 ## 0.1 E1 read, 2026-09-10, at the pre-registered headline
 
 Read through `require_seal` against seal `998b3bca…`, fitted on the train split's 5,515 decisions and
