@@ -1,0 +1,348 @@
+"""An interactive console for extracting residual-stream vectors and injecting them back.
+
+The model is loaded once and stays resident, so a session is a conversation with a live model
+rather than a series of one-minute reloads. Vectors live in named slots, so a vector extracted from
+one prompt can be injected into another, combined with a second vector, or swept over layers and
+strengths without re-extraction.
+
+WHAT THIS IS FOR. Lindsey's *Emergent Introspective Awareness* (transformer-circuits, 2025) builds a
+concept vector from "Tell me about {word}." minus the mean over random words, injects it into the
+residual stream about two thirds of the way up, and asks the model whether it notices an intruding
+thought. This console does the mechanical part of that and leaves the experimental design to you.
+
+THE MAGNITUDE CONVENTION, WHICH IS RULED AND NOT MINE TO PICK. A *synthetic* direction is injected at
+`alpha` times the residual norm at that layer and position — the repo's existing rule for directions
+the model did not itself produce, and the same units as the paper's "strength 2". The norm is
+measured on the **clean** forward of the carrier prompt at the injection position and recorded, so
+the same alpha means the same thing across prompts and layers. A *donor difference* (`h_donor −
+h_target`) is already in the model's own units and is injected at alpha = 1 by default; the repo's
+ruling (`GEMMA3-CONFIDENCE-2026-09-08`) prefers donor differences precisely because they need no
+scale convention. `extract` gives you donor rows; `concept` gives you a synthetic direction.
+
+HOW THIS DIFFERS FROM THE STEERING PILOT, DECLARED BECAUSE IT MATTERS. `STEER-PILOT-2026-09-10` patched
+the **prefill only** and deliberately left decode untouched (`h.shape[1] > pos`). The paper's protocol
+injects from a chosen token *and continues through the assistant's response*, so this console sustains
+the injection across every decode step by default. That is a different intervention, not a port of
+the pilot's, and `sustain=false` gives you the pilot's prefill-only behaviour for comparison.
+
+LAYER INDEXING. `L` is a residual index: layer 0 is the embedding output and layer L is the residual
+**after block L-1**, which is the repo's convention throughout. The hook is installed on block L-1.
+Two thirds of the way up is L≈23 on the 34-layer 4B and L≈32 on the 48-layer 12B.
+
+    python scripts/inject_repl.py --model /path/to/snapshot --device cuda:0
+
+Commands (`help` lists them live):
+
+    gen <prompt>                              generate with no intervention
+    extract <slot> @<L> [pos=<i>] <prompt>    residual at layer L, position pos (default: last)
+    concept <slot> @<L> <word>                Lindsey's recipe: "Tell me about {word}." minus the
+                                              mean over --concept-baseline random words
+    inject <slot> @<L> [a=<alpha>] [from=<i>] [sustain=<bool>] <prompt>
+    sweep <slot> layers=<a,b,c> [a=<alpha>]  <prompt>
+    slots | drop <slot> | save <file> | load <file> | help | quit
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import random
+import shlex
+import sys
+from pathlib import Path
+
+import torch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from local_llm_lab import device as device_mod  # noqa: E402
+from local_llm_lab import hf_text  # noqa: E402
+from local_llm_lab.arch_torch import TorchArchitectureView  # noqa: E402
+from local_llm_lab.pipeline.runner import config_eos_ids, torch_greedy_stream  # noqa: E402
+
+#: The words the concept recipe subtracts, so a concept vector is a direction and not a position.
+BASELINE_WORDS = (
+    "table", "river", "pencil", "harbour", "cotton", "engine", "meadow", "marble", "lantern",
+    "compass", "biscuit", "curtain", "gravel", "kettle", "ladder", "mirror", "needle", "orchard",
+    "pillow", "quarry", "ribbon", "saddle", "thimble", "velvet", "window", "anchor", "bramble",
+    "cinder", "drawer", "ember", "fennel", "girder", "hollow", "ingot", "jasmine", "kestrel",
+    "linnet", "mantle", "nutmeg", "oyster", "parsley", "quiver", "rafter", "sorrel", "trellis",
+    "urchin", "vellum", "walnut", "yarrow", "zephyr",
+)
+
+
+class Injection:
+    """Adds a fixed direction to a block's output residual, on every forward it sees.
+
+    Sustained by default: the hook fires on the prefill and on every KV-cached decode step, because
+    the torch decode loop calls the model per step and never touches hook handles. Positions are
+    absolute over the whole sequence; the hook tracks how far the sequence has advanced rather than
+    trusting the slice it is handed, since a decode step's slice is one token wide.
+    """
+
+    def __init__(self, block, vector, *, scale: float, from_position: int, sustain: bool = True):
+        self.block, self.vector, self.scale = block, vector, scale
+        self.from_position, self.sustain = from_position, sustain
+        self.applications, self.positions_touched = 0, 0
+        self._seen = 0  # absolute position of the first row in the current slice
+        self._handle = None
+
+    def __enter__(self):
+        self._handle = self.block.register_forward_hook(self._hook)
+        return self
+
+    def __exit__(self, *_):
+        if self._handle is not None:
+            self._handle.remove()
+            self._handle = None
+        return False
+
+    def _hook(self, _module, _args, output):
+        hidden = output[0] if isinstance(output, tuple) else output
+        width = hidden.shape[1]
+        start, self._seen = self._seen, self._seen + width
+        if not self.sustain and start > 0:
+            return output  # prefill only: the pilot's convention, kept for comparison
+        first = max(self.from_position - start, 0)
+        if first >= width:
+            return output
+        delta = (self.vector * self.scale).to(hidden.dtype).to(hidden.device)
+        hidden[:, first:, :] = hidden[:, first:, :] + delta
+        self.applications += 1
+        self.positions_touched += width - first
+        return (hidden, *output[1:]) if isinstance(output, tuple) else hidden
+
+    def report(self) -> dict:
+        return {"applications": self.applications, "positions_touched": self.positions_touched,
+                "from_position": self.from_position, "sustain": self.sustain, "scale": self.scale}
+
+
+class Console:
+    def __init__(self, snapshot: Path, *, device: str, dtype: str, baseline_words: int, seed: int):
+        device_mod.pin(seed=seed)
+        self.device = device_mod.select(device)
+        print(f"loading {snapshot.name} on {self.device} in {dtype} ...", flush=True)
+        self.model, self.report = hf_text.load_text_causal_lm(
+            snapshot, dtype=dtype, attn_implementation="eager", device=self.device)
+        from transformers import AutoTokenizer
+
+        self.tokenizer = AutoTokenizer.from_pretrained(str(snapshot), local_files_only=True)
+        self.view = TorchArchitectureView.from_model(self.model)
+        self.eos = set(config_eos_ids(self.model))
+        self.slots: dict[str, dict] = {}
+        self.baseline_words = baseline_words
+        self.rng = random.Random(seed)
+        print(f"ready: {self.view.num_layers} layers, hidden {self.view.hidden_size}, "
+              f"two-thirds depth is layer {round(self.view.num_layers * 2 / 3)}", flush=True)
+
+    # -- plumbing ------------------------------------------------------------------------------
+    def render(self, prompt: str) -> list[int]:
+        """A user turn through the model's own chat template, tokenized without a second BOS."""
+        text = self.tokenizer.apply_chat_template(
+            [{"role": "user", "content": prompt}], add_generation_prompt=True, tokenize=False)
+        ids = self.tokenizer(text, add_special_tokens=False)["input_ids"]
+        bos = self.tokenizer.bos_token_id
+        if bos is not None and ids[:2] == [bos, bos]:
+            raise ValueError("double BOS: the template and the tokenizer both added one")
+        return ids
+
+    def residual_at(self, ids: list[int], layer: int, position: int | None) -> torch.Tensor:
+        """The residual after block `layer-1` at one absolute position, from a single forward."""
+        captured = {}
+
+        def hook(_m, _a, output):
+            hidden = output[0] if isinstance(output, tuple) else output
+            captured["h"] = hidden.detach()[0].float().cpu()
+
+        handle = self.view.blocks[layer - 1].register_forward_hook(hook)
+        try:
+            with torch.no_grad():
+                self.model(self.view._ids(ids))
+        finally:
+            handle.remove()
+        rows = captured["h"]
+        return rows[position if position is not None else rows.shape[0] - 1].clone()
+
+    def generate(self, ids: list[int], max_tokens: int) -> str:
+        pieces = []
+        with torch.no_grad():
+            for _token, text in torch_greedy_stream(
+                    self.model, self.view, self.tokenizer, ids, max_tokens, eos_ids=self.eos):
+                pieces.append(text)
+        return "".join(pieces)
+
+    # -- commands ------------------------------------------------------------------------------
+    def cmd_gen(self, prompt: str, max_tokens: int) -> None:
+        print(self.generate(self.render(prompt), max_tokens).strip() or "(nothing)")
+
+    def cmd_extract(self, slot: str, layer: int, position: int | None, prompt: str) -> None:
+        ids = self.render(prompt)
+        vector = self.residual_at(ids, layer, position)
+        self.slots[slot] = {"vector": vector, "layer": layer, "kind": "residual",
+                            "norm": float(vector.norm()), "prompt": prompt,
+                            "position": position if position is not None else len(ids) - 1}
+        print(f"{slot}: residual at layer {layer}, position {self.slots[slot]['position']}, "
+              f"norm {self.slots[slot]['norm']:.1f}")
+
+    def cmd_concept(self, slot: str, layer: int, word: str) -> None:
+        """The paper's recipe: the word's activation minus the mean over random words."""
+        target = self.residual_at(self.render(f"Tell me about {word}."), layer, None)
+        pool = [w for w in BASELINE_WORDS if w.lower() != word.lower()]
+        chosen = self.rng.sample(pool, min(self.baseline_words, len(pool)))
+        stack = [self.residual_at(self.render(f"Tell me about {w}."), layer, None) for w in chosen]
+        mean = torch.stack(stack).mean(dim=0)
+        vector = target - mean
+        self.slots[slot] = {"vector": vector, "layer": layer, "kind": "concept", "word": word,
+                            "norm": float(vector.norm()), "baseline_n": len(chosen),
+                            "target_norm": float(target.norm())}
+        print(f"{slot}: concept '{word}' at layer {layer}, direction norm {vector.norm():.1f} "
+              f"against a carrier norm of {target.norm():.1f} "
+              f"({vector.norm() / target.norm():.1%} of it), {len(chosen)} baseline words")
+
+    def _prepare(self, slot: str, layer: int, alpha: float, ids: list[int], from_position: int):
+        entry = self.slots[slot]
+        vector = entry["vector"]
+        if entry["kind"] == "concept":
+            # Ruled convention: a synthetic direction is scaled to alpha times the residual norm
+            # at the injection site, measured clean. The same alpha means the same thing anywhere.
+            here = float(self.residual_at(ids, layer, from_position).norm())
+            scale = alpha * here / float(vector.norm())
+            basis = f"alpha x clean residual norm {here:.1f} at layer {layer} position {from_position}"
+        else:
+            scale = alpha
+            basis = "alpha x the vector itself (already in the model's own units)"
+        return vector, scale, basis
+
+    def cmd_inject(self, slot: str, layer: int, alpha: float, from_position: int | None,
+                   sustain: bool, prompt: str, max_tokens: int) -> None:
+        if slot not in self.slots:
+            print(f"no slot '{slot}'"); return
+        ids = self.render(prompt)
+        start = from_position if from_position is not None else len(ids) - 1
+        vector, scale, basis = self._prepare(slot, layer, alpha, ids, start)
+        injection = Injection(self.view.blocks[layer - 1], vector, scale=scale,
+                              from_position=start, sustain=sustain)
+        with injection:
+            out = self.generate(ids, max_tokens)
+        print(f"[{slot} @ L{layer}, alpha {alpha}, from {start}, sustain {sustain}; {basis}]")
+        print(out.strip() or "(nothing)")
+        print(f"  -- hook fired {injection.applications} times over "
+              f"{injection.positions_touched} positions")
+
+    def cmd_sweep(self, slot: str, layers: list[int], alpha: float, prompt: str,
+                  max_tokens: int) -> None:
+        if slot not in self.slots:
+            print(f"no slot '{slot}'"); return
+        ids = self.render(prompt)
+        start = len(ids) - 1
+        for layer in layers:
+            vector, scale, _ = self._prepare(slot, layer, alpha, ids, start)
+            with Injection(self.view.blocks[layer - 1], vector, scale=scale, from_position=start):
+                out = self.generate(ids, max_tokens)
+            first = " ".join(out.split())[:150]
+            print(f"  L{layer:>3} a={alpha}: {first or '(nothing)'}")
+
+    def cmd_slots(self) -> None:
+        if not self.slots:
+            print("(no slots)"); return
+        for name, entry in sorted(self.slots.items()):
+            extra = f"word '{entry['word']}'" if entry["kind"] == "concept" else f"'{entry.get('prompt','')[:40]}'"
+            print(f"  {name:<12} {entry['kind']:<9} L{entry['layer']:<3} norm {entry['norm']:>8.1f}  {extra}")
+
+    def cmd_save(self, path: str) -> None:
+        payload = {n: {k: (v.tolist() if torch.is_tensor(v) else v) for k, v in e.items()}
+                   for n, e in self.slots.items()}
+        Path(path).write_text(json.dumps(payload))
+        print(f"wrote {len(payload)} slot(s) to {path}")
+
+    def cmd_load(self, path: str) -> None:
+        payload = json.loads(Path(path).read_text())
+        for name, entry in payload.items():
+            entry["vector"] = torch.tensor(entry["vector"])
+            self.slots[name] = entry
+        print(f"loaded {len(payload)} slot(s) from {path}")
+
+
+def parse_options(words: list[str]) -> tuple[dict, list[str]]:
+    """Split leading `key=value` options from the free text that follows."""
+    options, rest = {}, list(words)
+    while rest and "=" in rest[0] and not rest[0].startswith("@"):
+        key, _, value = rest.pop(0).partition("=")
+        options[key] = value
+    return options, rest
+
+
+def truthy(value: str) -> bool:
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def run(console: Console, max_tokens: int) -> int:
+    print("type 'help' for commands, 'quit' to leave", flush=True)
+    for line in sys.stdin:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line in {"quit", "exit"}:
+            return 0
+        try:
+            head, *rest = shlex.split(line) if line.startswith(("save", "load", "drop")) else line.split(" ", 1)
+            body = rest[0] if rest else ""
+            if head == "help":
+                print(__doc__.split("Commands")[1])
+            elif head == "slots":
+                console.cmd_slots()
+            elif head == "drop":
+                console.slots.pop(body.strip(), None); console.cmd_slots()
+            elif head == "save":
+                console.cmd_save(body.strip())
+            elif head == "load":
+                console.cmd_load(body.strip())
+            elif head == "gen":
+                console.cmd_gen(body, max_tokens)
+            elif head in {"extract", "concept", "inject", "sweep"}:
+                words = body.split()
+                slot = words.pop(0)
+                layer = None
+                if words and words[0].startswith("@"):
+                    layer = int(words.pop(0)[1:])
+                options, words = parse_options(words)
+                text = " ".join(words)
+                if head == "extract":
+                    console.cmd_extract(slot, layer, int(options["pos"]) if "pos" in options else None, text)
+                elif head == "concept":
+                    console.cmd_concept(slot, layer, text.strip())
+                elif head == "inject":
+                    console.cmd_inject(
+                        slot, layer if layer is not None else console.slots[slot]["layer"],
+                        float(options.get("a", 2.0)),
+                        int(options["from"]) if "from" in options else None,
+                        truthy(options.get("sustain", "true")), text,
+                        int(options.get("n", max_tokens)))
+                else:
+                    console.cmd_sweep(slot, [int(x) for x in options["layers"].split(",")],
+                                      float(options.get("a", 2.0)), text,
+                                      int(options.get("n", max_tokens)))
+            else:
+                print(f"unknown command '{head}' — try 'help'")
+        except Exception as exc:  # a console that dies on a typo is not a console
+            print(f"!! {type(exc).__name__}: {exc}")
+        print(flush=True)
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--model", type=Path, required=True, help="local snapshot directory")
+    parser.add_argument("--device", default=None)
+    parser.add_argument("--dtype", default="bfloat16")
+    parser.add_argument("--max-tokens", type=int, default=160)
+    parser.add_argument("--concept-baseline", type=int, default=24)
+    parser.add_argument("--seed", type=int, default=0)
+    args = parser.parse_args(argv)
+    console = Console(args.model, device=args.device, dtype=args.dtype,
+                      baseline_words=args.concept_baseline, seed=args.seed)
+    return run(console, args.max_tokens)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
