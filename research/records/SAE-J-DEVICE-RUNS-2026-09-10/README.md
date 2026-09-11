@@ -292,6 +292,34 @@ The first-token result of §4.1 carries through to the call: every first-token f
 
 **Consequence for §3.** The A2 refusals stand as what they are — the declared vocabulary-wide budget was not met — but the sentence "the readout-relevant part of these activations lives mostly in the dictionary's error term" is withdrawn as a statement about the decision: where the decision has a margin it does not change; where it is close, the reconstruction at layer 18 changes it about twice as often as a random error of the same size, and at layer 24 less often. What §3 measured, and still shows, is that the dictionaries' error is amplified by the gain-only vocabulary readout in directions that do not bear on this decision. A decision-focused fidelity measure (the review's experiment 1, running as this is written) is the instrument to add beside the budget, not in place of it.
 
+### 4.4 The whole action population, so the flip rate can be read against the margin
+
+Every behavioural number above came from cells chosen for small margins, which shows what happens in the tail and not whether the effect is confined to it. [substitution_test_v2.py](substitution_test_v2.py) was therefore run over **all 300 action cells** at both layers, two controls per cell rather than four to afford the population (08:05Z–08:24Z, 20 minutes; [bridge/subst2-4b-all.json](bridge/subst2-4b-all.json)). Margins across the population run from 1.2 to 25.3 logits with a median of 15.3.
+
+**Layer 18** (300 cells, margins 1.2 to 25.3, median 15.3)
+
+| margin band, logits | cells | reconstruction flips | random flips | angle-matched flips |
+|---|---:|---:|---:|---:|
+| 1.2 – 11.9 | 60 | 16 (27%) | 14 of 120 (11.7%) | 9 of 120 (7.5%) |
+| 11.9 – 14.1 | 60 | 1 (2%) | 2 of 120 (1.7%) | 1 of 120 (0.8%) |
+| 14.1 – 16.5 | 60 | 0 (0%) | 2 of 120 (1.7%) | 0 of 120 (0.0%) |
+| 16.5 – 18.8 | 60 | 0 (0%) | 0 of 120 (0.0%) | 0 of 120 (0.0%) |
+| 18.8 – 25.3 | 60 | 0 (0%) | 0 of 120 (0.0%) | 1 of 120 (0.8%) |
+| **all** | **300** | **17 (5.7%)** | **18 of 600 (3.0%)** | **11 of 600 (1.8%)** |
+
+**Layer 24** (300 cells, margins 1.2 to 25.3, median 15.3)
+
+| margin band, logits | cells | reconstruction flips | random flips | angle-matched flips |
+|---|---:|---:|---:|---:|
+| 1.2 – 11.9 | 60 | 0 (0%) | 8 of 120 (6.7%) | 6 of 120 (5.0%) |
+| 11.9 – 14.1 | 60 | 0 (0%) | 3 of 120 (2.5%) | 1 of 120 (0.8%) |
+| 14.1 – 16.5 | 60 | 0 (0%) | 0 of 120 (0.0%) | 1 of 120 (0.8%) |
+| 16.5 – 18.8 | 60 | 0 (0%) | 0 of 120 (0.0%) | 0 of 120 (0.0%) |
+| 18.8 – 25.3 | 60 | 0 (0%) | 0 of 120 (0.0%) | 0 of 120 (0.0%) |
+| **all** | **300** | **0 (0.0%)** | **11 of 600 (1.8%)** | **8 of 600 (1.3%)** |
+
+**The effect is confined to the lowest quintile, and only at layer 18.** Below about 12 logits the reconstruction flips 27% of decisions at layer 18 against 12% for a random error of the same norm and 8% for an angle-matched one — a little over twice the matched rate, consistent with the 9-of-32 seen on the selected tail. Above that margin it flips one cell in 240. **At layer 24 the reconstruction flips nothing in 300 cells**, while random errors of the same size flip 1.8% and angle-matched 1.3%: the dictionary's error there is not merely harmless, it is gentler than chance. That is the same ordering the saved-array controls gave for lens-score amplification, now on behaviour and on the whole population rather than on a tail.
+
 ## 5. The dictionary width and sparsity control
 
 Overnight 2026-09-10/11 (22:04Z–02:20Z), on Daniel's fetch authorisation. What the hub ships at `resid_post_all` is 16k and 262k widths at `l0_small` and `l0_big` for every layer; 65k exists only at the `resid_post` site, a different suite covering 4B blocks 9, 17, 22 and 29 (and 12B 12, 24, 31, 41), so the 65k ladder was run at 4B block 17 only and a suite-matched 16k from `resid_post` is queued so that suite is not read as width. Each dictionary went through its own admission dry-run, the runner on the same 600 cells with the same thresholds (both stages where examples ship, A2 alone for 262k which ships none), and the in-domain control on the fit prompts; driver [width_control_run.sh](width_control_run.sh), configs from [bridge_configs_width.py](bridge_configs_width.py), summaries under [bridge/width/](bridge/width/). Read as a paired comparison on identical cells: raw share / lens-score share / ratio / active features / cells ranked under the 0.5 line (the vocabulary-wide line, kept for comparability with §3; §4 says what it does and does not measure).
