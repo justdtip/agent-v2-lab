@@ -239,6 +239,13 @@ def f3_bootstrap_and_verdict() -> list[str]:
     if read_e2.governing({"low": -0.7, "high": 0.7}, wide)[2] != "paired, fit held still":
         problems.append("F3: the wider interval does not govern when it is the cheap one")
 
+    if read_e2.is_registered(read_e2.HEADLINE_FRACTION, read_e2.HEADLINE_RANK, None):
+        problems.append("F3: a stratum with no tolerance is registered at the headline coordinates")
+    if not read_e2.is_registered(read_e2.HEADLINE_FRACTION, read_e2.HEADLINE_RANK, "ε_sub"):
+        problems.append("F3: a tolerance-carrying stratum is not registered at the headline")
+    if read_e2.is_registered(read_e2.HEADLINE_FRACTION, 1, "ε_sub"):
+        problems.append("F3: an off-headline rank is registered")
+
     # The declared interval must resample within strata and refit, not hold the fit still.
     rng = np.random.default_rng(7)
     features = rng.normal(size=(24, 4)).astype(np.float32)

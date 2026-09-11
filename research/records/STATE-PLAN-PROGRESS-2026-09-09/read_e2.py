@@ -244,6 +244,15 @@ def verdict(low: float, high: float, epsilon: float) -> str:
     return "not resolvable at this n: the governing interval straddles ε"
 
 
+def is_registered(fraction: float, rank: int, tolerance_key: str | None) -> bool:
+    """A cell is registered only at the headline coordinates **and** for a stratum with a tolerance.
+
+    `ordinary_test` sits at those coordinates and carries none, so it is descriptive there too
+    (Codex recheck2 F3). Registration is a property of the estimand, not of the grid position.
+    """
+    return fraction == HEADLINE_FRACTION and rank == HEADLINE_RANK and tolerance_key is not None
+
+
 def tolerance_for(seal: dict, key: str | None) -> dict | None:
     """The stratum's tolerance, from the seal rather than from a constant here."""
     if key is None:
@@ -362,8 +371,7 @@ def read_model(name: str, directory: Path, folds: dict, seal: dict, cached: dict
             for rank in LADDER:
                 # `ordinary_test` carries no registered tolerance, so it is descriptive even at the
                 # headline coordinates (Codex F3): registered is about the estimand, not the cell.
-                registered = (fraction == HEADLINE_FRACTION and rank == HEADLINE_RANK
-                              and key is not None)
+                registered = is_registered(fraction, rank, key)
                 refit = None
                 if registered and resamples:
                     refit = refitting_bootstrap(features, subsets[label], ordinary_train, folds,
