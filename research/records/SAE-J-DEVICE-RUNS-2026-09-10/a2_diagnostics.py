@@ -92,7 +92,9 @@ for cell, h in zip(readings, residuals, strict=True):
             if corr[j] <= 0: break
             chosen.append(j); zc, _ = nnls(dictionary.w_dec[chosen].T.astype(np.float64), target.astype(np.float64), maxiter=50 * len(chosen)); resid = target - zc @ dictionary.w_dec[chosen]
         rec["raw_share_reselected_same_k"] = share(resid, h); rec["reselected_overlap_with_active"] = float(len(set(chosen) & set(S.tolist())) / S.size)
-    rec["raw_share"] = raw_share; rows.append(rec)
+    rec["raw_share"] = raw_share
+    rec = {k: (float(v) if isinstance(v, (np.floating, np.integer)) else ([float(x) for x in v] if isinstance(v, list) and v and isinstance(v[0], (np.floating, float)) else v)) for k, v in rec.items()}
+    rows.append(rec)
 def q(xs): xs = np.asarray([x for x in xs if x is not None], float); return {"n": int(xs.size), "min": float(xs.min()), "median": float(np.median(xs)), "p90": float(np.quantile(xs, .9)), "max": float(xs.max())} if xs.size else {"n": 0}
 summary = {}
 for pos in sorted({r["position"] for r in rows}):

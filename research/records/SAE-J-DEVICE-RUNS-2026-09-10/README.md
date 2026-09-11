@@ -238,4 +238,42 @@ A second review (same source, later on 2026-09-11; filed at the end of REVIEW-20
 
 **The lens map does not propagate this perturbation, and normalisation is not the reason.** Passing the lens's residual change through the exact derivative of the model's own final readout, so the normalisation responds, leaves its relative error at 1.3–1.6 at every strength (a prediction worse than predicting zero), against 0.14–0.62 for the derivative; and before any readout the cosine between `J δ` and the exact change of the final residual is −0.04 at layer 18 and 0.19–0.46 at layer 24. The averaged, fit-domain map `J` does not describe how this model carries a perturbation from these positions to its output, even though it reads the six tool logits at the action position to 0.99 agreement (W-5). Reading a state and predicting a perturbation are different uses, and the second is not licensed by the first.
 
+### 4.2 The complete call (the review's "on a small subset, the completed tool call")
+
+[call_test.py](call_test.py): the same two samples and layers, the same eleven arms per cell (baseline, same-state, reconstruction, four random, four angle-matched with the signed projection matched), but now the whole tool call is generated greedily for 48 tokens from the action position, with the patch on the prefill only as in the steering pilot, and parsed (tool, path, JSON validity); outcomes are paired against the model's own baseline call and against the expert's call from the corpus. 30 minutes, 00:46Z–01:16Z; [bridge/calltest-4b.json](bridge/calltest-4b.json). The same-state arm reproduces the baseline call text exactly in all 128 cell-layers, and every baseline call is valid JSON.
+
+| calls changed from the model's own baseline | L18, first 32 | L18, lowest-margin 32 | L24, first 32 | L24, lowest-margin 32 |
+|---|---:|---:|---:|---:|
+| baseline: tool = expert's / path = expert's | 30 / 32 | 23 / 31 | 30 / 32 | 23 / 31 |
+| **reconstruction: tool changed** (of 32) | **0** | **9** | **0** | **0** |
+| reconstruction: path changed / call text changed | 0 / 0 | 5 / 9 | 0 / 0 | 0 / 0 |
+| random, same norm: tool changed (of 128) | 2 | 15 | 0 | 16 |
+| angle-matched: tool changed (of 128) | 0 | 13 | 0 | 13 |
+| invalid JSON, any arm | 0 | 0 | 0 | 1 of 288 |
+
+The first-token result of §4.1 carries through to the call: every first-token flip is a different tool call, five of the nine at layer 18 also change the path, and no arm produces malformed JSON. At layer 18 on close decisions the reconstruction changes the call in 28% of cells against 12% for random and 10% for angle-matched errors of the same size (eight of the nine go to `list_files` from `read_file` or `search_files`; one goes from the model's own `replace_text` to the expert's `read_file`). At layer 24 the reconstruction changes no call in either sample while random errors change 12% of the low-margin ones. Where the model has a margin, nothing changes anywhere.
+
+### 4.3 The saved-array diagnostics (the review's experiments 1, 2 and 4)
+
+[a2_diagnostics.py](a2_diagnostics.py), all 600 out-of-domain cells, 16k `l0_small`, CPU, 25 minutes per layer; layer 18 in [bridge/a2diag-4b-l18.json](bridge/a2diag-4b-l18.json), layer 24 follows. Per cell: the vocabulary-wide share and the same after subtracting each score vector's vocabulary mean; the target token's relative error; the lens-score argmax and margin before and after reconstruction and the top-10 gap changes in lens-score space; eight random and eight angle-matched errors of the same norm read through the same `L`; and, with the decoder frozen, nonnegative least squares on the cell's own active set and a nonnegative greedy re-selection with the same number of atoms.
+
+| 4B layer 18 | P_note (300) | P_act (300) |
+|---|---:|---:|
+| share, vocabulary-wide / centred | 0.70 / 0.68 | 0.59 / 0.59 |
+| target token's relative error, median / p90 | 0.84 / 2.8 | 0.69 / 2.1 |
+| lens-score argmax survives reconstruction | 227 of 300 | 203 of 300 |
+| max top-10 gap change in lens-score space, over the lens-score margin, median / p90 | 3.2 / 6.9 | 6.5 / 23 |
+| **share of a random error of the same norm** (pooled median) | **1.44** | **1.23** |
+| share of an angle-matched error (pooled median) | 1.38 | 1.18 |
+| rank of the actual share among the 8 random / 8 angle-matched draws | 0 of 8 in every cell | 0 of 8 in every cell |
+| readout gain ratio (‖L x‖/‖x‖ ÷ ‖L h‖/‖h‖): actual error / random error | 11.1 / 22.5 | 8.4 / 17.5 |
+| raw share: encoder / NNLS on the same active set / greedy re-selection with the same k | 0.064 / 0.062 / 0.060 | 0.070 / 0.065 / 0.064 |
+| atoms shared between the re-selection and the active set | 50% | 46% |
+
+**Experiment 2 inverts the amplification reading.** A random direction of the same norm as the dictionary's error is amplified by the readout about twice as much as the dictionary's error is: its share is above one (the readout of the error exceeds the readout of the whole activation), and the actual error ranks lowest of all sixteen matched controls in every one of the 600 cells. The "5–11× amplification" of §3 is what this gain-only vocabulary readout does to *any* error in the residual stream; the dictionary's error sits in the less amplified half of directions. The review's second branch holds: the headline amplification described the readout's sensitivity, not an unusual property of the dictionary's error.
+
+**Experiment 1: centring is not the explanation, and lens-score space exaggerates.** Subtracting the vocabulary mean changes the share by a hundredth. But in lens-score space the reconstruction moves top-10 gaps by several times the margin and changes the lens-score argmax in a quarter to a third of cells — where §4.1 found the model's own argmax unchanged in every cell with a margin. The vocabulary-wide lens metric was not counting a common shift; it was counting movement the model does not carry to its output.
+
+**Experiment 4: the encoder is not the lever.** Refitting the coefficients on the same atoms gains half a point of raw share; choosing twenty atoms afresh gains one point with half the atoms different. The limitation is what twenty atoms of this dictionary can express, the review's third branch; that puts width back in play (§5, the width control) and the fine-tuning remedy behind it.
+
 **Consequence for §3.** The A2 refusals stand as what they are — the declared vocabulary-wide budget was not met — but the sentence "the readout-relevant part of these activations lives mostly in the dictionary's error term" is withdrawn as a statement about the decision: where the decision has a margin it does not change; where it is close, the reconstruction at layer 18 changes it about twice as often as a random error of the same size, and at layer 24 less often. What §3 measured, and still shows, is that the dictionaries' error is amplified by the gain-only vocabulary readout in directions that do not bear on this decision. A decision-focused fidelity measure (the review's experiment 1, running as this is written) is the instrument to add beside the budget, not in place of it.
