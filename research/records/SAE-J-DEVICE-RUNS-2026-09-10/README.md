@@ -255,7 +255,7 @@ The first-token result of §4.1 carries through to the call: every first-token f
 
 ### 4.3 The saved-array diagnostics (the review's experiments 1, 2 and 4)
 
-[a2_diagnostics.py](a2_diagnostics.py), all 600 out-of-domain cells, 16k `l0_small`, CPU, 25 minutes per layer; layer 18 in [bridge/a2diag-4b-l18.json](bridge/a2diag-4b-l18.json), layer 24 follows. Per cell: the vocabulary-wide share and the same after subtracting each score vector's vocabulary mean; the target token's relative error; the lens-score argmax and margin before and after reconstruction and the top-10 gap changes in lens-score space; eight random and eight angle-matched errors of the same norm read through the same `L`; and, with the decoder frozen, nonnegative least squares on the cell's own active set and a nonnegative greedy re-selection with the same number of atoms.
+[a2_diagnostics.py](a2_diagnostics.py), all 600 out-of-domain cells, 16k `l0_small`, CPU, 25 minutes per layer; layer 18 in [bridge/a2diag-4b-l18.json](bridge/a2diag-4b-l18.json), layer 24 in [bridge/a2diag-4b-l24.json](bridge/a2diag-4b-l24.json). Per cell: the vocabulary-wide share and the same after subtracting each score vector's vocabulary mean; the target token's relative error; the lens-score argmax and margin before and after reconstruction and the top-10 gap changes in lens-score space; eight random and eight angle-matched errors of the same norm read through the same `L`; and, with the decoder frozen, nonnegative least squares on the cell's own active set and a nonnegative greedy re-selection with the same number of atoms.
 
 | 4B layer 18 | P_note (300) | P_act (300) |
 |---|---:|---:|
@@ -270,7 +270,20 @@ The first-token result of §4.1 carries through to the call: every first-token f
 | raw share: encoder / NNLS on the same active set / greedy re-selection with the same k | 0.064 / 0.062 / 0.060 | 0.070 / 0.065 / 0.064 |
 | atoms shared between the re-selection and the active set | 50% | 46% |
 
-**Experiment 2 inverts the amplification reading.** A random direction of the same norm as the dictionary's error is amplified by the readout about twice as much as the dictionary's error is: its share is above one (the readout of the error exceeds the readout of the whole activation), and the actual error ranks lowest of all sixteen matched controls in every one of the 600 cells. The "5–11× amplification" of §3 is what this gain-only vocabulary readout does to *any* error in the residual stream; the dictionary's error sits in the less amplified half of directions. The review's second branch holds: the headline amplification described the readout's sensitivity, not an unusual property of the dictionary's error.
+| 4B layer 24 | P_note (300) | P_act (300) |
+|---|---:|---:|
+| share, vocabulary-wide / centred | 0.67 / 0.67 | 0.71 / 0.70 |
+| target token's relative error, median / p90 | 0.48 / 0.76 | 0.15 / 0.43 |
+| lens-score argmax survives reconstruction | 19 of 300 | 105 of 300 |
+| max top-10 gap change in lens-score space, over the lens-score margin, median / p90 | 10.4 / 64 | 11.3 / 83 |
+| **share of a random error of the same norm** (pooled median) | **1.61** | **1.66** |
+| share of an angle-matched error (pooled median) | 1.52 | 1.62 |
+| rank of the actual share among the 8 random / 8 angle-matched draws, median (max) | 0 (0) / 0 (0) | 0 (0) / 0 (0) |
+| readout gain ratio: actual error / random error | 5.5 / 13.2 | 5.4 / 12.5 |
+| raw share: encoder / NNLS on the same active set / greedy re-selection with the same k | 0.123 / 0.118 / 0.115 | 0.135 / 0.125 / 0.124 |
+| atoms shared between the re-selection and the active set | 59% | 73% |
+
+**Experiment 2 inverts the amplification reading, at both layers.** A random direction of the same norm as the dictionary's error is amplified by the readout about twice as much as the dictionary's error is: its share is above one (the readout of the error exceeds the readout of the whole activation), and the actual error ranks lowest of all sixteen matched controls in every one of the 600 cells. The "5–11× amplification" of §3 is what this gain-only vocabulary readout does to *any* error in the residual stream; the dictionary's error sits in the less amplified half of directions. The review's second branch holds: the headline amplification described the readout's sensitivity, not an unusual property of the dictionary's error.
 
 **Experiment 1: centring is not the explanation, and lens-score space exaggerates.** Subtracting the vocabulary mean changes the share by a hundredth. But in lens-score space the reconstruction moves top-10 gaps by several times the margin and changes the lens-score argmax in a quarter to a third of cells — where §4.1 found the model's own argmax unchanged in every cell with a margin. The vocabulary-wide lens metric was not counting a common shift; it was counting movement the model does not carry to its output.
 
