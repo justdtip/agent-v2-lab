@@ -146,6 +146,68 @@ def verify_document(directory: Path, seal: dict[str, Any]) -> list[str]:
     return [f"the sealed document no longer passes its checker: {f}" for f in failures]
 
 
+def require_addendum(directory: Path, *, parent: dict[str, Any], must_list: dict[str, Path]) -> dict[str, Any]:
+    """The active amendment addendum, or a refusal. Called before any estimand the amendment governs.
+
+    The circularity is real and is resolved by direction: the reader is one of the addendum's sealed
+    files, so it cannot carry the addendum's digest as a constant. Instead the addendum is written
+    **after** the reader is final, and the reader asks only that the addendum **lists this reader's
+    own current bytes** — and the rule module's — in its file table. A reader that has drifted from
+    what was sealed therefore fails to find itself, and needs no advance knowledge of any digest.
+
+    An addendum whose `<stem>-SUPERSEDED.md` marker sits beside it is void and is refused by name,
+    which is what makes marking rather than deleting safe.
+    """
+    directory = Path(directory)
+    found = sorted(directory.glob("addendum-*.json"))
+    if not found:
+        raise NotSealed(
+            f"no addendum-*.json in {directory}: the amendment's estimands are not read without the "
+            "addendum that seals its instrument"
+        )
+    active = [p for p in found if not (directory / f"{p.stem}-SUPERSEDED.md").exists()]
+    superseded = [p.name for p in found if p not in active]
+    if not active:
+        raise NotSealed(f"every addendum in {directory} is superseded: {superseded}")
+    if len(active) > 1:
+        raise NotSealed(f"{len(active)} addenda are active at once: {[p.name for p in active]}; "
+                        "which one governs is not for a reader to choose")
+    path = active[0]
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    for key in ("amends", "baseline_commit", "files"):
+        if key not in payload:
+            raise NotSealed(f"{path.name} is missing {key!r}; a partial addendum is no addendum")
+    if payload["amends"].get("sha256") != parent["verified"]["seal_sha256"]:
+        raise SealBroken(f"{path.name} amends seal {str(payload['amends'].get('sha256'))[:12]}…, "
+                         f"not the one verified here")
+
+    problems = []
+    for name, target in must_list.items():
+        listed = payload["files"].get(name)
+        if listed is None:
+            problems.append(f"{path.name} does not list {name}, so it cannot have sealed it")
+        elif listed != _sha256(target):
+            problems.append(f"{name} has changed since {path.name} sealed it")
+    root = directory.parents[2]
+    for name, listed in sorted(payload["files"].items()):
+        candidate = root / name
+        if not candidate.exists():
+            problems.append(f"{name} is gone; {path.name} fixes it at {listed[:12]}…")
+        elif _sha256(candidate) != listed:
+            problems.append(f"{name} differs from the bytes {path.name} fixes")
+    if problems:
+        raise SealBroken(f"{path.name} no longer describes this tree; {len(problems)} disagreement(s):"
+                         "\n  - " + "\n  - ".join(problems))
+
+    return {**payload, "verified": {
+        "addendum": path.name,
+        "sha256": _sha256(path),
+        "baseline_commit": payload["baseline_commit"],
+        "files": f"{len(payload['files'])} file(s) match the bytes the addendum fixes",
+        "superseded_ignored": superseded,
+    }}
+
+
 def require_seal(directory: Path, *, expected_digest: str | None = None) -> dict[str, Any]:
     """Refuse to read anything under `directory` unless the seal is present and still true.
 
@@ -184,6 +246,7 @@ def require_seal(directory: Path, *, expected_digest: str | None = None) -> dict
 
 
 __all__ = [
-    "NotSealed", "SealBroken", "SEAL_NAME", "load_seal", "require_seal", "seal_digest",
+    "NotSealed", "SealBroken", "SEAL_NAME", "load_seal", "require_addendum", "require_seal",
+    "seal_digest",
     "verify_baseline", "verify_document", "verify_files",
 ]

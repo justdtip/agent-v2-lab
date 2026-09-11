@@ -1,20 +1,25 @@
-"""E2, read through the seal: update closure as a retrieval score (§4.2, §7, §7.1).
+"""E2, read through the seal and the amendment's addendum: update closure as a retrieval score.
 
-**The transport rule is Amendment 1's**, sealed as addendum `def0b7e9…`: a rank-r supervised map to
-the successor, fitted on the fitting folds' ordinary transitions and applied `m` times for a
-transition of cost `m`. `m` is the step delta, 1 on an ordinary transition and on a contiguous
-correction, 2 where the correction crosses a step whose row was dropped; that delta is the recovery
-cost. The rule's input standardisation is internal and its output is in the untransformed residual
-space, so no normalisation of the rule enters the metric.
+**Admission.** Nothing is read until the parent seal verifies *and* an active, non-superseded
+addendum verifies against it and lists this reader's own current bytes and the rule module's. The
+reader carries no addendum digest as a constant — it is itself one of the addendum's sealed files, so
+the addendum is written after the reader is final and the reader asks only to find itself in it. The
+verified addendum's identity is recorded in the output.
 
-Everything §4.2 does fix is obeyed: the candidate set is all N decisions of the episode, the source
-included, so chance is exactly 1/N; a tie is a miss; the distance is Euclidean on native bf16
-promoted to float32 and not otherwise transformed; the transport distance is descriptive, aggregated
-within an episode and then across episodes, and enters no bound.
+**The gate gates.** §5's headline capability is computed for **both** models, at the headline depth
+and rank, **before any stratum of either model is scored**. If either model falls below 0.5 nothing
+is scored and the run refuses. A capability figure printed after a result is not a gate.
 
-The rule is fitted on **ordinary transitions of the train split only**, out of fold, using the sealed
-fold assignment (§7.1). Every one of the 553 corrective transitions is therefore out-of-sample by
-construction, which is the claim being tested: that the update rule generalises to the perturbation.
+**The rule** is Amendment 1 §2's: a rank-r supervised map to the successor, fitted out of fold on the
+sealed assignment over ordinary train transitions, applied `m` times for a transition of cost `m`.
+It lives in `transport_rule` so the addendum's builder can execute the function this reader runs.
+
+**The arithmetic is §4.2's.** The transported point is cast to float32 before the distance and the
+strict-nearest comparison, because the captured residuals are bf16 promoted to float32 *for the
+arithmetic*, and float64 and float32 do not agree near a tie — where the tie rule decides a miss.
+
+**Tolerances come from the seal**, not from constants here, and a stratum whose scored population is
+smaller than its requested one never carries the complete stratum's tolerance.
 """
 
 from __future__ import annotations
@@ -29,22 +34,42 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[2] / "src"))
+sys.path.insert(0, str(HERE))
 
 from local_llm_lab.pipeline.state_programme.decodability import (  # noqa: E402
     HEADLINE_FRACTION, HEADLINE_RANK, LADDER, layers_for,
 )
-from local_llm_lab.pipeline.state_programme.read_gate import require_seal  # noqa: E402
+from local_llm_lab.pipeline.state_programme.read_gate import (  # noqa: E402
+    require_addendum, require_seal,
+)
+from local_llm_lab.pipeline.state_programme.tolerances import (  # noqa: E402
+    paired_bootstrap_bounds, required_n,
+)
 from local_llm_lab.pipeline.state_programme.transport import fit, nearer_the_successor  # noqa: E402
-
-sys.path.insert(0, str(HERE))
 from read_e1 import load_cells, load_layers  # noqa: E402
+
+#: Amendment 1 §5's gate: the fraction the rule must clear at the headline depth and rank.
+GATE = 0.5
+#: Each stratum and the seal's tolerance row that governs it. `None` is descriptive, not an estimand.
+STRATA = (("ordinary_train", "ε_ord"),
+          ("corrective", "ε_sub"),
+          ("corrective_contiguous", "contiguous"),
+          ("corrective_across_a_gap", "across a gap"),
+          ("ordinary_test", None))
+RULE_MODULE = "src/local_llm_lab/pipeline/state_programme/transport.py"
+READER = "research/records/STATE-PLAN-PROGRESS-2026-09-09/read_e2.py"
 
 
 class Refused(RuntimeError):
     """A reading that cannot be made honestly is not made."""
 
 
-def transitions(cells: list[dict]) -> list[dict]:
+def transport_rule(fitting_sources: np.ndarray, fitting_targets: np.ndarray, max_rank: int):
+    """Amendment 1 §2's rule, in one place, so a conformity check executes what the reader runs."""
+    return fit(fitting_sources, fitting_targets, max_rank)
+
+
+def transitions(cells: list[dict], folds: dict[str, int]) -> list[dict]:
     """Consecutive captured decisions within an episode, classified as §4.2 classifies them."""
     by_task: dict[str, list[int]] = defaultdict(list)
     for row, cell in enumerate(cells):
@@ -57,6 +82,7 @@ def transitions(cells: list[dict]) -> list[dict]:
             corrective = bool(cells[target].get("recovery"))
             out.append({
                 "task_id": task, "source": source, "target": target, "m": delta,
+                "fold": folds[task],
                 "kind": "corrective" if corrective else "ordinary",
                 "subgroup": ("contiguous" if delta == 1 else "across a gap") if corrective else "ordinary",
                 "split": cells[target]["split"], "candidates": rows,
@@ -64,24 +90,18 @@ def transitions(cells: list[dict]) -> list[dict]:
     return out
 
 
-def transport_rule(fitting_sources: np.ndarray, fitting_targets: np.ndarray, max_rank: int):
-    """Amendment 1 §2's rule, in one place.
-
-    Isolated deliberately. The addendum's builder pushes a fixture through **this** function, on
-    which §2's rule and the withdrawn `x + m·d` give different answers, and refuses unless it returns
-    §2's. A reader that drifts from the sealed rule is then caught by execution and not by reading.
-    """
-    return fit(fitting_sources, fitting_targets, max_rank)
-
-
-def score(features: np.ndarray, moves: list[dict], rules: dict[str, object], rank: int) -> list[dict]:
-    """One row per transition: hit or miss, its chance level, and the transport distance."""
-    rows = []
+def score(features: np.ndarray, moves: list[dict], rules: dict, rank: int) -> tuple[list[dict], set]:
+    """One row per scored transition, and the folds this rank could not reach (F4)."""
+    rows, unreached = [], set()
     for move in moves:
         rule = rules.get(move["task_id"])
         if rule is None or rank > rule.max_rank:
+            unreached.add(move["fold"])
             continue
-        transported = rule.apply(features[move["source"]], rank=rank, times=move["m"])
+        # §4.2's declared arithmetic: float32, because the tie rule decides a miss and float64 and
+        # float32 disagree near a tie.
+        transported = np.asarray(rule.apply(features[move["source"]], rank=rank, times=move["m"]),
+                                 dtype=np.float32)
         candidates = np.array(move["candidates"])
         distances = np.linalg.norm(features[candidates] - transported, axis=1)
         best = distances.min()
@@ -89,22 +109,27 @@ def score(features: np.ndarray, moves: list[dict], rules: dict[str, object], ran
         hit = bool(len(winners) == 1 and candidates[winners[0]] == move["target"])  # a tie is a miss
         rows.append({**move, "hit": float(hit), "chance": 1.0 / len(candidates),
                      "distance": float(np.linalg.norm(features[move["target"]] - transported))})
-    return rows
+    return rows, unreached
 
 
-def tails(values: np.ndarray) -> dict:
-    """The distribution, not the centre: §7's unit is the episode and episodes differ."""
+def tails(values: np.ndarray, *, kind: str) -> dict:
+    """The distribution, not the centre. `kind` decides what the endpoint masses can honestly mean."""
     if not len(values):
         return {}
     q = np.quantile(values, [0.0, 0.05, 0.25, 0.5, 0.75, 0.95, 1.0])
-    return {"min": float(q[0]), "p05": float(q[1]), "p25": float(q[2]), "median": float(q[3]),
-            "p75": float(q[4]), "p95": float(q[5]), "max": float(q[6]),
-            "share_at_zero": float((values <= 0.0).mean()),
-            "share_at_one": float((values >= 1.0).mean())}
+    out = {"min": float(q[0]), "p05": float(q[1]), "p25": float(q[2]), "median": float(q[3]),
+           "p75": float(q[4]), "p95": float(q[5]), "max": float(q[6])}
+    if kind == "rate":  # bounded in [0, 1]; these are exact endpoint masses
+        out["share_exactly_zero"] = float((values == 0.0).mean())
+        out["share_exactly_one"] = float((values == 1.0).mean())
+    else:  # a paired contrast spans [-1, 1]; "at zero" and "at or below chance" are different things
+        out["share_at_or_below_chance"] = float((values <= 0.0).mean())
+        out["share_exactly_at_chance"] = float((values == 0.0).mean())
+    return out
 
 
 def by_episode(rows: list[dict]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """§7's unit: one bounded observation per episode, and its chance level, and its distance."""
+    """§7's unit: one bounded observation per episode, its chance level, and its distance."""
     grouped: dict[str, list[dict]] = defaultdict(list)
     for row in rows:
         grouped[row["task_id"]].append(row)
@@ -115,76 +140,150 @@ def by_episode(rows: list[dict]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return hits, chance, distance
 
 
-def read_model(name: str, directory: Path, folds: dict[str, int]) -> dict:
+def fit_out_of_fold(features: np.ndarray, ordinary_train: list[dict], folds: dict[str, int]) -> dict:
+    """Amendment 1's rule per fold, fitted on the OTHER folds' ordinary train transitions."""
+    per_fold = {}
+    for held_out in sorted(set(folds.values())):
+        used = [m for m in ordinary_train if m["fold"] != held_out]
+        sources = np.array([features[m["source"]] for m in used])
+        targets = np.array([features[m["target"]] for m in used])
+        per_fold[held_out] = transport_rule(sources, targets, max(LADDER))
+    return per_fold
+
+
+def capability(features: np.ndarray, ordinary_train: list[dict], per_fold: dict, rank: int) -> dict:
+    """§5's two-point comparison on held-out ordinary transitions. Not the retrieval score."""
+    held, requested, scored, unreached = [], 0, 0, set()
+    for held_out, rule in sorted(per_fold.items()):
+        rows = [m for m in ordinary_train if m["fold"] == held_out]
+        requested += len(rows)
+        if not rows or rank > rule.max_rank:
+            unreached.add(held_out)
+            continue
+        src = np.array([features[m["source"]] for m in rows])
+        tgt = np.array([features[m["target"]] for m in rows])
+        moved = np.asarray(rule.apply(src, rank=rank, times=1), dtype=np.float32)
+        held.append(nearer_the_successor(moved, src, tgt))
+        scored += len(rows)
+    return {"fraction": float(np.concatenate(held).mean()) if held else None,
+            "requested": requested, "scored": scored,
+            "folds_unavailable": sorted(unreached), "complete": not unreached}
+
+
+def tolerance_for(seal: dict, key: str | None) -> dict | None:
+    """The stratum's tolerance, from the seal rather than from a constant here."""
+    if key is None:
+        return None
+    rows = [r for r in seal["tolerances"]["rows"] if key in r["name"]]
+    if key == "ε_sub":  # the bare name also matches its two subgroups; take the unqualified row
+        rows = [r for r in rows if "contiguous" not in r["name"] and "across a gap" not in r["name"]]
+    if len(rows) != 1:
+        raise Refused(f"{len(rows)} tolerance rows in the seal match {key!r}")
+    row = rows[0]
+    return {"name": row["name"], "epsilon": row["epsilon_declared"],
+            "needs_n_at_least": row["needs_n_at_least"],
+            "m": seal["tolerances"]["m"], "alpha": seal["tolerances"]["alpha"],
+            "range_width": seal["tolerances"]["range_width"]}
+
+
+def evaluate(subset: list[dict], features: np.ndarray, rules: dict, rank: int,
+             tolerance: dict | None, seed: int, registered: bool) -> dict | None:
+    """One (stratum, depth, rank) cell, with its coverage, its tolerance and its bound."""
+    rows, unreached = score(features, subset, rules, rank)
+    if not rows:
+        return {"status": "unavailable", "reason": f"no transition reached rank {rank}",
+                "requested_transitions": len(subset), "scored_transitions": 0,
+                "folds_unavailable": sorted(unreached)}
+    hits, chance, distance = by_episode(rows)
+    over = hits - chance
+    complete = not unreached and len(rows) == len(subset)
+    cell = {
+        "status": "scored" if complete else "reduced population",
+        "registered": registered, "exploratory": not registered,
+        "requested_transitions": len(subset), "scored_transitions": len(rows),
+        "folds_unavailable": sorted(unreached),
+        "n_episodes": int(len(hits)),
+        "hit_rate": float(hits.mean()), "chance": float(chance.mean()),
+        "over_chance": float(over.mean()),
+        "transport_distance": float(distance.mean()),
+        "tails_over_chance": tails(over, kind="contrast"),
+        "tails_hit_rate": tails(hits, kind="rate"),
+        "per_episode_over_chance": over.tolist(),
+    }
+    low, high = paired_bootstrap_bounds(hits, chance, seed=seed)
+    cell["paired_bootstrap"] = {"low": low, "high": high}
+    if tolerance is None:
+        cell["tolerance"] = None
+        cell["reading"] = "descriptive; this stratum carries no pre-registered tolerance"
+        return cell
+    if not complete:
+        # F4: the complete stratum's tolerance does not describe a population it did not score.
+        cell["tolerance"] = {**tolerance, "applied": False}
+        cell["reading"] = ("the sealed tolerance is NOT applied: the scored population is smaller "
+                           "than the registered one, and a tolerance derived for the whole stratum "
+                           "does not govern a part of it")
+        return cell
+    needed = required_n(tolerance["m"], tolerance["epsilon"],
+                        alpha=tolerance["alpha"], range_width=tolerance["range_width"])
+    sufficient = len(hits) >= needed
+    cell["tolerance"] = {**tolerance, "applied": True, "recomputed_needs_n": needed,
+                         "episodes_sufficient": bool(sufficient)}
+    if not sufficient:
+        cell["reading"] = (f"insufficient: {len(hits)} episodes against {needed} required at "
+                           f"ε = {tolerance['epsilon']}; no verdict is read at this resolution")
+    elif abs(cell["over_chance"]) > tolerance["epsilon"]:
+        cell["reading"] = f"resolved: |{cell['over_chance']:.3f}| exceeds ε = {tolerance['epsilon']}"
+    else:
+        cell["reading"] = (f"not resolvable at this n: |{cell['over_chance']:.3f}| is within "
+                           f"ε = {tolerance['epsilon']}; this is not evidence of no effect")
+    return cell
+
+
+def load_for(name: str, directory: Path, folds: dict, fraction: float | None):
+    """Cells, features, the depth map and the transitions. `fraction` None loads all six depths."""
     cells = load_cells(directory)
     depth = int(cells[0]["layers"])
     chosen = layers_for(depth)
-    moves = transitions(cells)
+    wanted = [chosen[fraction]] if fraction is not None else sorted(chosen.values())
+    moves = transitions(cells, folds)
+    features = load_layers(directory, cells, wanted)
+    return cells, (features[:, 0, :] if fraction is not None else features), chosen, moves
+
+
+def read_model(name: str, directory: Path, folds: dict, seal: dict, cached: dict) -> dict:
+    cells, features_all, chosen, moves = load_for(name, directory, folds, None)
     ordinary_train = [m for m in moves if m["kind"] == "ordinary" and m["split"] == "train"]
     corrective = [m for m in moves if m["kind"] == "corrective"]
-    print(f"  {name}: {len(moves)} transitions, {len(ordinary_train)} ordinary in train, "
+    subsets = {
+        "ordinary_train": ordinary_train,
+        "corrective": corrective,
+        "corrective_contiguous": [m for m in corrective if m["subgroup"] == "contiguous"],
+        "corrective_across_a_gap": [m for m in corrective if m["subgroup"] == "across a gap"],
+        "ordinary_test": [m for m in moves if m["kind"] == "ordinary" and m["split"] == "test"],
+    }
+    print(f"  {name}: {len(moves)} transitions, {len(ordinary_train)} ordinary train, "
           f"{len(corrective)} corrective")
 
-    unassigned = sorted({m["task_id"] for m in moves} - set(folds))
-    if unassigned:
-        raise Refused(f"{len(unassigned)} episode(s) have no sealed fold, first {unassigned[0]}")
-
-    features_all = load_layers(directory, cells, sorted(chosen.values()))
-    strata = (("ordinary_train", ordinary_train),
-              ("corrective", corrective),
-              ("corrective_contiguous", [m for m in corrective if m["subgroup"] == "contiguous"]),
-              ("corrective_across_a_gap", [m for m in corrective if m["subgroup"] == "across a gap"]),
-              ("ordinary_test", [m for m in moves if m["kind"] == "ordinary" and m["split"] == "test"]))
-
+    seed = int(seal["seed"])
     results = []
     for position, layer in enumerate(sorted(chosen.values())):
         fraction = next(f for f, l in chosen.items() if l == layer)
         features = features_all[:, position, :]
-
-        # Amendment 1's rule, out of fold: fitted on the OTHER folds' ordinary train transitions.
-        per_fold = {}
-        capability = {}
-        for held_out in sorted(set(folds.values())):
-            used = [m for m in ordinary_train if folds[m["task_id"]] != held_out]
-            sources = np.array([features[m["source"]] for m in used])
-            targets = np.array([features[m["target"]] for m in used])
-            per_fold[held_out] = transport_rule(sources, targets, max(LADDER))
+        per_fold = cached.get(fraction) or fit_out_of_fold(features, ordinary_train, folds)
         rules = {task: per_fold[fold] for task, fold in folds.items()}
-
-        # §5's capability reference, recomputed here on this depth's own held-out ordinary rows.
-        for rank in LADDER:
-            held = []
-            for held_out in sorted(set(folds.values())):
-                rows = [m for m in ordinary_train if folds[m["task_id"]] == held_out]
-                if not rows or rank > per_fold[held_out].max_rank:
-                    continue
-                src = np.array([features[m["source"]] for m in rows])
-                tgt = np.array([features[m["target"]] for m in rows])
-                held.append(nearer_the_successor(
-                    per_fold[held_out].apply(src, rank=rank, times=1), src, tgt))
-            capability[rank] = float(np.concatenate(held).mean()) if held else None
-
-        cell = {"layer": layer, "fraction": fraction, "headline": fraction == HEADLINE_FRACTION,
-                "capability_reference": {str(r): capability[r] for r in LADDER},
-                "components_per_fold": {str(f): per_fold[f].max_rank for f in sorted(per_fold)}}
-        for label, subset in strata:
+        cell = {"layer": layer, "fraction": fraction,
+                "headline_depth": fraction == HEADLINE_FRACTION,
+                "components_per_fold": {str(f): per_fold[f].max_rank for f in sorted(per_fold)},
+                "capability_reference": {str(r): capability(features, ordinary_train, per_fold, r)
+                                         for r in LADDER}}
+        for label, key in STRATA:
             cell[label] = {}
             for rank in LADDER:
-                hits, chance, distance = by_episode(score(features, subset, rules, rank))
-                if not len(hits):
-                    cell[label][str(rank)] = None
-                    continue
-                over = hits - chance
-                cell[label][str(rank)] = {
-                    "n_episodes": int(len(hits)), "n_transitions": len(subset),
-                    "hit_rate": float(hits.mean()), "chance": float(chance.mean()),
-                    "over_chance": float(over.mean()),
-                    "transport_distance": float(distance.mean()),
-                    "tails_over_chance": tails(over), "tails_hit_rate": tails(hits),
-                    "per_episode_over_chance": over.tolist(),
-                }
+                registered = fraction == HEADLINE_FRACTION and rank == HEADLINE_RANK
+                cell[label][str(rank)] = evaluate(subsets[label], features, rules, rank,
+                                                  tolerance_for(seal, key), seed, registered)
         results.append(cell)
-    return {"model": name, "depth": depth, "layers": chosen, "cells": results}
+    return {"model": name, "depth": int(cells[0]["layers"]), "layers": chosen, "cells": results}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -195,50 +294,84 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--expect-seal")
     args = parser.parse_args(argv)
 
+    root = args.record.resolve().parents[2]
     seal = require_seal(args.record, expected_digest=args.expect_seal)
-    print("seal verified:", seal["verified"]["files"], "|", seal["verified"]["baseline"])
+    addendum = require_addendum(args.record, parent=seal, must_list={
+        READER: Path(__file__).resolve(), RULE_MODULE: root / RULE_MODULE})
+    print("seal verified:   ", seal["verified"]["files"], "|", seal["verified"]["baseline"])
+    print("addendum:        ", addendum["verified"]["addendum"], addendum["verified"]["sha256"][:16] + "…",
+          "| baseline", addendum["verified"]["baseline_commit"][:12] + "…")
+    if addendum["verified"]["superseded_ignored"]:
+        print("  superseded, ignored:", addendum["verified"]["superseded_ignored"])
+
     assignment = json.loads((args.record / "folds.json").read_text())
     if assignment["assignment_sha256"] != seal["folds"]["assignment_sha256"]:
         raise Refused("folds.json is not the assignment the seal fixes")
     folds = {task: int(fold) for task, fold in assignment["fold_of"].items()}
-    print(f"sealed folds: {len(folds)} episodes, K={assignment['folds']}, "
-          f"{assignment['assignment_sha256'][:12]}…")
 
-    results = []
-    for name in sorted(p.name for p in args.captures.iterdir() if p.is_dir()):
-        directory = args.captures / name
-        if (directory / "manifest.jsonl").exists():
-            results.append(read_model(name, directory, folds))
+    directories = {p.name: p for p in sorted(args.captures.iterdir())
+                   if p.is_dir() and (p / "manifest.jsonl").exists()}
+
+    # PHASE 1 — the gate, both models, before any stratum of either is scored (F2).
+    print(f"\n=== GATE: §5, depth {HEADLINE_FRACTION}, rank {HEADLINE_RANK}, threshold {GATE} ===")
+    gates, cached = {}, {}
+    for name, directory in directories.items():
+        cells, features, chosen, moves = load_for(name, directory, folds, HEADLINE_FRACTION)
+        ordinary_train = [m for m in moves if m["kind"] == "ordinary" and m["split"] == "train"]
+        per_fold = fit_out_of_fold(features, ordinary_train, folds)
+        result = capability(features, ordinary_train, per_fold, HEADLINE_RANK)
+        result.update({"layer": chosen[HEADLINE_FRACTION], "rank": HEADLINE_RANK,
+                       "threshold": GATE,
+                       "passes": bool(result["fraction"] is not None and result["fraction"] >= GATE)})
+        gates[name] = result
+        cached[name] = {HEADLINE_FRACTION: per_fold}
+        print(f"  {name:<24} {result['fraction']:.3f}  "
+              f"{'PASS' if result['passes'] else 'FAIL'}  "
+              f"({result['scored']}/{result['requested']} transitions"
+              f"{'' if result['complete'] else ', folds unavailable ' + str(result['folds_unavailable'])})")
+    failed = [n for n, g in gates.items() if not g["passes"]]
+    if failed:
+        raise Refused(f"§5's gate fails on {failed}; no stratum is scored on either model")
+    print("  gate passes on both models; scoring proceeds")
+
+    # PHASE 2 — the strata, once.
+    print("\n=== STRATA ===")
+    results = [read_model(name, directory, folds, seal, cached[name])
+               for name, directory in directories.items()]
 
     args.out.write_text(json.dumps({
         "seal_sha256": seal["verified"]["seal_sha256"],
-        "rule": "Amendment 1 (addendum def0b7e9): a rank-r supervised map to the successor, fitted "
-                "on the fitting folds' ordinary transitions and applied m times for cost m",
+        "addendum": addendum["verified"],
+        "rule": "Amendment 1 §2: a rank-r supervised map to the successor, fitted out of fold on "
+                "ordinary train transitions and applied m times for cost m",
+        "arithmetic": "float32 at the retrieval boundary, per §4.2",
         "headline": {"fraction": HEADLINE_FRACTION, "rank": HEADLINE_RANK},
-        "models": results}, indent=2) + "\n")
+        "gate": gates, "models": results}, indent=2) + "\n")
 
     r = str(HEADLINE_RANK)
-    print(f"\n=== HEADLINE: depth {HEADLINE_FRACTION}, rank {HEADLINE_RANK} ===")
-    print(f"{'model':<22} {'stratum':<24} {'hit':>6} {'chance':>7} {'over':>7} {'p05':>7} "
-          f"{'p50':>7} {'p95':>7} {'zero':>6} {'n':>5}")
+    print(f"\n=== HEADLINE (registered): depth {HEADLINE_FRACTION}, rank {HEADLINE_RANK} ===")
+    print(f"{'model':<22} {'stratum':<24} {'ε':>5} {'hit':>6} {'chance':>7} {'over':>7} "
+          f"{'p05':>7} {'p50':>7} {'p95':>7} {'≤chance':>8} {'n':>5}  reading")
     for model in results:
         for cell in model["cells"]:
-            if not cell["headline"]:
+            if not cell["headline_depth"]:
                 continue
-            print(f"{'':<22} capability reference at r={HEADLINE_RANK}: "
-                  f"{cell['capability_reference'][r]:.3f}  ({model['model']})")
-            for label in ("ordinary_train", "corrective", "corrective_contiguous",
-                          "corrective_across_a_gap", "ordinary_test"):
+            for label, _key in STRATA:
                 row = cell[label][r]
-                if row is None:
-                    print(f"{model['model']:<22} {label:<24} {'--':>6}")
+                if row is None or row.get("status") == "unavailable":
+                    print(f"{model['model']:<22} {label:<24} {'--':>5}")
                     continue
                 t = row["tails_over_chance"]
-                print(f"{model['model']:<22} {label:<24} {row['hit_rate']:>6.3f} "
-                      f"{row['chance']:>7.3f} {row['over_chance']:>7.3f} {t['p05']:>7.3f} "
-                      f"{t['median']:>7.3f} {t['p95']:>7.3f} {t['share_at_zero']:>6.2f} "
-                      f"{row['n_episodes']:>5}")
+                eps = row["tolerance"]["epsilon"] if row["tolerance"] else None
+                print(f"{model['model']:<22} {label:<24} "
+                      f"{(f'{eps:.2f}' if eps else '--'):>5} "
+                      f"{row['hit_rate']:>6.3f} {row['chance']:>7.3f} {row['over_chance']:>7.3f} "
+                      f"{t['p05']:>7.3f} {t['median']:>7.3f} {t['p95']:>7.3f} "
+                      f"{t['share_at_or_below_chance']:>8.2f} {row['n_episodes']:>5}  "
+                      f"{row['reading'][:46]}")
     print(f"\nwritten: {args.out}")
+    print("Everything outside the headline row is the exploratory depth/rank profile, "
+          "not a registered quantity.")
     return 0
 
 
