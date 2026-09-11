@@ -1027,5 +1027,35 @@ work. A step, in the loop, every time: reinstate the defect, watch the test go r
 Three keystrokes in a scratch copy, and it is the only thing that distinguishes a test that pins a
 fix from a test that keeps it company.
 
+**A twelfth, and it is the worst of them, because the check was a seal.** On 2026-09-11 an addendum
+was written to fix the instrument for an estimand: seven files, digested, against the commit a
+reviewer had read. Its builder verified a great deal — the parent seal still verified, the document
+passed its own checker, the printed capability table reproduced the artefact that produced it to the
+digit, that artefact had been measured against this seal and this fold assignment, and every one of
+the seven files matched its bytes at the baseline. All of it passed, and it was reported as sealed.
+
+One of the seven was the estimand's reader, and at that commit the reader still computed the rule the
+amendment existed to **replace**. It did not import the rule module at all. The seal therefore fixed,
+in one artefact, a document specifying one rule and an implementation of another. Scoring against it
+would have reproduced a number already known to be an artefact, and the seal would have recorded the
+run as conforming.
+
+**Nothing subtle defeated it.** The reader said `mean per-step displacement` in a comment, in English,
+four lines above where the builder opened the file to hash it. The Chief had read that same line the
+previous afternoon while looking for something else and had not connected it either. Two readers and
+five checks passed over a sentence that said, in plain words, that the code did the withdrawn thing.
+
+So the rule the twelfth gives back, and it is narrower and harder than "read the code": **a seal over
+code is worthless unless it executes the code.** Identity and provenance — digests, baselines,
+signatures, does-it-match-what-the-reviewer-saw — are the easy properties, and a verifier that checks
+only those certifies that the wrong thing has not changed. Meaning has to be executed. The form that
+works is a **separating fixture**: an input on which the sealed rule and the rule it replaced give
+different answers, pushed through the reader's *own* function, refusing unless it returns the sealed
+rule's answer — and refusing, too, if the fixture ever stops separating them, or the check quietly
+becomes vacuous the first time the two rules converge.
+
+That last clause is the eleventh instance applied to this one before shipping it: the new checks were
+run against the reader that had slipped through, and watched to refuse, before they were trusted.
+
 And the diagnostic that found six of the seven: **ask what the check would say if the thing it guards
 were broken, and then break it.** Every one of these answered "pass".
