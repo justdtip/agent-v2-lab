@@ -1,0 +1,288 @@
+{
+  "base_commit": "dce24012e36f437400c25f0318a52ae3a35da5ad",
+  "checks": {
+    "C1_diagnostic_failure_FloatingPointError": {
+      "certified": false,
+      "fell_back_to_full_svd": true,
+      "reason": "diagnostics unavailable: injected diagnostic failure"
+    },
+    "C1_diagnostic_failure_LinAlgError": {
+      "certified": false,
+      "fell_back_to_full_svd": true,
+      "reason": "diagnostics unavailable: injected diagnostic failure"
+    },
+    "C1_diagnostic_failure_ValueError": {
+      "certified": false,
+      "fell_back_to_full_svd": true,
+      "reason": "diagnostics unavailable: injected diagnostic failure"
+    },
+    "C1_exact_nonleading": {
+      "diagnostic": {
+        "certified": false,
+        "converged": true,
+        "gap_tolerance": 1e-06,
+        "krylov_steps": 1,
+        "reason": "global leadingness is not established by residual and projected Ritz gap",
+        "relative_residual": 0.0,
+        "residual_tolerance": 1e-10,
+        "ritz_gap": 1.0
+      },
+      "diagnostic_sigma": 1.0,
+      "matrix_unchanged": true,
+      "public_array_equal": true,
+      "public_sigma": 4.242640687119285,
+      "reference_calls": 1,
+      "reference_sigma": 4.242640687119285
+    },
+    "C1_finite_cross_overflow_in_diagnostic_falls_back": {
+      "certified": false,
+      "fell_back_to_full_svd": true,
+      "reason": "diagnostics unavailable: invalid value encountered in divide"
+    },
+    "C1_near_degenerate": {
+      "diagnostic": {
+        "certified": false,
+        "converged": true,
+        "gap_tolerance": 1e-06,
+        "krylov_steps": 1,
+        "reason": "global leadingness is not established by residual and projected Ritz gap",
+        "relative_residual": 1.570092458683775e-16,
+        "residual_tolerance": 1e-10,
+        "ritz_gap": 1.0
+      },
+      "diagnostic_sigma": 1.4142135623730951,
+      "matrix_unchanged": true,
+      "public_array_equal": true,
+      "public_sigma": 1.4142135765152306,
+      "reference_calls": 1,
+      "reference_sigma": 1.4142135765152306
+    },
+    "C1_nonfinite_reference_refuses": true,
+    "C1_nonleading": {
+      "diagnostic": {
+        "certified": false,
+        "converged": true,
+        "gap_tolerance": 1e-06,
+        "krylov_steps": 1,
+        "reason": "global leadingness is not established by residual and projected Ritz gap",
+        "relative_residual": 1.570092458683775e-16,
+        "residual_tolerance": 1e-10,
+        "ritz_gap": 1.0
+      },
+      "diagnostic_sigma": 1.4142135623730951,
+      "matrix_unchanged": true,
+      "public_array_equal": true,
+      "public_sigma": 4.242640687119285,
+      "reference_calls": 1,
+      "reference_sigma": 4.242640687119285
+    },
+    "C1_padded64": {
+      "diagnostic": {
+        "certified": false,
+        "converged": true,
+        "gap_tolerance": 1e-06,
+        "krylov_steps": 1,
+        "reason": "global leadingness is not established by residual and projected Ritz gap",
+        "relative_residual": 1.570092458683775e-16,
+        "residual_tolerance": 1e-10,
+        "ritz_gap": 1.0
+      },
+      "diagnostic_sigma": 1.4142135623730951,
+      "matrix_unchanged": true,
+      "public_array_equal": true,
+      "public_sigma": 4.2426406871192865,
+      "reference_calls": 1,
+      "reference_sigma": 4.2426406871192865
+    },
+    "C1_rank_one": {
+      "diagnostic": {
+        "certified": false,
+        "converged": true,
+        "gap_tolerance": 1e-06,
+        "krylov_steps": 8,
+        "reason": "global leadingness is not established by residual and projected Ritz gap",
+        "relative_residual": 3.0823047853375567e-16,
+        "residual_tolerance": 1e-10,
+        "ritz_gap": 0.45666747821816783
+      },
+      "diagnostic_sigma": 203.99999999999997,
+      "matrix_unchanged": true,
+      "public_array_equal": true,
+      "public_sigma": 204.00000000000003,
+      "reference_calls": 1,
+      "reference_sigma": 204.00000000000003
+    },
+    "C1_rectangular": {
+      "diagnostic": {
+        "certified": false,
+        "converged": true,
+        "gap_tolerance": 1e-06,
+        "krylov_steps": 3,
+        "reason": "global leadingness is not established by residual and projected Ritz gap",
+        "relative_residual": 1.6788690277393318e-16,
+        "residual_tolerance": 1e-10,
+        "ritz_gap": 0.9926120718450411
+      },
+      "diagnostic_sigma": 31.742026508027077,
+      "matrix_unchanged": true,
+      "public_array_equal": true,
+      "public_sigma": 31.74202650802707,
+      "reference_calls": 1,
+      "reference_sigma": 31.74202650802707
+    },
+    "C1_repeated": {
+      "diagnostic": {
+        "certified": false,
+        "converged": false,
+        "gap_tolerance": 1e-06,
+        "krylov_steps": 8,
+        "reason": "global leadingness is not established by residual and projected Ritz gap",
+        "relative_residual": 1.4696065413279054e-13,
+        "residual_tolerance": 1e-10,
+        "ritz_gap": 1.4188650254707413e-13
+      },
+      "diagnostic_sigma": 1.0000000000000735,
+      "matrix_unchanged": true,
+      "public_array_equal": true,
+      "public_sigma": 1.0,
+      "reference_calls": 1,
+      "reference_sigma": 1.0
+    },
+    "C1_zero": {
+      "diagnostic": {
+        "certified": false,
+        "reason": "zero"
+      },
+      "diagnostic_sigma": 0.0,
+      "matrix_unchanged": true,
+      "public_array_equal": true,
+      "public_sigma": 0.0,
+      "reference_calls": 1,
+      "reference_sigma": 0.0
+    },
+    "C2_C3_fitter_identity": [
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "C2_tiny_sigma_floor",
+        "rank": 0
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "C1_full_fitter_nonleading_start",
+        "rank": 1
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "ordinary_float32_0",
+        "rank": 4
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "ordinary_float32_1",
+        "rank": 4
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "ordinary_float32_2",
+        "rank": 4
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "ordinary_float32_3",
+        "rank": 4
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "ordinary_float32_4",
+        "rank": 4
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "ordinary_float32_5",
+        "rank": 4
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "ordinary_float64_0",
+        "rank": 4
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "ordinary_float64_1",
+        "rank": 4
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "ordinary_float64_2",
+        "rank": 4
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "ordinary_float64_3",
+        "rank": 4
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "ordinary_float64_4",
+        "rank": 4
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "ordinary_float64_5",
+        "rank": 4
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "rectangular_target",
+        "rank": 3
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "constant_coordinate",
+        "rank": 4
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "constant_target",
+        "rank": 0
+      },
+      {
+        "all_retained_components_fell_back": true,
+        "array_equal_all_fields_coefficients_predictions": true,
+        "name": "rank_one_target",
+        "rank": 4
+      }
+    ],
+    "C2_static_stop_finiteness_and_deflation_order_match": true,
+    "C3_claims_revised_and_historical_speedup_withdrawn": true
+  },
+  "numpy": "2.5.2",
+  "python": "3.13.7",
+  "real_capture_reads": 0,
+  "reviewed_state": "uncommitted snapshot identified by file hashes, not base commit alone",
+  "source_sha256": {
+    "research/records/STATE-PLAN-PROGRESS-2026-09-09/AMENDMENT-2-CERTIFIED-DIRECTION.md": "76509aab11cc0d924df766a657efb3fe4e0901d0646377456d4838901087efcd",
+    "src/local_llm_lab/pipeline/state_programme/transport.py": "6e8b71351cea460991c1a7012be4023c34c81807cc4138fe6ac127201e4cc276",
+    "src/local_llm_lab/pipeline/state_programme/transport_certified.py": "5e90554a787d02626f2bacaf4e9192ce5f6c1238a0e433069375692a1b1b1d0a",
+    "tests/test_e2_review_regressions.py": "1fab8ae78f187cf27e7db4f102cab7718cf79ee9535fca6b20c964fd6603c2b2",
+    "tests/test_state_transport_certified.py": "9c5bf75ef3ab7b67d2fcd114f7a986a1a11b7f6944355c5d50f91c611b5ce111"
+  },
+  "verdict": "PASS for C1-C3 correction on reviewed bytes; no optimized bypass or execution release"
+}
