@@ -1,0 +1,186 @@
+{
+  "target": "1d936087ca944c4934c9bfec7185005f302209fa",
+  "checks": {
+    "current-tests": {
+      "exit_code": 0,
+      "argv": [
+        "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
+        "-B",
+        "/private/tmp/amendment-r5-b6dgjjo6/run.py",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "-c",
+        "/private/tmp/amendment-r5-b6dgjjo6/pytest.ini",
+        "/private/tmp/amendment-r5-b6dgjjo6/tests"
+      ],
+      "stdout": "...........................................                              [100%]\n43 passed in 1.19s\n",
+      "stderr": ""
+    },
+    "old-fitter-control": {
+      "exit_code": 1,
+      "argv": [
+        "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
+        "-B",
+        "/private/tmp/amendment-r5-b6dgjjo6/run.py",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "-c",
+        "/private/tmp/amendment-r5-b6dgjjo6/pytest.ini",
+        "/private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py"
+      ],
+      "stdout": ".FFF.FFFF......                                                          [100%]\n=================================== FAILURES ===================================\n________________ test_the_restart_witness_yields_two_components ________________\n\ncodex_witness = (2, -1)\n\n    def test_the_restart_witness_yields_two_components(codex_witness=(2, -1)):\n        \"\"\"Codex F2's discriminating fixture: successors (2x0+x1, 2x0-x1, 0), rank 2 requested. The old\n        fitter, restarting from the previous component's direction, returned rank 1; the fixed one two.\"\"\"\n        x = ORTHOGONAL_ROWS\n        y = np.stack([2 * x[:, 0] + x[:, 1], 2 * x[:, 0] - x[:, 1], np.zeros(4)], axis=1)\n        fitted = fit(x, y, 2)\n>       assert fitted.max_rank == 2\nE       assert 1 == 2\nE        +  where 1 = Transport(mean=array([0., 0., 0.]), scale=array([1., 1., 1.]), target_mean=array([0., 0., 0.]), weights=array([[1.],\\n ...ings=array([[1.],\\n       [0.],\\n       [0.]]), target_loadings=array([[2.],\\n       [2.],\\n       [0.]]), iterations=(1,)).max_rank\n\n/private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py:49: AssertionError\n__ test_a_cross_product_with_zero_row_sums_and_zero_first_column_stays_finite __\n\n    def test_a_cross_product_with_zero_row_sums_and_zero_first_column_stays_finite():\n        \"\"\"Codex F1's zero-start witness: the old start `cross @ 1` was zero and its fallback, the first\n        column, zero too, so the old fitter divided zero by zero and kept NaNs while reporting rank 1.\"\"\"\n        cross = np.array([[0.0, 1.0, -1.0], [0.0, -1.0, 1.0], [0.0, 0.0, 0.0]])\n        x, y = ORTHOGONAL_ROWS, targets_for_cross(cross)\n        fitted = fit(x, y, 2)\n>       assert np.isfinite(fitted.weights).all() and np.isfinite(fitted.coefficients(fitted.max_rank)).all()\nE       AssertionError: assert (np.False_)\nE        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x10b0a0e70>()\nE        +    where <built-in method all of numpy.ndarray object at 0x10b0a0e70> = array([[False, False],\\n       [False, False],\\n       [False, False]]).all\nE        +      where array([[False, False],\\n       [False, False],\\n       [False, False]]) = <ufunc 'isfinite'>(array([[nan, nan],\\n       [nan, nan],\\n       [nan, nan]]))\nE        +        where <ufunc 'isfinite'> = np.isfinite\nE        +        and   array([[nan, nan],\\n       [nan, nan],\\n       [nan, nan]]) = Transport(mean=array([0., 0., 0.]), scale=array([1., 1., 1.]), target_mean=array([0., 0., 0.]), weights=array([[nan, n...\\n       [nan, nan]]), target_loadings=array([[nan, nan],\\n       [nan, nan],\\n       [nan, nan]]), iterations=(200, 200)).weights\n\n/private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py:59: AssertionError\n_______ test_the_leading_direction_is_the_leading_one_not_a_fixed_point ________\n\n    def test_the_leading_direction_is_the_leading_one_not_a_fixed_point():\n        \"\"\"Codex F1's non-leading witness: X\u1d40Y = [[8,-8,0],[0,0,4],[0,0,0]]; the leading left singular\n        direction is (1,0,0) with singular value sqrt(128); the old start (0,4,0) converged to (0,1,0),\n        singular value 4, alignment exactly zero, and was certified. The SVD form returns the leading one.\"\"\"\n        cross = np.array([[8.0, -8.0, 0.0], [0.0, 0.0, 4.0], [0.0, 0.0, 0.0]])\n        x, y = ORTHOGONAL_ROWS, targets_for_cross(cross)\n        fitted = fit(x, y, 1)\n>       assert abs(float(fitted.weights[:, 0] @ np.array([1.0, 0.0, 0.0]))) == pytest.approx(1.0, abs=1e-9)\nE       assert 0.0 == 1.0 \u00b1 1.0e-09\nE         \nE         comparison failed\nE         Obtained: 0.0\nE         Expected: 1.0 \u00b1 1.0e-09\n\n/private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py:71: AssertionError\n___________________ test_the_full_rank_rule_is_least_squares ___________________\n\nrng = Generator(PCG64) at 0x10B088120\n\n    def test_the_full_rank_rule_is_least_squares(rng=np.random.default_rng(9)):\n        \"\"\"Known answer: with as many components as predictors (and targets at least as wide, since the\n        component count is bounded by the rank of X\u1d40Y) the PLS rule is the least-squares map, so its\n        prediction equals the projection of Y onto the column space of the centred X. The old fitter\n        stopped at 11 of 12 components on this fixture.\"\"\"\n        x = rng.normal(size=(120, 12))\n        y = x @ rng.normal(size=(12, 12)) + 0.1 * rng.normal(size=(120, 12))\n        fitted = fit(x, y, 12)\n>       assert fitted.max_rank == 12\nE       assert 11 == 12\nE        +  where 11 = Transport(mean=array([-0.01877231, -0.05836254,  0.08617212, -0.00537461,  0.08521007,\\n       -0.05030143, -0.00730286...81568875, -0.40411072, -0.76144484,\\n        -0.62070544]]), iterations=(37, 44, 37, 200, 40, 121, 79, 200, 21, 83, 14)).max_rank\n\n/private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py:92: AssertionError\n_________________ test_targets_narrower_than_sources_are_held __________________\n\nrng = Generator(PCG64) at 0x10B088200\n\n    def test_targets_narrower_than_sources_are_held(rng=np.random.default_rng(10)):\n        \"\"\"The target loadings are allocated at the target width; the old allocation used the source\n        width and could not hold a narrower target (a broadcast error at the first component).\"\"\"\n        x = rng.normal(size=(80, 12))\n        y = x @ rng.normal(size=(12, 6))\n>       fitted = fit(x, y, 4)\n                 ^^^^^^^^^^^^\n\n/private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py:103: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nsources = array([[-1.10333845e+00, -7.25024640e-01, -7.81805257e-01,\n         2.66975856e-01, -2.48580729e-01,  1.26483052e-01,\n...        -6.27568228e-01,  2.37775498e-01,  1.01746319e+00,\n        -1.84967159e+00, -1.00113945e+00, -3.86386350e-01]])\ntargets = array([[  0.81961497,   2.70697321,   2.20286525,  -2.66070977,\n         -2.51429248,   0.02511729],\n       [  0.55662...3,   1.53434974],\n       [ -2.9921497 ,   0.21511636,  -4.48207079,   0.34360271,\n          1.48626438,   2.36852991]])\nmax_rank = 4\n\n    def fit(sources: np.ndarray, targets: np.ndarray, max_rank: int) -> Transport:\n        \"\"\"Fit on the fitting folds' ordinary transitions alone.\"\"\"\n        mean = sources.mean(axis=0)\n        scale = sources.std(axis=0)\n        scale[scale < 1e-8] = 1.0\n        target_mean = targets.mean(axis=0)\n    \n        x = ((sources - mean) / scale).astype(np.float64)\n        y = (targets - target_mean).astype(np.float64)\n        cross = x.T @ y  # updated by rank-one terms below, never recomputed\n    \n        features = x.shape[1]\n        weights = np.zeros((features, max_rank))\n        loadings = np.zeros((features, max_rank))\n        target_loadings = np.zeros((features, max_rank))\n        iterations: list[int] = []\n    \n        start = cross @ np.ones(y.shape[1])\n        if np.linalg.norm(start) < DEFLATION_FLOOR:\n            start = cross[:, 0].copy()\n        for component in range(max_rank):\n            if np.linalg.norm(cross) < DEFLATION_FLOOR:\n                break\n            w, used = _leading_direction(cross, start)\n            t = x @ w\n            tt = float(t @ t)\n            if tt < DEFLATION_FLOOR:\n                break\n            p = (x.T @ t) / tt\n            c = (y.T @ t) / tt\n>           weights[:, component], loadings[:, component], target_loadings[:, component] = w, p, c\n                                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE           ValueError: could not broadcast input array from shape (6,) into shape (12,)\n\n/private/tmp/amendment-r5-b6dgjjo6/src/local_llm_lab/pipeline/state_programme/transport.py:106: ValueError\n________________ test_a_non_finite_input_is_refused_not_carried ________________\n\n    def test_a_non_finite_input_is_refused_not_carried():\n        x, y = ORTHOGONAL_ROWS.copy(), targets_for_cross(np.eye(3))\n        y[0, 0] = np.nan\n>       with pytest.raises(ValueError, match=\"not finite\"):\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE       Failed: DID NOT RAISE ValueError\n\n/private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py:113: Failed\n________________________ test_the_fit_is_deterministic _________________________\n\nrng = Generator(PCG64) at 0x10B0882E0\n\n    def test_the_fit_is_deterministic(rng=np.random.default_rng(1)):\n        \"\"\"No random number enters it, so two fits of one input agree bit for bit.\"\"\"\n        x, y = moving(rng)\n        a, b = fit(x, y, 8), fit(x, y, 8)\n        assert np.array_equal(a.weights, b.weights)\n>       assert a.leading_singular_values == b.leading_singular_values\n               ^^^^^^^^^^^^^^^^^^^^^^^^^\nE       AttributeError: 'Transport' object has no attribute 'leading_singular_values'\n\n/private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py:122: AttributeError\n=============================== warnings summary ===============================\ntests/test_state_transport.py::test_a_cross_product_with_zero_row_sums_and_zero_first_column_stays_finite\n  /private/tmp/amendment-r5-b6dgjjo6/src/local_llm_lab/pipeline/state_programme/transport.py:63: RuntimeWarning: invalid value encountered in divide\n    v = start / np.linalg.norm(start)\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED ../../../../private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py::test_the_restart_witness_yields_two_components\nFAILED ../../../../private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py::test_a_cross_product_with_zero_row_sums_and_zero_first_column_stays_finite\nFAILED ../../../../private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py::test_the_leading_direction_is_the_leading_one_not_a_fixed_point\nFAILED ../../../../private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py::test_the_full_rank_rule_is_least_squares\nFAILED ../../../../private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py::test_targets_narrower_than_sources_are_held\nFAILED ../../../../private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py::test_a_non_finite_input_is_refused_not_carried\nFAILED ../../../../private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py::test_the_fit_is_deterministic\n7 failed, 8 passed, 1 warning in 0.24s\n",
+      "stderr": ""
+    },
+    "check_amendment": {
+      "exit_code": 0,
+      "argv": [
+        "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
+        "-B",
+        "/Users/daniel.tipton/worktrees/cuda-ws-d/research/records/STATE-PLAN-PROGRESS-2026-09-09/check_amendment.py"
+      ],
+      "stdout": "amendment figures: clean\n",
+      "stderr": ""
+    },
+    "check_amendment-self-test": {
+      "exit_code": 0,
+      "argv": [
+        "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
+        "-B",
+        "/Users/daniel.tipton/worktrees/cuda-ws-d/research/records/STATE-PLAN-PROGRESS-2026-09-09/check_amendment.py",
+        "--self-test"
+      ],
+      "stdout": "self-test passed: planting 0.552 in \u00a77 is rejected\namendment figures: clean\n",
+      "stderr": ""
+    },
+    "check_prereg": {
+      "exit_code": 0,
+      "argv": [
+        "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
+        "-B",
+        "/Users/daniel.tipton/worktrees/cuda-ws-d/research/records/STATE-PLAN-PROGRESS-2026-09-09/check_prereg.py"
+      ],
+      "stdout": "rendered rows                    8907                                       ok\nagentic rows                     8559                                       ok\nchat replay rows                 348                                        ok\ndistinct decisions               7629                                       ok\nepisodes                         1128                                       ok\nextra rows from oversampling     930                                        ok\nrecovery decisions               578                                        ok\nduplicated twice                 490                                        ok\nduplicated six times             88                                         ok\nrepeats are identical rows       {}                                         ok\ntasks with a dropped decision    334                                        ok\ntransitions                      6501                                       ok\nordinary transitions             5948                                       ok\ncontiguous recovery transitions  244                                        ok\nrecovery across a gap            309                                        ok\ntrain ordinary transitions       4122                                       ok\ntest ordinary transitions        1541                                       ok\nvalid ordinary transitions       285                                        ok\ntest-split decisions             1781                                       ok\nexploratory episodes             12                                         ok\ncapture set digest, the triples  1a7cfbdd4e21fc203eafbcc3ec50b96afcb214c1   ok\ncapture set digest, the file     8bbc8062249ce1cc0e15050a866cd726a2c205a9   ok\nE1 evaluation episodes           240                                        ok\nE2 ordinary episodes             840                                        ok\narchive digest                   7fe6e64b89749b997854638b260d7654316636da   ok\n4B layers                        34                                         ok\n4B hidden                        2560                                       ok\n12B layers                       48                                         ok\n12B hidden                       3840                                       ok\n4B main stratum GiB              1.273                                      ok\n12B main stratum GiB             2.674                                      ok\nboth, main stratum GiB           3.947                                      ok\ntokens measured, median          1310                                       ok\ntokens measured, max             4274                                       ok\ntokens measured, min             416                                        ok\ncells captured                   7629                                       ok\nexploratory positions measured   18018                                      ok\nidentical ids across the two models 7629                                       ok\nidentical read position          7629                                       ok\nterminal chain decisions         94                                         ok\nterminal chain in test           20                                         ok\nnon-terminal without the marker  575                                        ok\n12B peak reserved                26.453                                     ok\nfold assignment digest           c5e9622f7bef663c96614a99bab7e120873ad9eb   ok\nfold seed                        20260910                                   ok\nfolds                            5                                          ok\nfold 0 size                      220                                        ok\nfold 1 size                      232                                        ok\nfold 2 size                      226                                        ok\nfold 3 size                      224                                        ok\nfold 4 size                      226                                        ok\nepisodes in the folds            1128                                       ok\neps_sub row                      6501                                       ok\ncontiguous subgroup row          244                                        ok\nacross a gap row                 309                                        ok\nthe paired range width is declared 7629                                       ok\n\nall 68 claims check out against the computed artefacts.\n  (coverage is what these claims pin, not the whole document; a section with no claim here is unchecked, not verified)\n",
+      "stderr": ""
+    },
+    "check_prereg-self-test": {
+      "exit_code": 0,
+      "argv": [
+        "/Users/daniel.tipton/Desktop/An app/.venv/bin/python",
+        "-B",
+        "/Users/daniel.tipton/worktrees/cuda-ws-d/research/records/STATE-PLAN-PROGRESS-2026-09-09/check_prereg.py",
+        "--self-test"
+      ],
+      "stdout": "self-test: 73 pinned claim(s) corrupted; 0 survived corruption\n  every pinned claim's corruption was caught by the claim that pins it.\n",
+      "stderr": ""
+    }
+  },
+  "sources": [
+    {
+      "path": "src/local_llm_lab/__init__.py",
+      "sha256": "dcbdef2e02c3757b8f9fc3ba34a5595f7f33d295cf1415ec75d07e516662f45b"
+    },
+    {
+      "path": "src/local_llm_lab/pipeline/__init__.py",
+      "sha256": "149384f3721df199454edd7f1bf4542ff00519781f565fc5ababead2c982fcdf"
+    },
+    {
+      "path": "src/local_llm_lab/pipeline/state_programme/__init__.py",
+      "sha256": "77c4be96fa594e34427e516b7be93c15267688a9567943e20b577e72b77c535b"
+    },
+    {
+      "path": "src/local_llm_lab/pipeline/state_programme/decodability.py",
+      "sha256": "291504c14d0bd41927665e3ddbf5107512ac3c6d6fea08507a7bef689cc88c08"
+    },
+    {
+      "path": "src/local_llm_lab/pipeline/state_programme/read_gate.py",
+      "sha256": "4714ba6ad2e1e3e2778169c26e19e30904a3cd5e9c9ccf8b568e8eb5421216e5"
+    },
+    {
+      "path": "src/local_llm_lab/pipeline/state_programme/transport.py",
+      "sha256": "6e8b71351cea460991c1a7012be4023c34c81807cc4138fe6ac127201e4cc276"
+    },
+    {
+      "path": "src/local_llm_lab/spawn.py",
+      "sha256": "d6dc6969a36262580bb4b77e2e6a8e167ad985a7c590a2d08fde731ba349b1a3"
+    },
+    {
+      "path": "tests/test_state_decodability.py",
+      "sha256": "c4db07a39580e18223bbd3f2b678c2f450fd8bbc80026d8e4552e71ff2e6094a"
+    },
+    {
+      "path": "tests/test_state_read_gate.py",
+      "sha256": "8df24a7e444d4fd93fc8b4dce243806018be9f855f0462eca4876d75512b7faa"
+    },
+    {
+      "path": "tests/test_state_transport.py",
+      "sha256": "73e5cdd4232a12d56e33db63d025be0b871987d850539c13b44793151fe6b7ba"
+    }
+  ],
+  "seal": {
+    "sha256": "998b3bcafa9d6aaffa21ebd43df3935b1634ba7b12fe187073837acd942ce521",
+    "m": 12,
+    "baseline": "acc130a4c2057717c462564e5f4ed5dc35fa60ed",
+    "files": {
+      "PREREGISTRATION.md": "9bc94059d40936497f499fb01c9c1b83eece813a2ec6a516ea536d6b6cd62c67",
+      "capture-budget.json": "afe560f31f874221e9c62efa522e99d1e75a3338dc6e25a4da5e444094c69155",
+      "capture-set.jsonl": "8bbc8062249ce1cc0e15050a866cd726a2c205a969f3eeab3840fcb5520cee3e",
+      "capture_budget.py": "9d18e13386d636be1e56c493e278b14b05285ffc142a7c0759d7bab677ef0dd9",
+      "carrier-ablation.json": "c79a45279c5ee587dde9b441ad79a92e694e8a5f5d45d31569d70ab40ff33adb",
+      "carrier_ablation.py": "6e9c897274a3ad4f149ab77080296fb6d46cbc419ef4cea8f120e746e9121042",
+      "check_prereg.py": "d01fea03a66a602b3e60c64d469dbfd85e6b1cbfb33e871b1552a470a1222205",
+      "corpus-count.json": "94f300e5db86e498798250a2246d7e419b67e7b692838489c40b400960fcf1ea",
+      "count_corpus.py": "51048e5d78a7c4c62d9a85400cde47d8538dff0c678d82034a4b0ecf8d6a5376",
+      "folds.json": "d9df843e95ec1ad47777d2bfb082b268ff3ed942b9c183d72205c15828837128",
+      "folds.py": "82c7b52c3da3b68d81296977f271bdabcb2b220edb6dc89c6f974fcf318abc62",
+      "prereg-inputs.json": "935a6eaca020d60c4c998eadbdd7c3577be10dc3404c0475fafe92795e30e04e",
+      "prereg_inputs.py": "f97a4b1a4fff56b82ae52ae75d5be5adc90d8898274d40dba9598f635bca4854"
+    }
+  },
+  "e1": {
+    "research/records/STATE-PLAN-PROGRESS-2026-09-09/read_e1.py": "4bf03ecc629497e9f2334f70f37d2cd70db65231035c94a6d0a3862c167c452e",
+    "research/records/STATE-PLAN-PROGRESS-2026-09-09/e1-readings.json": "ba841d7c0601b6326c621c68701852140e92e931ced570cb2ca2dd03d36f303f",
+    "research/records/STATE-PLAN-PROGRESS-2026-09-09/e1-summary.json": "9077715b30ccf5de7601ae95c75c7406ee379fac8a45772bd2cd382c3524350d",
+    "src/local_llm_lab/pipeline/state_programme/decodability.py": "291504c14d0bd41927665e3ddbf5107512ac3c6d6fea08507a7bef689cc88c08"
+  },
+  "gate_table": {
+    "seal_sha256": "998b3bcafa9d6aaffa21ebd43df3935b1634ba7b12fe187073837acd942ce521",
+    "assignment_sha256": "c5e9622f7bef663c96614a99bab7e120873ad9eb79617912526c02e48016372c",
+    "population": "ordinary transitions of the train split, out of fold",
+    "quantity": "fraction where the transported point is strictly nearer the successor than the source, one application of the rule",
+    "models": {
+      "gemma3-12b-cuda-bf16": {
+        "layer": 24,
+        "fraction": 0.5,
+        "depth": 48,
+        "n_transitions": 4122,
+        "by_rank": {
+          "1": 0.5521591460456089,
+          "2": 0.5875788452207666,
+          "4": 0.6705482775351771,
+          "8": 0.7513343037360505,
+          "16": 0.8918000970402717,
+          "32": 0.9541484716157205
+        },
+        "short_folds": []
+      },
+      "gemma3-4b-cuda-bf16": {
+        "layer": 17,
+        "fraction": 0.5,
+        "depth": 34,
+        "n_transitions": 4122,
+        "by_rank": {
+          "1": 0.5815138282387191,
+          "2": 0.5613779718583212,
+          "4": 0.7035419699175157,
+          "8": 0.7690441533236293,
+          "16": 0.9114507520621058,
+          "32": 0.9517224648229015
+        },
+        "short_folds": []
+      }
+    }
+  },
+  "limits": "No model, capture arrays, E1 rerun, or amended corrective readings executed; preserved committed bytes and producer attestations are distinguished."
+}

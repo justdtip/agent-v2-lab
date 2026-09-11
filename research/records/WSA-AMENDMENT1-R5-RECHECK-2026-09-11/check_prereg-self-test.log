@@ -1,0 +1,2 @@
+self-test: 73 pinned claim(s) corrupted; 0 survived corruption
+  every pinned claim's corruption was caught by the claim that pins it.

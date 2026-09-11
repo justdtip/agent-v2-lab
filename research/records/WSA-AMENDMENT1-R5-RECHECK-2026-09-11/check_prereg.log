@@ -1,0 +1,59 @@
+rendered rows                    8907                                       ok
+agentic rows                     8559                                       ok
+chat replay rows                 348                                        ok
+distinct decisions               7629                                       ok
+episodes                         1128                                       ok
+extra rows from oversampling     930                                        ok
+recovery decisions               578                                        ok
+duplicated twice                 490                                        ok
+duplicated six times             88                                         ok
+repeats are identical rows       {}                                         ok
+tasks with a dropped decision    334                                        ok
+transitions                      6501                                       ok
+ordinary transitions             5948                                       ok
+contiguous recovery transitions  244                                        ok
+recovery across a gap            309                                        ok
+train ordinary transitions       4122                                       ok
+test ordinary transitions        1541                                       ok
+valid ordinary transitions       285                                        ok
+test-split decisions             1781                                       ok
+exploratory episodes             12                                         ok
+capture set digest, the triples  1a7cfbdd4e21fc203eafbcc3ec50b96afcb214c1   ok
+capture set digest, the file     8bbc8062249ce1cc0e15050a866cd726a2c205a9   ok
+E1 evaluation episodes           240                                        ok
+E2 ordinary episodes             840                                        ok
+archive digest                   7fe6e64b89749b997854638b260d7654316636da   ok
+4B layers                        34                                         ok
+4B hidden                        2560                                       ok
+12B layers                       48                                         ok
+12B hidden                       3840                                       ok
+4B main stratum GiB              1.273                                      ok
+12B main stratum GiB             2.674                                      ok
+both, main stratum GiB           3.947                                      ok
+tokens measured, median          1310                                       ok
+tokens measured, max             4274                                       ok
+tokens measured, min             416                                        ok
+cells captured                   7629                                       ok
+exploratory positions measured   18018                                      ok
+identical ids across the two models 7629                                       ok
+identical read position          7629                                       ok
+terminal chain decisions         94                                         ok
+terminal chain in test           20                                         ok
+non-terminal without the marker  575                                        ok
+12B peak reserved                26.453                                     ok
+fold assignment digest           c5e9622f7bef663c96614a99bab7e120873ad9eb   ok
+fold seed                        20260910                                   ok
+folds                            5                                          ok
+fold 0 size                      220                                        ok
+fold 1 size                      232                                        ok
+fold 2 size                      226                                        ok
+fold 3 size                      224                                        ok
+fold 4 size                      226                                        ok
+episodes in the folds            1128                                       ok
+eps_sub row                      6501                                       ok
+contiguous subgroup row          244                                        ok
+across a gap row                 309                                        ok
+the paired range width is declared 7629                                       ok
+
+all 68 claims check out against the computed artefacts.
+  (coverage is what these claims pin, not the whole document; a section with no claim here is unchecked, not verified)

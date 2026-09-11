@@ -1,0 +1,168 @@
+.FFF.FFFF......                                                          [100%]
+=================================== FAILURES ===================================
+________________ test_the_restart_witness_yields_two_components ________________
+
+codex_witness = (2, -1)
+
+    def test_the_restart_witness_yields_two_components(codex_witness=(2, -1)):
+        """Codex F2's discriminating fixture: successors (2x0+x1, 2x0-x1, 0), rank 2 requested. The old
+        fitter, restarting from the previous component's direction, returned rank 1; the fixed one two."""
+        x = ORTHOGONAL_ROWS
+        y = np.stack([2 * x[:, 0] + x[:, 1], 2 * x[:, 0] - x[:, 1], np.zeros(4)], axis=1)
+        fitted = fit(x, y, 2)
+>       assert fitted.max_rank == 2
+E       assert 1 == 2
+E        +  where 1 = Transport(mean=array([0., 0., 0.]), scale=array([1., 1., 1.]), target_mean=array([0., 0., 0.]), weights=array([[1.],\n ...ings=array([[1.],\n       [0.],\n       [0.]]), target_loadings=array([[2.],\n       [2.],\n       [0.]]), iterations=(1,)).max_rank
+
+/private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py:49: AssertionError
+__ test_a_cross_product_with_zero_row_sums_and_zero_first_column_stays_finite __
+
+    def test_a_cross_product_with_zero_row_sums_and_zero_first_column_stays_finite():
+        """Codex F1's zero-start witness: the old start `cross @ 1` was zero and its fallback, the first
+        column, zero too, so the old fitter divided zero by zero and kept NaNs while reporting rank 1."""
+        cross = np.array([[0.0, 1.0, -1.0], [0.0, -1.0, 1.0], [0.0, 0.0, 0.0]])
+        x, y = ORTHOGONAL_ROWS, targets_for_cross(cross)
+        fitted = fit(x, y, 2)
+>       assert np.isfinite(fitted.weights).all() and np.isfinite(fitted.coefficients(fitted.max_rank)).all()
+E       AssertionError: assert (np.False_)
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x10b0a0e70>()
+E        +    where <built-in method all of numpy.ndarray object at 0x10b0a0e70> = array([[False, False],\n       [False, False],\n       [False, False]]).all
+E        +      where array([[False, False],\n       [False, False],\n       [False, False]]) = <ufunc 'isfinite'>(array([[nan, nan],\n       [nan, nan],\n       [nan, nan]]))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+E        +        and   array([[nan, nan],\n       [nan, nan],\n       [nan, nan]]) = Transport(mean=array([0., 0., 0.]), scale=array([1., 1., 1.]), target_mean=array([0., 0., 0.]), weights=array([[nan, n...\n       [nan, nan]]), target_loadings=array([[nan, nan],\n       [nan, nan],\n       [nan, nan]]), iterations=(200, 200)).weights
+
+/private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py:59: AssertionError
+_______ test_the_leading_direction_is_the_leading_one_not_a_fixed_point ________
+
+    def test_the_leading_direction_is_the_leading_one_not_a_fixed_point():
+        """Codex F1's non-leading witness: XᵀY = [[8,-8,0],[0,0,4],[0,0,0]]; the leading left singular
+        direction is (1,0,0) with singular value sqrt(128); the old start (0,4,0) converged to (0,1,0),
+        singular value 4, alignment exactly zero, and was certified. The SVD form returns the leading one."""
+        cross = np.array([[8.0, -8.0, 0.0], [0.0, 0.0, 4.0], [0.0, 0.0, 0.0]])
+        x, y = ORTHOGONAL_ROWS, targets_for_cross(cross)
+        fitted = fit(x, y, 1)
+>       assert abs(float(fitted.weights[:, 0] @ np.array([1.0, 0.0, 0.0]))) == pytest.approx(1.0, abs=1e-9)
+E       assert 0.0 == 1.0 ± 1.0e-09
+E         
+E         comparison failed
+E         Obtained: 0.0
+E         Expected: 1.0 ± 1.0e-09
+
+/private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py:71: AssertionError
+___________________ test_the_full_rank_rule_is_least_squares ___________________
+
+rng = Generator(PCG64) at 0x10B088120
+
+    def test_the_full_rank_rule_is_least_squares(rng=np.random.default_rng(9)):
+        """Known answer: with as many components as predictors (and targets at least as wide, since the
+        component count is bounded by the rank of XᵀY) the PLS rule is the least-squares map, so its
+        prediction equals the projection of Y onto the column space of the centred X. The old fitter
+        stopped at 11 of 12 components on this fixture."""
+        x = rng.normal(size=(120, 12))
+        y = x @ rng.normal(size=(12, 12)) + 0.1 * rng.normal(size=(120, 12))
+        fitted = fit(x, y, 12)
+>       assert fitted.max_rank == 12
+E       assert 11 == 12
+E        +  where 11 = Transport(mean=array([-0.01877231, -0.05836254,  0.08617212, -0.00537461,  0.08521007,\n       -0.05030143, -0.00730286...81568875, -0.40411072, -0.76144484,\n        -0.62070544]]), iterations=(37, 44, 37, 200, 40, 121, 79, 200, 21, 83, 14)).max_rank
+
+/private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py:92: AssertionError
+_________________ test_targets_narrower_than_sources_are_held __________________
+
+rng = Generator(PCG64) at 0x10B088200
+
+    def test_targets_narrower_than_sources_are_held(rng=np.random.default_rng(10)):
+        """The target loadings are allocated at the target width; the old allocation used the source
+        width and could not hold a narrower target (a broadcast error at the first component)."""
+        x = rng.normal(size=(80, 12))
+        y = x @ rng.normal(size=(12, 6))
+>       fitted = fit(x, y, 4)
+                 ^^^^^^^^^^^^
+
+/private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py:103: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sources = array([[-1.10333845e+00, -7.25024640e-01, -7.81805257e-01,
+         2.66975856e-01, -2.48580729e-01,  1.26483052e-01,
+...        -6.27568228e-01,  2.37775498e-01,  1.01746319e+00,
+        -1.84967159e+00, -1.00113945e+00, -3.86386350e-01]])
+targets = array([[  0.81961497,   2.70697321,   2.20286525,  -2.66070977,
+         -2.51429248,   0.02511729],
+       [  0.55662...3,   1.53434974],
+       [ -2.9921497 ,   0.21511636,  -4.48207079,   0.34360271,
+          1.48626438,   2.36852991]])
+max_rank = 4
+
+    def fit(sources: np.ndarray, targets: np.ndarray, max_rank: int) -> Transport:
+        """Fit on the fitting folds' ordinary transitions alone."""
+        mean = sources.mean(axis=0)
+        scale = sources.std(axis=0)
+        scale[scale < 1e-8] = 1.0
+        target_mean = targets.mean(axis=0)
+    
+        x = ((sources - mean) / scale).astype(np.float64)
+        y = (targets - target_mean).astype(np.float64)
+        cross = x.T @ y  # updated by rank-one terms below, never recomputed
+    
+        features = x.shape[1]
+        weights = np.zeros((features, max_rank))
+        loadings = np.zeros((features, max_rank))
+        target_loadings = np.zeros((features, max_rank))
+        iterations: list[int] = []
+    
+        start = cross @ np.ones(y.shape[1])
+        if np.linalg.norm(start) < DEFLATION_FLOOR:
+            start = cross[:, 0].copy()
+        for component in range(max_rank):
+            if np.linalg.norm(cross) < DEFLATION_FLOOR:
+                break
+            w, used = _leading_direction(cross, start)
+            t = x @ w
+            tt = float(t @ t)
+            if tt < DEFLATION_FLOOR:
+                break
+            p = (x.T @ t) / tt
+            c = (y.T @ t) / tt
+>           weights[:, component], loadings[:, component], target_loadings[:, component] = w, p, c
+                                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           ValueError: could not broadcast input array from shape (6,) into shape (12,)
+
+/private/tmp/amendment-r5-b6dgjjo6/src/local_llm_lab/pipeline/state_programme/transport.py:106: ValueError
+________________ test_a_non_finite_input_is_refused_not_carried ________________
+
+    def test_a_non_finite_input_is_refused_not_carried():
+        x, y = ORTHOGONAL_ROWS.copy(), targets_for_cross(np.eye(3))
+        y[0, 0] = np.nan
+>       with pytest.raises(ValueError, match="not finite"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+/private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py:113: Failed
+________________________ test_the_fit_is_deterministic _________________________
+
+rng = Generator(PCG64) at 0x10B0882E0
+
+    def test_the_fit_is_deterministic(rng=np.random.default_rng(1)):
+        """No random number enters it, so two fits of one input agree bit for bit."""
+        x, y = moving(rng)
+        a, b = fit(x, y, 8), fit(x, y, 8)
+        assert np.array_equal(a.weights, b.weights)
+>       assert a.leading_singular_values == b.leading_singular_values
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'Transport' object has no attribute 'leading_singular_values'
+
+/private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py:122: AttributeError
+=============================== warnings summary ===============================
+tests/test_state_transport.py::test_a_cross_product_with_zero_row_sums_and_zero_first_column_stays_finite
+  /private/tmp/amendment-r5-b6dgjjo6/src/local_llm_lab/pipeline/state_programme/transport.py:63: RuntimeWarning: invalid value encountered in divide
+    v = start / np.linalg.norm(start)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../../../private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py::test_the_restart_witness_yields_two_components
+FAILED ../../../../private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py::test_a_cross_product_with_zero_row_sums_and_zero_first_column_stays_finite
+FAILED ../../../../private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py::test_the_leading_direction_is_the_leading_one_not_a_fixed_point
+FAILED ../../../../private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py::test_the_full_rank_rule_is_least_squares
+FAILED ../../../../private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py::test_targets_narrower_than_sources_are_held
+FAILED ../../../../private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py::test_a_non_finite_input_is_refused_not_carried
+FAILED ../../../../private/tmp/amendment-r5-b6dgjjo6/tests/test_state_transport.py::test_the_fit_is_deterministic
+7 failed, 8 passed, 1 warning in 0.24s
