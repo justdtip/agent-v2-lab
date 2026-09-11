@@ -144,5 +144,49 @@ def leading_direction(cross: np.ndarray) -> tuple[np.ndarray, float, dict]:
     return u, float(values[0]), {**certificate, "fell_back_to_full_svd": True}
 
 
-__all__ = ["GAP_TOLERANCE", "KRYLOV_DIMENSION", "RESIDUAL_TOLERANCE",
-           "leading_direction", "leading_triplet"]
+def certified_fit(sources: np.ndarray, targets: np.ndarray, max_rank: int):
+    """`transport.fit`'s procedure with the certified direction in place of the full SVD.
+
+    Identical in every other respect — the same standardisation, centring, deflation, cross-product
+    update and stopping rules — so the two differ in exactly one step and can be compared directly.
+    """
+    from local_llm_lab.pipeline.state_programme.transport import DEFLATION_FLOOR, Transport
+
+    mean = sources.mean(axis=0)
+    scale = sources.std(axis=0)
+    scale[scale < 1e-8] = 1.0
+    target_mean = targets.mean(axis=0)
+    x = ((sources - mean) / scale).astype(np.float64)
+    y = (targets - target_mean).astype(np.float64)
+    cross = x.T @ y
+
+    features, width = x.shape[1], y.shape[1]
+    weights = np.zeros((features, max_rank))
+    loadings = np.zeros((features, max_rank))
+    target_loadings = np.zeros((width, max_rank))
+    singular, certificates = [], []
+    for _component in range(max_rank):
+        if np.linalg.norm(cross) < DEFLATION_FLOOR:
+            break
+        w, sigma, certificate = leading_direction(cross)
+        t = x @ w
+        tt = float(t @ t)
+        if tt < DEFLATION_FLOOR:
+            break
+        p_load = (x.T @ t) / tt
+        c_load = (y.T @ t) / tt
+        index = len(singular)
+        weights[:, index], loadings[:, index], target_loadings[:, index] = w, p_load, c_load
+        singular.append(float(sigma))
+        certificates.append(certificate)
+        cross = cross - tt * np.outer(p_load, c_load)
+        x -= np.outer(t, p_load)
+        y -= np.outer(t, c_load)
+    kept = len(singular)
+    fitted = Transport(mean, scale, target_mean, weights[:, :kept], loadings[:, :kept],
+                       target_loadings[:, :kept], tuple(singular))
+    return fitted, certificates
+
+
+__all__ = ["GAP_TOLERANCE", "KRYLOV_SCHEDULE", "RESIDUAL_TOLERANCE",
+           "certified_fit", "leading_direction", "leading_triplet"]
