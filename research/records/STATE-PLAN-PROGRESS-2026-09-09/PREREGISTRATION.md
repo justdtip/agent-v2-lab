@@ -240,8 +240,72 @@ representational richness, and every figure carries that label.
   permuted within family. The **step-0 null**: the same probe read from the residual at the first
   decision of the same task, which carries what the task prompt alone tells — family, difficulty —
   and nothing of the progress.
-- **Negative control**: `pointer_chain` steps-remaining must sit at the permutation null on both
-  models. A probe that decodes it is reading a leak, and the finding is the leak.
+- **The unknown-horizon control, restated. The version that stood here was wrong at the last step.**
+  It said `pointer_chain` steps-remaining must sit at the permutation null on both models and that
+  any decoding above it is a leak. That is false at the terminal decision: the chain's end is
+  **visible in the prompt**. Measured on the corpus — all **94** terminal `pointer_chain` decisions
+  (20 of them in E1's test split) contain `Node: final` in the text the model is given, and **0 of
+  575** non-terminal ones do. Recognising that a chain has ended is reading the input, not leaking
+  the label, and the old veto would have condemned a probe for doing the obvious right thing.
+
+  **Eligible positions are pre-specified by a rule on the visible text, never on the label.** A
+  `pointer_chain` decision is ineligible for this control exactly when its rendered prompt contains
+  the terminal marker. That rule is applied to the prompt, so it can be evaluated without knowing
+  the horizon; using `step == max(step)` would be the label wearing a rule's clothes, and would also
+  be circular — the label is what the control exists to protect.
+
+  **The null is conditional on what stays visible**, not permutation. Each conditioning variable is
+  named with why it is legitimately available: the **chain length so far**, which the model can
+  count from the transcript; **survival** — that the chain has not ended, which is the absence of the
+  marker above; the **family and difficulty**, both in the task prompt; and the **visible progress
+  note**, which the protocol writes at every step. A probe may know all of that without knowing the
+  horizon.
+
+  **Status: DEFERRED, its veto disabled (the Chief, on Codex's second confirming pass, 2026-09-10).**
+  The procedure above is provisional. Codex measured what it would retain on this corpus: the
+  stratum floor keeps **15 episodes and 100 eligible decisions, all at difficulty 2**, while step 5
+  borrows ε_main, a tolerance derived for 240 episodes; the visible progress note is **not** a
+  function of nodes visited — notes at equal counts carry different paths — so step 1's reason for
+  adding no stratum is false; and permuting labels across decisions breaks the shared horizon that
+  the decisions of one episode carry together. The final procedure — permutation at the **episode**
+  level so the shared horizon is respected, a tolerance derived from the control's **own**
+  population, strata that respect the note's content — is fixed by an **amendment that Codex reviews
+  before any result of this control is read**. Until that amendment is sealed the control reads
+  *deferred, not measured* and its veto cannot fire (§10, §12). The seal of this document does not
+  wait for the amendment; the reading of this control does.
+
+  **The null is a conditional randomization, specified here as a provisional procedure** (deferred,
+  above). Naming its inputs is not enough to run it, and an unspecified null cannot govern a verdict.
+
+  1. **Strata** *(provisional; the reason given here is false, see the status above: the note is not a
+     function of nodes visited).* Eligible decisions are grouped by `(difficulty, nodes visited so far)`.
+     `family` is constant by construction, `survival` is constant given eligibility, and the visible
+     progress note was taken to be a deterministic function of nodes visited — it is not; at "Visited 2
+     node(s)" the corpus carries 92 distinct notes, each naming the node it follows.
+  2. **Extraction.** `nodes visited so far` is read from the rendered prompt as the count of
+     `read_file` observations before the decision, never from the label or the step index.
+  3. **The randomization.** Within each stratum the steps-remaining labels are permuted across
+     decisions, **10,000 draws**, seeded from the seal. Permuting within the stratum is what makes
+     the null conditional: everything the conditioning variables carry is preserved exactly, and
+     only the association with the residual is destroyed.
+  4. **Unsupported strata.** A stratum with fewer than **10** eligible decisions is dropped, with its
+     size reported; strata are never merged to reach the threshold, because merging changes the
+     conditioning set after seeing it.
+  5. **The comparison** *(provisional; the veto is disabled, see the status above).* The probe's
+     accuracy on eligible decisions against the permutation distribution of the same quantity, at the
+     ε and α of §7's table — a tolerance this control's own population does not support, which is one
+     of the reasons it is deferred. When the amended procedure is measured, exceeding the null's
+     `1 − α` quantile by more than its own ε is the diagnostic flag of §12, not a veto.
+
+  **What firing supports, stated narrowly.** Exceeding this null is evidence that the residual
+  carries steps-remaining information **beyond what the four conditioning variables carry** — it is
+  not a proof of leakage in general, because the conditioning set may be incomplete and a null built
+  on an incomplete set can be beaten by a probe reading a legitimate cue nobody listed. The veto is
+  therefore an instruction to **investigate and name the cue**, and the instrument is called into
+  question only if no visible cue accounts for the excess. Codex's objection is right and this is the
+  narrower claim that answers it: naming several conditioning variables does not establish their
+  sufficiency.
+
 - **Evaluation set**: the test split's 1,781 decisions, 240 episodes, clean variants only. Held out
   by episode by construction, never by position.
 
@@ -442,7 +506,7 @@ turn count is still the step index; what does not survive is any horizon inferre
 | 1–4 | E1 on the 4B: {step index, steps remaining} × {permutation null, step-0 null} |
 | 5–8 | E1 on the 12B: the same four |
 | 9–10 | E2 closure on the 4B and on the 12B |
-| 11–12 | the `pointer_chain` negative control on the 4B and on the 12B |
+| 11–12 | the `pointer_chain` negative control on the 4B and on the 12B — **deferred** (§4.1); its tolerance comes with the amendment, from its own population, and M stays 12 so the bound is not loosened by the deferral |
 
 **The bound** is the first state variable's, unchanged: Hoeffding over M fixed quantities at
 confidence 1 − α, `n ≥ ln(2M/α) / ε²`, with α = 0.05, computed by
@@ -463,11 +527,24 @@ a paired difference of accuracies needs `2 ln(2M/α)/ε²`, and `required_n` now
 rather than carrying a second formula. Bounding a contrast as though it were a single [0, 1] mean
 claims a resolution its own range does not support, which is what the first draft did.
 
+### THE OPERATIVE TOLERANCE TABLE — the only one, and every other value in this document is superseded
+
 | | evaluation set | unit | n | ε declared | needs n ≥ | spare |
 |---|---|---|---:|---:|---:|---:|
 | ε_main | E1 on the test split | episodes | 240 | **0.23** | 234 | 6 |
 | ε_ord | E2 ordinary transitions, train split | episodes | 840 | **0.13** | 731 | 109 |
 | ε_sub | E2 corrective transitions | episodes (one each) | 553 | **0.15** | 549 | 4 |
+| ε_sub, contiguous (`transient`) | subgroup | episodes | 244 | **0.23** | 234 | 10 |
+| ε_sub, across a gap | subgroup | episodes | 309 | **0.20** | 309 | 0 |
+
+*A second table survived below when §7 was recomputed at the paired range width, unmarked, and Codex
+found it: it declared, at range width 1 and now superseded, ε_main = 0.17 and ε_sub = 0.11. Under
+this document's own rule those superseded values are not merely stale but **unmet**: 0.17 needs 428
+episodes against 240, and 0.11 needs 1,021 against 553. A reader
+taking the wrong table would have claimed a resolution the corpus does not support, and the two
+tables could flip a verdict between them. Every superseded value below is now marked in place rather
+than deleted, and `check_prereg.py` refuses a document that declares two operative values for one
+tolerance.*
 
 *A note on the convention, because it is not the textbook one, and it is now ruled.* At range width
 1 the helper returns `ln(2M/α)/ε²`, which is **twice** the textbook Hoeffding `w²ln(2M/α)/(2ε²)`. At
@@ -484,7 +561,8 @@ of them was an artefact of counting dependent observations as independent.
 **Subgroups carry their own ε; the pooled one attaches to the pooled set only.** E2's corrective
 stratum is two populations that differ structurally (§4.2): the contiguous transitions, where the
 decision before the correction is itself observed, and those spanning a step with no rendered row.
-Reporting either against the pooled 0.11 would claim a resolution its own n does not support.
+Reporting either against the **pooled 0.15** would claim a resolution its own n does not support.
+*(This sentence read "the pooled 0.11" — a superseded single-mean value — until Codex found it.)*
 
 | stratum | episodes | exact ε | **declared** | needs n ≥ | spare |
 |---|---:|---:|---:|---:|---:|
@@ -516,16 +594,21 @@ stratification by `(split, family, variant)`.
 
 Both are reported for every quantity, and where they disagree the wider one governs the claim.
 
-**ε_main is 0.17 and not 0.16.** The bound at 240 episodes is 0.1604, so 0.16 would be the honest
-figure to a reader — but declaring 0.16 requires n ≥ 242, and there are 240 test episodes. Two short.
-The declared value rounds **up** or the condition is not met, and a threshold that misses by two is
-exactly the kind that gets rounded into existence after the fact.
+**SUPERSEDED — single-mean values, kept for the reasoning only.** The two paragraphs that stood here
+declared ε_main 0.17 and ε_sub 0.11. Both were computed at range width 1 and neither is operative;
+under the paired width they are not even attainable (0.17 needs 428 episodes against 240; 0.11 needs
+1,021 against 553). The operative values are 0.23 and 0.15 in the table above.
 
-**ε_sub stands at 0.11 and is still a loosening**, now for a plainer reason than before: there are
-553 corrective transitions in the whole corpus, one per recovery episode, and no split of them
-reaches n at ε_main. The alternative to loosening is not reporting the primary estimand's informative
-stratum at all. This is the existing budget rule's shape — loosen ε_sub, write both numbers and the
-reason, before the run — applied to a population limit rather than a device-time one.
+What survives is the rule they were written to state, which applies unchanged at the new width: **the
+declared value rounds up or the condition is not met**. At width 1 that turned 0.16 into 0.17 because
+0.16 needed 242 episodes against 240 — two short. At the paired width it is why the across-a-gap
+subgroup is 0.20 and met by exactly its 309, and why every row above carries the n it needs beside
+the n it has. A threshold that misses by two is exactly the kind that gets rounded into existence
+after the fact.
+
+And the loosening's reason survives too: there are 553 corrective transitions in the whole corpus,
+one per recovery episode, so ε_sub is loosened against a **population** limit rather than a
+device-time one — the budget rule's shape, both numbers and the reason written before the run.
 
 **What the run can claim, given these.** At ε_main = 0.23, E1 can support a claim that one model's
 decodability exceeds a null by more than about twenty-three points of accuracy, and cannot support a
@@ -596,6 +679,18 @@ against `model.config` on the card before the first capture is written.
 | `gemma3-12b-cuda-bf16` | 48 | 3,840 | 49 | 367.5 | 2.674 |
 | both | | | | 542.5 | **3.947** |
 
+**Measured, both passes complete**, 7,629 of 7,629 each, `complete: true`, `whole_set: true`, 30
+shards apiece:
+
+| | predicted | on disk | elapsed | ms/decision | peak reserved |
+|---|---:|---:|---:|---:|---:|
+| 4B | 1.273 GiB | **1.3 GB** | 7.7 min | 75.6 (alone) | 9.52 (est. 8.1) |
+| 12B | 2.674 GiB | **2.7 GB** | 42.2 min | 331.6 (shared) | 26.45 (est. 23.7) |
+
+The storage table was right to the tenth of a gigabyte on both. The memory estimates ran about 15%
+light, in the direction the 4B measurement already predicted. The 12B's rate is on a shared card and
+is not a property of the model.
+
 This replaces R6's 4.6 GiB, which was correct arithmetic on 8,907 rendered rows; on the 7,629
 distinct decisions, with the 348 chat replay rows excluded and the 930 duplicates recognised as
 copies, it is 3.95 GiB. Against 235 GiB free on the card at 10:37Z.
@@ -603,11 +698,24 @@ copies, it is 3.95 GiB. Against 235 GiB free on the card at 10:37Z.
 Captures live outside the checkout at `/workspace/captures/<entry>/`, because `data/` was ignored
 only after this corpus was made and the resume key hashes untracked files.
 
-**Prompt lengths are measured in characters here, not tokens**, because no Gemma tokenizer is
-present on the laptop: minimum 1,824, median 4,738, maximum 14,316. At 4.0 characters per token
-those give a median of about 1,185 tokens and a longest of about 3,579, which reproduces the Chief's
-independently measured 1,200 and 3,600 to within one per cent. The token figures are re-measured on
-the card at capture time and the measured values go in the manifest beside these.
+**Prompt lengths, measured on the card at capture time**, from the 4B pass's own manifest — the
+assumed figures are kept beside them because the assumption was declared and should be scored:
+
+| | assumed (4.0 chars/token) | **measured** |
+|---|---:|---:|
+| minimum | 456 | **416** |
+| median | ~1,185 | **1,310** |
+| 99th percentile | — | **3,300** |
+| longest | ~3,579 | **4,274** |
+
+The implied ratio is **3.617** characters per token, not 4.0, so every token figure derived from the
+assumption ran about 10% light and the longest row is 19% longer than assumed. The assumption was
+declared as one and is now scored rather than quietly replaced.
+
+Three things the manifest establishes that no arithmetic could: the captured position is the last
+token of the prompt in **7,629 of 7,629** cells, every cell reports `forward_batch` and
+`anchor_batch` of 1, every cell reports `capture_dtype: native`, and all 7,629 carry **one**
+checkpoint identity. Those are the contract's own claims, read back from what was written.
 
 ---
 
@@ -636,9 +744,11 @@ seal.**
 None of the twelve has a dropped decision or an oversampled one, which follows from their being
 clean: only recovery decisions are duplicated and only recovery variants lose rows.
 
-About 15,776 positions in total at 4.0 characters per token, so **about 8.2 GiB for both models** —
-below R6's estimate of about 12 GiB, on the same basis that the main stratum is below its estimate.
-The figure is re-computed from the measured token counts on the card before the stratum is written.
+**Measured from the 4B capture's manifest: 18,018 positions**, against the 15,776 assumed at 4.0
+characters per token — 14% more, in the same direction as the length correction above. At the
+per-position costs of §8 that is about **9.3 GiB for both models**, still below R6's estimate of
+about 12 GiB. The stratum is read only after the seal; the figure is now a measurement rather than a
+projection.
 
 ---
 
@@ -649,6 +759,9 @@ reason attached to each. Fixed here:
 
 - E1 in its original predictive-sufficiency form: **untestable**, by Facts 2 and 3. This one is
   fixed now, because it is a property of the corpus and not of a run.
+- The unknown-horizon control of §4.1: **deferred, not measured**, its **veto disabled**. Its
+  provisional procedure is in §4.1; its final procedure comes by amendment, reviewed before any result
+  of it is read. Nothing about the instrument's validity is inferred from it until then.
 - E1 as decodability at matched rank: **not measured**. It becomes *measured* when it has been
   executed, and not before. A pre-registration that records its own estimands as measured is
   describing an intention; the state is a fact about the run and this document has had none.
@@ -677,10 +790,13 @@ Each fails closed and names itself.
    `capture_set_sha256`. CPU only, seconds, no card time; nothing was written into the shared
    checkout. This is the re-run on the device copy that order §1 asks the owner of the
    pre-registration to do.
-2. **The two models share the rendering byte for byte.** The 12B entry asserts it in a comment with
-   the tokenizer digests; the check compares the two snapshots' `tokenizer.json` and
-   `tokenizer.model` and re-renders one episode under each entry, comparing the digest. The corpus
-   was rendered for the 4B entry, so this is a precondition and not an assumption.
+2. **The two models share the rendering byte for byte. Checked, 2026-09-10, and it passes — by a
+   stronger test than the one planned here.** Rather than compare tokenizer files and re-render one
+   episode, both capture passes recorded the digest of the ids they actually consumed, per decision.
+   Those digests are **identical at 7,629 of 7,629 decisions**, and the read position is identical at
+   7,629 of 7,629. So the two models were given the same input, token for token, at every decision
+   the comparison will use — which is the thing the tokenizer check was a proxy for, measured
+   directly on the artefacts that will be read.
 3. **Depth and width match the registry.** 34 × 2,560 and 48 × 3,840 against `model.config`;
    `capture_budget.json` carries `verified_on_device: false` until this passes.
 4. **`cache.strategy: none` on both entries**, since H2's restatement depends on it.
@@ -696,7 +812,18 @@ Each fails closed and names itself.
 - **H2**, in its restated within-pass form, is falsified by the state at the decision position being
   recoverable from the sliding window alone at the same rank.
 - **The instrument** is falsified before either: by the step index failing to decode (Fact 1's
-  control), or by `pointer_chain` steps-remaining decoding above the permutation null.
+  control), or by positive evidence of a failed measurement path — a capture that fails its identity
+  or digest checks, a probe fitted on the wrong split. **The unknown-horizon control of §4.1 is a
+  diagnostic, not a falsifier.** Once it is measured, exceeding its conditional null is a flag that
+  starts the investigation §4.1 specifies — name the visible cue that accounts for the excess — and
+  is not by itself falsification; failing to find a cue is not proof that none exists, so any later
+  invalidation needs the positive evidence above. The control is stated once, in §4.1, in its
+  conditional form only, and it is deferred with its veto disabled. Beating the *unconditional*
+  permutation null on `pointer_chain` steps-remaining does **not** invalidate the instrument: the
+  chain's end is visible in the text at the terminal decision, so a probe that reads it is reading
+  its input. This paragraph carried the unconditional form until Codex found the contradiction with
+  §4.1, and then said "falsified" where §4.1 said "investigate" until Codex found that too. E1's
+  ordinary permutation nulls are unaffected — they serve a different purpose and are not this veto.
 
 The programme's own record of this week is that the instrument fails before the model does. **A first
 result showing the 12B more predictive than the 4B is, until the capacity rule is applied and the
@@ -725,7 +852,9 @@ the device copy and passing (§11).
    The screen exists; the gate's byte-identity half is implemented by nothing, and the document says
    so rather than implying otherwise. The re-read diagnostic does not depend on it and is orderable.
 2. **E3** (§4.4): not measured, not scheduled, waiting on WS-B's cache exchange.
-3. **The seal**, which follows Codex's file-only review of this draft and precedes the first
+3. **The unknown-horizon control's final procedure** (§4.1): deferred, veto disabled; an amendment
+   reviewed by Codex before any of its results are read. The seal does not wait for it.
+4. **The seal**, which follows Codex's file-only review of this draft and precedes the first
    *reading* of any capture. The capture pass itself does not wait for it: §16.18 permits captures to
    be made before the seal so long as none is read.
 

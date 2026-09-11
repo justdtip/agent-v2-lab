@@ -1,0 +1,49 @@
+{
+  "amendment": "Amendment 1 — E2's transport rule",
+  "amends": {
+    "baseline_commit": "acc130a4c2057717c462564e5f4ed5dc35fa60ed",
+    "seal": "seal.json",
+    "sha256": "998b3bcafa9d6aaffa21ebd43df3935b1634ba7b12fe187073837acd942ce521"
+  },
+  "baseline_commit": "1d936087ca944c4934c9bfec7185005f302209fa",
+  "capability_table": {
+    "gemma3-12b-cuda-bf16": {
+      "by_rank": {
+        "1": 0.5521591460456089,
+        "16": 0.8918000970402717,
+        "2": 0.5875788452207666,
+        "32": 0.9541484716157205,
+        "4": 0.6705482775351771,
+        "8": 0.7513343037360505
+      },
+      "layer": 24
+    },
+    "gemma3-4b-cuda-bf16": {
+      "by_rank": {
+        "1": 0.5815138282387191,
+        "16": 0.9114507520621058,
+        "2": 0.5613779718583212,
+        "32": 0.9517224648229015,
+        "4": 0.7035419699175157,
+        "8": 0.7690441533236293
+      },
+      "layer": 17
+    }
+  },
+  "commit": "4e6e2d3f63d055fb114162194ae5964f486d653b",
+  "files": {
+    "research/records/STATE-PLAN-PROGRESS-2026-09-09/AMENDMENT-1-TRANSPORT-RULE.md": "edd329a0e3414b2d1428d743d076495a55cb1b8e3b0c866fba11bda621804d02",
+    "research/records/STATE-PLAN-PROGRESS-2026-09-09/check_amendment.py": "b7493993a38378e5dc2e614a169fc201511404bee3fae9e0cb42d37ed3b39f9b",
+    "research/records/STATE-PLAN-PROGRESS-2026-09-09/gate-table.json": "8995a660df1f3189c91a91d66ffe43202cf583b66bb6f39f0d7d402dcb007539",
+    "research/records/STATE-PLAN-PROGRESS-2026-09-09/measure_gate.py": "290b37441b1f788632f8e51a8165b183d5c1de02c46d2ff0840301767934906a",
+    "research/records/STATE-PLAN-PROGRESS-2026-09-09/read_e2.py": "913058c56ee19c53bd3eb9928890d4c57852f11178c022226ac6781e933cedb1",
+    "src/local_llm_lab/pipeline/state_programme/transport.py": "6e8b71351cea460991c1a7012be4023c34c81807cc4138fe6ac127201e4cc276",
+    "tests/test_state_transport.py": "73e5cdd4232a12d56e33db63d025be0b871987d850539c13b44793151fe6b7ba"
+  },
+  "refusals": {
+    "parent": "the addendum is void if the parent seal does not verify",
+    "reader": "no corrective stratum is scored until the gate of §5 passes",
+    "table": "§5's printed table must reproduce gate-table.json to the digit it prints"
+  },
+  "schema_version": 1
+}

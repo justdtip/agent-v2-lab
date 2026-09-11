@@ -958,5 +958,146 @@ sentence to keep. A verifier that fails loudly gets fixed; a verifier that fails
 gets trusted, cited, and built on, because a wider interval looks like caution rather than a
 different comparison altogether.
 
+**A ninth, the day after, inside the claim checker itself.** The pre-registration's checker gained a
+rule that reads a table's declared-ε column by its header, so that a value counts as a declaration by
+its column and never by whether it is bold. The rule never runs. It recognises a header by asking
+whether the next line is a separator, and builds that question as `following.strip() + "|"` — which
+appends a pipe to a separator row that already ends in one, so the match never succeeds. Against the
+document it was written for it finds 0 header rows among 28 separators. Every tolerance row falls
+through to the branch meant for a table with *no* declared column, which reads every ε-shaped number
+in the row.
+
+Nothing complained, for two reasons that both belong here. The fallback is **stricter** than the rule
+it stood in for, so the failure was conservative in the eighth instance's exact sense. And the rule's
+own counterexample — the unbolded duplicate row it was written to catch — is caught *by the fallback*,
+so the self-test that exists to prove the rule works passes without the rule ever executing. Both
+entry points ran one path, as the earlier correction required. It was the wrong one.
+
+**This is the ninth's own lesson, and it sharpens the diagnostic below rather than repeating it.** The
+diagnostic was followed: the guarded thing was broken, and the checker caught it. What was never asked
+is **which rule caught it**. A self-test that asserts a corruption is detected does not assert that the
+new code detected it, and a fallback that is strictly stricter will answer for any rule it replaces.
+Where a check has two paths, break the thing *and* establish which path spoke — by disabling the new
+rule and confirming the corruption then survives, which is the only evidence that the rule does
+anything at all.
+
+**A tenth, which failed loudly, and the reason it did is the point of it.** Writing the seal builder
+for the plan-progress pre-registration I compared the capture set's **byte** digest against the digest
+over its **enumerated triples**, and the builder refused. Both are sixty-four hex characters, both
+answer to "the capture set's digest", and §2 of the document I was sealing says in prose that they are
+two different claims — one is the semantic record the set was enumerated under, the other is the bytes
+on disk. The prose did not stop me. The **storage** did: `prereg-inputs.json` keeps the triples digest
+at `decisions.capture_set_sha256` and stores the file's bytes under no name at all, so the conflation
+had nowhere to succeed and could only come out as a mismatch.
+
+Had one field named `sha256` held either value, the comparison would have passed and the seal would
+have carried the wrong claim under the right name — silently, and in the one artefact whose whole
+purpose is to fix which claim was made. That is this entry's family exactly, and it missed by the
+width of a schema.
+
+So the rule the tenth gives back, which is about design rather than review: **two quantities that are
+different claims must not share a field or a name.** A consumer that conflates them is then caught by
+arithmetic rather than by a reader, and arithmetic is the only check in this entry that ever fired on
+its own.
+
+**An eleventh, and it is the ninth one again, committed by the author of the ninth, three hours
+later.** The ninth instance ends with a procedure: where a check has two paths, break the thing *and*
+establish which path spoke, by disabling the new rule and confirming the corruption then survives. It
+was written at noon on 2026-09-10 after a checker rule was found inert. At three that afternoon I
+fixed a defect in a fitter — its power iteration restarted from the previous component's direction,
+which lies in the part just deflated, so it could stall and return fewer components than asked — and
+wrote a test named for the fix, asserting that a thirty-two-component request yields thirty-two
+components. Codex found that **all nine tests in that file pass on the defective fitter**, the one
+named for the fix included. I reinstated the defect in a scratch copy to check: nine of nine, green.
+
+The test's fixture simply does not reach the regime where the stall occurs. That is the ordinary way
+this happens and it is not the interesting part.
+
+**The interesting part is that writing the lesson down did nothing.** The ninth instance was not
+forgotten; it was mine, it was three hours old, and it names the exact procedure that would have
+caught this. I applied that procedure faithfully to the *checker* — disabled its rule in a copy,
+confirmed a case then survived — and did not think to apply it to my own bug fix, because a bug fix
+does not feel like "a check with two paths" even though it is exactly that: the fixed code and the
+old code are the two paths, and a test that cannot tell them apart has not tested the fix.
+
+So the rule the eleventh gives back is about where the check lives, not what it says: **a fix is not
+finished until its test has been run against the unfixed code and seen to fail.** Not "remember to
+verify discriminating power" — that is the ninth instance, and remembering it demonstrably does not
+work. A step, in the loop, every time: reinstate the defect, watch the test go red, put it back.
+Three keystrokes in a scratch copy, and it is the only thing that distinguishes a test that pins a
+fix from a test that keeps it company.
+
+**A twelfth, and it is the worst of them, because the check was a seal.** On 2026-09-11 an addendum
+was written to fix the instrument for an estimand: seven files, digested, against the commit a
+reviewer had read. Its builder verified a great deal — the parent seal still verified, the document
+passed its own checker, the printed capability table reproduced the artefact that produced it to the
+digit, that artefact had been measured against this seal and this fold assignment, and every one of
+the seven files matched its bytes at the baseline. All of it passed, and it was reported as sealed.
+
+One of the seven was the estimand's reader, and at that commit the reader still computed the rule the
+amendment existed to **replace**. It did not import the rule module at all. The seal therefore fixed,
+in one artefact, a document specifying one rule and an implementation of another. Scoring against it
+would have reproduced a number already known to be an artefact, and the seal would have recorded the
+run as conforming.
+
+**Nothing subtle defeated it.** The reader said `mean per-step displacement` in a comment, in English,
+four lines above where the builder opened the file to hash it. The Chief had read that same line the
+previous afternoon while looking for something else and had not connected it either. Two readers and
+five checks passed over a sentence that said, in plain words, that the code did the withdrawn thing.
+
+So the rule the twelfth gives back, and it is narrower and harder than "read the code": **a seal over
+code is worthless unless it executes the code.** Identity and provenance — digests, baselines,
+signatures, does-it-match-what-the-reviewer-saw — are the easy properties, and a verifier that checks
+only those certifies that the wrong thing has not changed. Meaning has to be executed. The form that
+works is a **separating fixture**: an input on which the sealed rule and the rule it replaced give
+different answers, pushed through the reader's *own* function, refusing unless it returns the sealed
+rule's answer — and refusing, too, if the fixture ever stops separating them, or the check quietly
+becomes vacuous the first time the two rules converge.
+
+That last clause is the eleventh instance applied to this one before shipping it: the new checks were
+run against the reader that had slipped through, and watched to refuse, before they were trusted.
+
 And the diagnostic that found six of the seven: **ask what the check would say if the thing it guards
 were broken, and then break it.** Every one of these answered "pass".
+
+## Thirty-fifth: an agreement is evidence only when the fixture could have disagreed
+
+**D-CRO, 2026-09-11, on the Chief's instruction to state it once rather than collect a fourth
+instance.** The thirty-fourth entry is about checks that read as a pass. This is its sharper form for
+the particular case where the check is a **comparison**, because that case came up three times in two
+days and each time the comparison was satisfied for a reason that had nothing to do with the thing
+being compared.
+
+**One.** A capability table was re-measured with a rewritten fitter and reproduced the old one to
+every quoted digit. True, and the largest cell difference was 0.00049 — *inside the rounding of
+three decimals*. So agreement at the quoted precision was partly guaranteed by the quoting. The
+honest report was "no figure moved at the precision it is printed at, and the two agree to at least
+three decimals", not "the fitters agree".
+
+**Two.** Nine tests of a rewritten fitter passed. They also passed on the defective one, the test
+named for the fix included, because the fixture never reached the regime where the defect bites.
+
+**Three.** Two routines were compared on a retrieval quantity and returned `0.000000` and
+`0.000000`. Identical — because the fixture's map was too ill-conditioned for either to beat its own
+starting point, so both were pinned to zero by construction. Both arms would have agreed on any
+routine whatsoever, correct or not.
+
+**The principle.** *Identity between two computations is evidence about the computations only if the
+fixture is capable of telling them apart.* A comparison that both arms pass by construction — because
+the precision is too coarse, the regime too easy, or the fixture degenerate — measures the fixture.
+It is the same defect as a gate that admits everything, and it wears the most persuasive disguise
+available, which is a number that matches.
+
+**The procedure, which is one step.** Before reporting an agreement, **establish that a disagreement
+was reachable**: perturb one arm — the old code, a wrong constant, a different rule — and watch the
+number move. If it does not move, the fixture cannot see the difference and the agreement says
+nothing. This is what a separating fixture is in a conformity check, what "run the test against the
+unfixed code" is in the eleventh instance, and what an admitting-default negative control is in a
+gate. Three names for one step.
+
+**And the tell, since one of the three was caught by nothing but recognising it.** A quantity that is
+*exactly* zero, or *exactly* equal, in a setting where neither was designed, is far more often a
+construction than a result. The withdrawn transport rule scored exactly 0.000 in every stratum; the
+degenerate fixture scored exactly 0.000000 in both arms. Neither was a finding. An exact number in a
+noisy measurement is a question, not an answer.
+

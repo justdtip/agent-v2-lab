@@ -5,6 +5,178 @@ This is a design to be ruled on, not a result, and it is written before any 12B 
 captured so that the pre-registration cannot be shaped by looking. Where a choice is the Director's
 or the Chief's it is marked **open** rather than settled quietly.
 
+## 0. Sealed, 2026-09-10
+
+`seal.json`, digest **998b3bcafa9d6aaffa21ebd43df3935b1634ba7b12fe187073837acd942ce521**, written at
+commit `f2a4265` with `--baseline acc130a`, on the Chief's relay of Codex's delta review
+(`6ee2563..4dc39d5`, no further review hold). The baseline is the commit whose text Codex reviewed;
+naming it is the claim that all thirteen sealed files are byte-identical to it, and the seal was
+created from a later tip precisely so that claim is checked rather than assumed.
+
+The seal fixes the seed (20260910), the fold assignment
+(`c5e9622f7bef663c96614a99bab7e120873ad9eb79617912526c02e48016372c`, recomputed by re-running
+`folds.py` rather than read from `folds.json`), both of §2's capture-set digests, the five operative
+tolerances with every ε recomputed from the bound at M = 12, α = 0.05 and the paired range width, and
+the digests of thirteen files. `make_seal.py` produced it and is recorded beside it as `produced_by`
+rather than sealed, because it postdates the reviewed text and was not reviewed as part of the study.
+
+Precondition 5's refusal is code: `state_programme.read_gate.require_seal` raises unless the seal is
+complete, its own bytes digest as expected, every sealed file still has the bytes it fixed, those
+files still match their bytes at the baseline commit, and the sealed document still passes the sealed
+checker. Verified against this seal: thirteen files matched, the baseline re-derived, the document
+passing. **No capture is read except through it.** The unknown-horizon control (§4.1) stays deferred
+with its veto disabled; its amendment is a separate reviewed item and the seal does not release it.
+
+## 0.4 What §7's declared interval costs, measured before running it
+
+Codex's recheck2 F3 requires §7 as sealed: episodes resampled within `(split, family, variant)` and
+**the rule refitted out of fold inside every resample**, 10,000 of them, at the registered headline
+(depth 0.5, rank 8, eight components).
+
+Measured on the card, an AMD Ryzen 7 9700X with **8 physical cores** — sixteen threads thrash, so the
+parallel configuration is eight workers of one thread each:
+
+| | one 8-component fit | one resample (5 folds) | 10,000 resamples, serial |
+|---|---:|---:|---:|
+| 4B, 2,560 wide | 27.7 s | 138.5 s | 385 h |
+| 12B, 3,840 wide | 85.7 s | 428.5 s | 1,190 h |
+
+**1,575 hours serial, about 66 days. Across all eight cores, about 197 hours — 8.2 days.** That is
+not a night, and the resample count is sealed, so it is reported rather than trimmed.
+
+Two levers change **no declared quantity**, and neither is mine to take:
+
+1. **Run the resamples in parallel.** They are independent; the 8.2-day figure above already assumes
+   it. Execution only.
+2. **Replace the full *p*×*p* SVD in the fitter with a certified leading triplet.** The fitter
+   computes a complete SVD of the deflated cross-product to obtain one singular vector, which is
+   `O(p³)` for a matrix of rank at most *n* < *p*. A Krylov method returns the same triplet with a
+   residual certificate — which is what Codex's F1 actually required. Measured on a 3,840² case: the
+   same leading singular value to every printed digit, cosine to the full SVD's vector
+   1.0000000000, residual 1.8 × 10⁻¹⁵, and **14× faster on that step**. The SVD is about 97% of the
+   fit, so roughly 10× overall, putting the run near **20 hours** with parallelism. This edits
+   `transport.py`, which an addendum seals, so it needs an amendment and a Codex review.
+
+At 8.2 days of wall clock on a rented card the cost is also a spending decision, which is neither the
+Chief's nor mine.
+
+## 0.3 Amendment 1's first addendum, SUPERSEDED before anything was read
+
+`addendum-1.json` (`def0b7e9…`, baseline `1d93608`) is **void**. It sealed `read_e2.py` at a commit
+where that reader still computed the withdrawn `x + m·d` and never imported the rule module, so it
+fixed an amendment and a contradicting implementation in one seal. Every check the builder ran
+passed; none of them asked whether the sealed code implements the sealed rule. The file is kept
+byte-identical — its digest is its identity and editing it would make the reported digest false — and
+`addendum-1-SUPERSEDED.md` beside it carries the reason. `addendum-2.json` replaces it after Codex
+reads `read_e2.py` against §2, the one file their PASS on revision 5 did not cover.
+
+The paragraph below is the report as it was made, kept so a reader sees what was claimed.
+
+## 0.3.1 Amendment 1 sealed as an addendum, 2026-09-11 (the superseded report)
+
+`addendum-1.json`, digest **def0b7e92961f4eb8a6a8634aa68eb65f6e4a0e313e0c07f3ab1a0cdf39d8dcd**,
+against baseline `1d93608` — the commit Codex read (PASS, review `6d9d714`). It amends seal
+`998b3bca…` and does not replace it; the parent must still verify or the addendum is void.
+
+It fixes seven files: the amendment, its checker, `measure_gate.py` and its `gate-table.json`,
+`read_e2.py`, the transport rule, and the rule's tests. `make_addendum.py` produced it and, as with
+the parent, recomputes rather than copies: §5's printed capability table must reproduce
+`gate-table.json` to the digit it is printed at, that table must have been measured against this seal
+and this fold assignment, the amendment must pass its own checker, and every sealed file must match
+its bytes at the baseline. All of those hold; the build reports each by name when it does not.
+
+**E2 is still *not measured*.** The addendum fixes the instrument, not a result. Next, in order: §5's
+gate, and only if it passes, the four strata of §4.2 scored once.
+
+## 0.1 E1 read, 2026-09-10, at the pre-registered headline
+
+Read through `require_seal` against seal `998b3bca…`, fitted on the train split's 5,515 decisions and
+evaluated on the 240 clean test episodes, which entered no fit. Rank 8 and the 0.5 depth are the
+headline **fixed in §5 before any capture**, so nothing below is a selected rank or a selected layer.
+`read_e1.py` produced `e1-readings.json`; `summarise_e1.py` produced `e1-summary.json` and re-fits
+nothing.
+
+| comparison | target | probe | over the permutation null | verdict at ε_main = 0.23 |
+|---|---|---:|---:|---|
+| 12B | step index | 0.789 | **0.646** | resolved |
+| 4B | step index | 0.732 | **0.611** | resolved |
+| 12B | steps remaining | 0.325 | 0.073 | not resolvable at this n |
+| 4B | steps remaining | 0.266 | 0.030 | not resolvable at this n |
+| 12B − 4B, paired by episode | step index | | 0.036 | not resolvable at this n |
+| 12B − 4B, paired by episode | steps remaining | | 0.043 | not resolvable at this n |
+
+**What this licenses.** At matched rank the residual at mid-depth carries the **step index** on both
+models, far above both nulls and above the resolution this corpus supports. That is a statement about
+encoding, not about richness, and it is the only one of the four that clears ε.
+
+**What it does not license.** Nothing about **steps remaining**, on either model: 0.073 and 0.030 are
+well inside the resolution, so the corpus cannot tell them from zero. And nothing about the
+**difference between the models**: 0.036 and 0.043 are likewise inside it. Neither is evidence of no
+difference. The document's opening says E1 supports a gap above about 23 accuracy points and nothing
+smaller, and these are the readings that opening was written for.
+
+**The full profile, over the permutation null, at the 0.5 depth.** §5 requires it, and it carries one
+figure that must not be read as a finding.
+
+| model | target | r=1 | r=2 | r=4 | r=8 | r=16 | r=32 |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 12B | step index | 0.419 | 0.215 | 0.544 | **0.646** | 0.670 | 0.813 |
+| 4B | step index | 0.434 | 0.223 | 0.546 | **0.611** | 0.649 | 0.738 |
+| 12B | steps remaining | −0.001 | 0.116 | 0.093 | **0.073** | 0.171 | 0.132 |
+| 4B | steps remaining | −0.017 | 0.123 | 0.044 | **0.030** | 0.128 | 0.270 |
+
+**The figure that must not be read as a finding is the 4B's 0.270 at r = 32.** It exceeds ε_main
+while the headline at r = 8 does not, and reporting it as "steps remaining is decodable on the 4B"
+would be choosing the rank after seeing the answer, which is the thing §5's fixed headline exists to
+prevent. It is reported because the profile is required and because hiding it would be worse. If it
+is to become a claim it needs its own pre-registration.
+
+**One anomaly, unexplained and flagged rather than smoothed.** Step index falls from r = 1 to r = 2 on
+both models (0.419 → 0.215 and 0.434 → 0.223) before climbing. The components are nested and greedy,
+so a second component cannot worsen the training fit; it can move held-out predictions across
+rounding boundaries, since the score is exact match on an integer. That is a hypothesis and not a
+measurement, and it is on the open list rather than in the text as an explanation.
+
+## 0.2 E2 is NOT read: the transport rule I chose cannot pass, and the form is not fixed by §4.2
+
+`read_e2.py` ran and returned a hit rate of **exactly 0.000 in every stratum on both models**. That is
+not a reading of E2. A score that cannot come out otherwise measures the instrument, not the corpus
+(`METHOD-2026-09-08`, entry 27), and this one cannot come out otherwise.
+
+**Why it cannot.** §4.2 fixes the candidate set as all *N* decisions of the episode **including the
+source**. My rule was the literal reading of "predicts +1 on an ordinary transition and the recovery
+cost at a corrective one": transport the read state by that many step-units,
+`T(x, m) = x + m·d`, with `d` the mean per-step displacement of the fitting folds' ordinary
+transitions. With the source among the candidates, such a rule can only win if it moves **more than
+halfway** to the successor. It does not come close. Measured on ordinary train transitions only, out
+of fold, at the headline depth:
+
+| | 4B | 12B |
+|---|---:|---:|
+| mean per-transition displacement, ‖x_{k+1} − x_k‖ | 1,548 | — |
+| ‖mean displacement‖, which is what `d` is | 313 | — |
+| coherent fraction, ‖mean‖ / mean‖·‖ | **0.202** | **0.290** |
+
+A fixed displacement moves the state about a fifth to under a third of the way, and the source sits
+at exactly that distance from the transported point while the successor sits at the full distance. The
+source therefore wins every time, by construction, in every stratum. Nothing about update closure
+follows from it.
+
+**The corpus is not the problem.** The same transitions, scored with the source excluded and no
+transport at all — is the true successor simply the nearest other decision of its episode? — give
+**0.430 on the 4B and 0.455 on the 12B against a chance level of 0.172**. The residual carries local
+order at about two and a half times chance. A rule that actually transports has something to find.
+
+**What this needs, and it is not mine to decide.** §4.2 fixes the candidate set, the tie rule, the
+metric and the strata — every choice that could otherwise be made after seeing a score — and does not
+fix the transport rule's **functional form**. I chose the form, it was the literal reading, and it
+cannot pass. Replacing it after seeing a null result is exactly the move a pre-registration exists to
+control, so the replacement is the Chief's ruling and not mine. It is put to them with the numbers
+above; until it is ruled, **E2 reads *not measured***, as §10's three states require.
+
+The diagnostic above was run on **ordinary training transitions only**. No corrective transition and
+no test episode was scored in it.
+
 ## 1. The hypothesis, stated as one
 
 The Director's, in his terms: **the 12B carries a richer representation of the task than the 4B,

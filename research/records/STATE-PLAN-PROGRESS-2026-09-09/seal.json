@@ -1,0 +1,110 @@
+{
+  "baseline_commit": "acc130a4c2057717c462564e5f4ed5dc35fa60ed",
+  "capture_set": {
+    "file_sha256": "8bbc8062249ce1cc0e15050a866cd726a2c205a969f3eeab3840fcb5520cee3e",
+    "lines": 7629,
+    "path": "capture-set.jsonl",
+    "triples_sha256": "1a7cfbdd4e21fc203eafbcc3ec50b96afcb214c169f21c7ba968ca83dfc9709a"
+  },
+  "commit": "f2a426524790d228fd42e7ab790d3f5974460523",
+  "deferred": {
+    "unknown_horizon_control": {
+      "quantities": "11-12 of M",
+      "released_by": "an amendment Codex reviews before any of its results are read",
+      "state": "deferred, not measured, veto disabled"
+    }
+  },
+  "files": {
+    "PREREGISTRATION.md": "9bc94059d40936497f499fb01c9c1b83eece813a2ec6a516ea536d6b6cd62c67",
+    "capture-budget.json": "afe560f31f874221e9c62efa522e99d1e75a3338dc6e25a4da5e444094c69155",
+    "capture-set.jsonl": "8bbc8062249ce1cc0e15050a866cd726a2c205a969f3eeab3840fcb5520cee3e",
+    "capture_budget.py": "9d18e13386d636be1e56c493e278b14b05285ffc142a7c0759d7bab677ef0dd9",
+    "carrier-ablation.json": "c79a45279c5ee587dde9b441ad79a92e694e8a5f5d45d31569d70ab40ff33adb",
+    "carrier_ablation.py": "6e9c897274a3ad4f149ab77080296fb6d46cbc419ef4cea8f120e746e9121042",
+    "check_prereg.py": "d01fea03a66a602b3e60c64d469dbfd85e6b1cbfb33e871b1552a470a1222205",
+    "corpus-count.json": "94f300e5db86e498798250a2246d7e419b67e7b692838489c40b400960fcf1ea",
+    "count_corpus.py": "51048e5d78a7c4c62d9a85400cde47d8538dff0c678d82034a4b0ecf8d6a5376",
+    "folds.json": "d9df843e95ec1ad47777d2bfb082b268ff3ed942b9c183d72205c15828837128",
+    "folds.py": "82c7b52c3da3b68d81296977f271bdabcb2b220edb6dc89c6f974fcf318abc62",
+    "prereg-inputs.json": "935a6eaca020d60c4c998eadbdd7c3577be10dc3404c0475fafe92795e30e04e",
+    "prereg_inputs.py": "f97a4b1a4fff56b82ae52ae75d5be5adc90d8898274d40dba9598f635bca4854"
+  },
+  "folds": {
+    "assignment_sha256": "c5e9622f7bef663c96614a99bab7e120873ad9eb79617912526c02e48016372c",
+    "basis": "measured-here",
+    "episodes": 1128,
+    "k": 5,
+    "per_fold": {
+      "0": 220,
+      "1": 232,
+      "2": 226,
+      "3": 224,
+      "4": 226
+    }
+  },
+  "produced_by": {
+    "path": "make_seal.py",
+    "sha256": "257f4c59586e6a965c0faa1adc57262159e5da654356f61ffe6ca62341aa15fd"
+  },
+  "programme": "state-plan-progress",
+  "record": "STATE-PLAN-PROGRESS-2026-09-09",
+  "refusals": {
+    "folds": "the assignment digest is fixed here so the folds cannot move afterwards (§7.1)",
+    "reader": "the reader refuses to read any capture without this file (§11 precondition 5)",
+    "tolerances": "every ε here was recomputed from the bound at the paired range width, not copied"
+  },
+  "schema_version": 1,
+  "seed": 20260910,
+  "tolerances": {
+    "alpha": 0.05,
+    "m": 12,
+    "range_width": 2.0,
+    "rows": [
+      {
+        "epsilon_declared": 0.23,
+        "evaluation_set": "E1 on the test split",
+        "n": 240,
+        "name": "ε_main",
+        "needs_n_at_least": 234,
+        "spare": 6,
+        "unit": "episodes"
+      },
+      {
+        "epsilon_declared": 0.13,
+        "evaluation_set": "E2 ordinary transitions, train split",
+        "n": 840,
+        "name": "ε_ord",
+        "needs_n_at_least": 731,
+        "spare": 109,
+        "unit": "episodes"
+      },
+      {
+        "epsilon_declared": 0.15,
+        "evaluation_set": "E2 corrective transitions",
+        "n": 553,
+        "name": "ε_sub",
+        "needs_n_at_least": 549,
+        "spare": 4,
+        "unit": "episodes (one each)"
+      },
+      {
+        "epsilon_declared": 0.23,
+        "evaluation_set": "subgroup",
+        "n": 244,
+        "name": "ε_sub, contiguous (transient)",
+        "needs_n_at_least": 234,
+        "spare": 10,
+        "unit": "episodes"
+      },
+      {
+        "epsilon_declared": 0.2,
+        "evaluation_set": "subgroup",
+        "n": 309,
+        "name": "ε_sub, across a gap",
+        "needs_n_at_least": 309,
+        "spare": 0,
+        "unit": "episodes"
+      }
+    ]
+  }
+}
