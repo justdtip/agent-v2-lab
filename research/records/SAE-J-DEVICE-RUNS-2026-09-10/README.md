@@ -204,3 +204,34 @@ By position (median ratio): | position | layer 18 | layer 24 |
 At 12B layer 47 the in-domain ratio is 3.9 against 3.2–3.3 on the agent transcripts, and at layer 24 it is 8.5 — the 12B's middle layer amplifies the residual as strongly as the 4B's, and a few in-domain cells there have a lens-score share above one (the residual's readout is larger than the whole activation's, which happens when `L e` and `L h` are partly opposed). The ranking of layers and the flatness across positions repeat. Four models-and-layers, in and out of domain, say the same thing.
 
 **What remains not measured.** Whether a wider or denser dictionary (the suites ship `l0_medium` and 65k/262k widths) lowers the ratio; whether a dictionary trained on the readout metric would; and whether the 90 ranked 12B cells' top features say anything about the action — the last requires labels these dictionaries do not have, and the interpretation limits forbid inventing them.
+
+## 4. The review of 2026-09-11 and the model's own answer
+
+A review received on the morning of 2026-09-11 (Daniel's relay; the text is in the order) made the point that the finding above rests on a metric — the lens-score share over the whole vocabulary — that is not a measurement of the model's decision, and proposed six experiments to separate "the dictionary misses useful information" from "the metric overstates how much that matters". Three have run; this section carries the decisive one first.
+
+### 4.1 Substituting the reconstruction into the model (the review's experiment 3)
+
+[substitution_test.py](substitution_test.py), 32 action-position cells (the first 32 of the sampled decisions), 4B layers 18 and 24, the 16k `l0_small` dictionaries, float32 eager at width 1, 3 minutes on the card, 23:54Z–23:57Z: [bridge/subst-4b.json](bridge/subst-4b.json). At the cell's position the rest of the model is run with the residual replaced by (a) itself — the inert control, which must and does change nothing (max logit difference 0.0; the unpatched forward reproduces the capture's residual to the bit); (b) the dictionary's reconstruction `ĥ = b + Σ z_i d_i`; (c) four random errors of the same norm as `e`; (d) four angle-matched errors (the same projection on `h`, the same norm). Read at that position: the next-token argmax and its margin, KL(p_orig ‖ p_arm), and the change of the logit gaps among the original top-10 tokens. Beside the model's own answer, two predictions of the same gap changes: the lens's (gain-only scores divided by the measured RMS of the final residual, so on the logit scale) and an exact forward-mode derivative of the logits along `ĥ − h` (`torch.autograd.functional.jvp`).
+
+| 4B, 32 cells | layer 18 | layer 24 |
+|---|---:|---:|
+| original margin, top-1 over top-2 (logits), median | 16.3 | 16.3 |
+| **reconstruction: argmax flips** | **0 of 32** | **0 of 32** |
+| reconstruction: margin after, median | 14.3 | 11.9 |
+| reconstruction: top-1/top-2 gap change, median [min, max] | −0.7 [−6.4, +5.9] | −0.6 [−11.1, +7.7] |
+| reconstruction: KL, median / max | 3 × 10⁻⁷ / 0.06 | 2 × 10⁻⁵ / 0.11 |
+| random error, same norm: KL, median / max | 4 × 10⁻⁷ / 3.6 | 7 × 10⁻⁷ / 0.27 |
+| angle-matched error: KL, median / max | 5 × 10⁻⁷ / 0.24 | 4 × 10⁻⁷ / 0.38 |
+| KL, reconstruction over the cell's random median: median / p90 | 1.2 / 91 | 9.2 / 3 × 10⁴ |
+| top-10 pairwise orderings flipped (of 45), median: reconstruction / random | 8 / 8 | 11 / 10 |
+| corr(actual gap changes, exact derivative), median [min] | 0.82 [0.50] | 0.84 [0.58] |
+| corr(actual gap changes, lens prediction), median [min] | 0.22 [−0.54] | 0.25 [−0.29] |
+| relative error of the prediction, median: derivative / lens | 0.62 / 1.54 | 0.58 / 1.14 |
+
+**The decision does not move.** In all 64 cell-layers the tool token the model would emit is unchanged by the substitution, and its margin over the runner-up shrinks by about a seventh at layer 18 and a quarter at layer 24 but stays at 12–14 logits. The KL to the original distribution is of order 10⁻⁷ to 10⁻⁵ because the distribution at this position is nearly one-hot; random errors of the same size do the same (their KL is the same order). The vocabulary-wide lens-score share of 0.6–0.7 that refused every ranking in §3 was therefore not measuring damage to the decision: **it counted score movement across two hundred thousand tokens that never compete.** On the review's outcome table that is row one — the lens or its metric overstates functional damage.
+
+**Where the reconstruction does differ from a random error.** At layer 24 the reconstruction perturbs the distribution about nine times more than a random error of the same norm at the median, with a long tail (KL up to 0.11 against a random median of 10⁻⁶), and the top-1/top-2 gap moves by up to 11 logits in individual cells. That is the precedent the review cited (reconstruction errors more consequential than matched random ones) — present at layer 24, absent at layer 18 (ratio 1.2) — but at a size that leaves every decision intact here. The count of top-10 orderings flipped is the same for the reconstruction and for random errors.
+
+**The lens does not predict the change; the local derivative does.** Over the 45 top-10 gap changes per cell the exact derivative along `ĥ − h` correlates 0.82–0.84 with what the model actually does (relative error 0.6, so the change is only partly linear at this size), while the lens — a map averaged over the fit domain, without the input-dependent normalisation — correlates 0.22–0.25 and has relative error above one. On the review's table that is row two: the averaging, or the lens's domain, is the limitation for predicting a perturbation's effect at these positions, even though the same lens reads the six tool logits at the action position to 0.99 agreement (W-5). Reading a state and predicting a perturbation are different uses, and the second is not licensed by the first.
+
+**Consequence for §3.** The A2 refusals stand as what they are — the declared vocabulary-wide budget was not met — but the sentence "the readout-relevant part of these activations lives mostly in the dictionary's error term" is withdrawn as a statement about the decision: the part of the activation that decides the tool is reconstructed well enough that the decision never changes. What §3 measured, and still shows, is that the dictionaries' error is amplified by the gain-only vocabulary readout in directions that do not bear on this decision. A decision-focused fidelity measure (the review's experiment 1, running as this is written) is the instrument to add beside the budget, not in place of it.
