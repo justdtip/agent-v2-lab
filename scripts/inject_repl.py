@@ -10,14 +10,17 @@ concept vector from "Tell me about {word}." minus the mean over random words, in
 residual stream about two thirds of the way up, and asks the model whether it notices an intruding
 thought. This console does the mechanical part of that and leaves the experimental design to you.
 
-THE MAGNITUDE CONVENTION, WHICH IS RULED AND NOT MINE TO PICK. A *synthetic* direction is injected at
-`alpha` times the residual norm at that layer and position — the repo's existing rule for directions
-the model did not itself produce, and the same units as the paper's "strength 2". The norm is
-measured on the **clean** forward of the carrier prompt at the injection position and recorded, so
-the same alpha means the same thing across prompts and layers. A *donor difference* (`h_donor −
-h_target`) is already in the model's own units and is injected at alpha = 1 by default; the repo's
-ruling (`GEMMA3-CONFIDENCE-2026-09-08`) prefers donor differences precisely because they need no
-scale convention. `extract` gives you donor rows; `concept` gives you a synthetic direction.
+THE MAGNITUDE, AND WHY THE DEFAULT IS NOT THE REPO'S LITERAL RULE. This repo rules that a synthetic
+direction is injected at `alpha` times the *residual norm* at the site, citing the paper's
+"strengths 2 to 4". Applied literally that is catastrophic: an extracted concept direction runs at
+a few per cent of the residual norm, so alpha 2 on that basis adds a perturbation twice the size of
+the residual it is added to, and the model emits one token forever. Measured, not assumed — it was
+the first thing this console did. So `basis=vector` is the default and multiplies the direction by
+alpha, which is the only reading of "strength 2" that leaves a model standing; `basis=residual` is
+the literal rule, kept and labelled. Either way the perturbation is printed as a fraction of the
+clean residual norm at the site, so the magnitude is never implicit. A *donor* row from `extract` is
+already in the model's own units, which is why the repo's ruling
+(`GEMMA3-CONFIDENCE-2026-09-08`) prefers donor differences: they need no convention at all.
 
 HOW THIS DIFFERS FROM THE STEERING PILOT, DECLARED BECAUSE IT MATTERS. `STEER-PILOT-2026-09-10` patched
 the **prefill only** and deliberately left decode untouched (`h.shape[1] > pos`). The paper's protocol
@@ -37,7 +40,7 @@ Commands (`help` lists them live):
     extract <slot> @<L> [pos=<i>] <prompt>    residual at layer L, position pos (default: last)
     concept <slot> @<L> <word>                Lindsey's recipe: "Tell me about {word}." minus the
                                               mean over --concept-baseline random words
-    inject <slot> @<L> [a=<alpha>] [from=<i>] [sustain=<bool>] <prompt>
+    inject <slot> @<L> [a=<alpha>] [from=<i>] [sustain=<bool>] [basis=vector|residual] <prompt>
     sweep <slot> layers=<a,b,c> [a=<alpha>]  <prompt>
     slots | drop <slot> | save <file> | load <file> | help | quit
 """
@@ -58,7 +61,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from local_llm_lab import device as device_mod  # noqa: E402
 from local_llm_lab import hf_text  # noqa: E402
 from local_llm_lab.arch_torch import TorchArchitectureView  # noqa: E402
-from local_llm_lab.pipeline.runner import config_eos_ids, torch_greedy_stream  # noqa: E402
+from local_llm_lab.pipeline.runner import config_eos_ids  # noqa: E402
 
 #: The words the concept recipe subtracts, so a concept vector is a direction and not a position.
 BASELINE_WORDS = (
@@ -128,7 +131,11 @@ class Console:
 
         self.tokenizer = AutoTokenizer.from_pretrained(str(snapshot), local_files_only=True)
         self.view = TorchArchitectureView.from_model(self.model)
-        self.eos = set(config_eos_ids(self.model))
+        self.stop_ids = set(config_eos_ids(self.model))
+        for name in ("<end_of_turn>", "<eos>"):
+            got = self.tokenizer.convert_tokens_to_ids(name)
+            if isinstance(got, int) and got >= 0:
+                self.stop_ids.add(got)
         self.slots: dict[str, dict] = {}
         self.baseline_words = baseline_words
         self.rng = random.Random(seed)
@@ -164,12 +171,28 @@ class Console:
         return rows[position if position is not None else rows.shape[0] - 1].clone()
 
     def generate(self, ids: list[int], max_tokens: int) -> str:
-        pieces = []
+        """Greedy decode with a KV cache, one forward per step so hooks fire on every token.
+
+        Deliberately not `runner.torch_greedy_stream`: that loop is shared with the sealed capture
+        path, and on this prompt it emits newlines where a plain greedy loop emits "Hello there!",
+        so its convention is not the one this console wants. Rather than change a loop other work
+        depends on, this one is local and small.
+        """
+        from transformers import DynamicCache
+
+        cache = DynamicCache()
+        cursor, emitted = list(ids), []
         with torch.no_grad():
-            for _token, text in torch_greedy_stream(
-                    self.model, self.view, self.tokenizer, ids, max_tokens, eos_ids=self.eos):
-                pieces.append(text)
-        return "".join(pieces)
+            logits = self.model(input_ids=self.view._ids(cursor),
+                                past_key_values=cache, use_cache=True).logits
+            for _ in range(max_tokens):
+                token = int(logits[0, -1].float().argmax())
+                if token in self.stop_ids:
+                    break
+                emitted.append(token)
+                logits = self.model(input_ids=self.view._ids([token]),
+                                    past_key_values=cache, use_cache=True).logits
+        return self.tokenizer.decode(emitted)
 
     # -- commands ------------------------------------------------------------------------------
     def cmd_gen(self, prompt: str, max_tokens: int) -> None:
@@ -199,44 +222,55 @@ class Console:
               f"against a carrier norm of {target.norm():.1f} "
               f"({vector.norm() / target.norm():.1%} of it), {len(chosen)} baseline words")
 
-    def _prepare(self, slot: str, layer: int, alpha: float, ids: list[int], from_position: int):
+    def _prepare(self, slot: str, layer: int, alpha: float, ids: list[int], from_position: int,
+                 basis: str = "vector"):
+        """Return the vector, the multiplier, and a legible statement of what the magnitude is.
+
+        `basis="vector"` (the default) multiplies the extracted direction by alpha, which is what
+        the paper's "strength 2" has to mean: the direction is already a difference of activations
+        and comes out at a few per cent of the residual, so alpha of 2 perturbs by a few per cent
+        more. `basis="residual"` is the literal reading of this repo's rule for synthetic directions
+        — alpha times the residual norm — and at alpha 2 that is a perturbation twice the size of
+        the residual it is added to, which destroys the model's output. Both are offered; the
+        destructive one is not the default, and either way the perturbation is reported as a
+        fraction of the clean residual norm so the magnitude is never implicit.
+        """
         entry = self.slots[slot]
         vector = entry["vector"]
-        if entry["kind"] == "concept":
-            # Ruled convention: a synthetic direction is scaled to alpha times the residual norm
-            # at the injection site, measured clean. The same alpha means the same thing anywhere.
-            here = float(self.residual_at(ids, layer, from_position).norm())
+        here = float(self.residual_at(ids, layer, from_position).norm())
+        if basis == "residual":
             scale = alpha * here / float(vector.norm())
-            basis = f"alpha x clean residual norm {here:.1f} at layer {layer} position {from_position}"
         else:
             scale = alpha
-            basis = "alpha x the vector itself (already in the model's own units)"
-        return vector, scale, basis
+        perturbation = scale * float(vector.norm())
+        note = (f"basis={basis}, |delta| {perturbation:,.0f} = "
+                f"{perturbation / here:.1%} of the clean residual norm {here:,.0f}")
+        return vector, scale, note
 
     def cmd_inject(self, slot: str, layer: int, alpha: float, from_position: int | None,
-                   sustain: bool, prompt: str, max_tokens: int) -> None:
+                   sustain: bool, prompt: str, max_tokens: int, basis: str = "vector") -> None:
         if slot not in self.slots:
             print(f"no slot '{slot}'"); return
         ids = self.render(prompt)
         start = from_position if from_position is not None else len(ids) - 1
-        vector, scale, basis = self._prepare(slot, layer, alpha, ids, start)
+        vector, scale, note = self._prepare(slot, layer, alpha, ids, start, basis)
         injection = Injection(self.view.blocks[layer - 1], vector, scale=scale,
                               from_position=start, sustain=sustain)
         with injection:
             out = self.generate(ids, max_tokens)
-        print(f"[{slot} @ L{layer}, alpha {alpha}, from {start}, sustain {sustain}; {basis}]")
+        print(f"[{slot} @ L{layer}, alpha {alpha}, from {start}, sustain {sustain}; {note}]")
         print(out.strip() or "(nothing)")
         print(f"  -- hook fired {injection.applications} times over "
               f"{injection.positions_touched} positions")
 
     def cmd_sweep(self, slot: str, layers: list[int], alpha: float, prompt: str,
-                  max_tokens: int) -> None:
+                  max_tokens: int, basis: str = "vector") -> None:
         if slot not in self.slots:
             print(f"no slot '{slot}'"); return
         ids = self.render(prompt)
         start = len(ids) - 1
         for layer in layers:
-            vector, scale, _ = self._prepare(slot, layer, alpha, ids, start)
+            vector, scale, _ = self._prepare(slot, layer, alpha, ids, start, basis)
             with Injection(self.view.blocks[layer - 1], vector, scale=scale, from_position=start):
                 out = self.generate(ids, max_tokens)
             first = " ".join(out.split())[:150]
@@ -317,11 +351,12 @@ def run(console: Console, max_tokens: int) -> int:
                         float(options.get("a", 2.0)),
                         int(options["from"]) if "from" in options else None,
                         truthy(options.get("sustain", "true")), text,
-                        int(options.get("n", max_tokens)))
+                        int(options.get("n", max_tokens)), options.get("basis", "vector"))
                 else:
                     console.cmd_sweep(slot, [int(x) for x in options["layers"].split(",")],
                                       float(options.get("a", 2.0)), text,
-                                      int(options.get("n", max_tokens)))
+                                      int(options.get("n", max_tokens)),
+                                      options.get("basis", "vector"))
             else:
                 print(f"unknown command '{head}' — try 'help'")
         except Exception as exc:  # a console that dies on a typo is not a console
