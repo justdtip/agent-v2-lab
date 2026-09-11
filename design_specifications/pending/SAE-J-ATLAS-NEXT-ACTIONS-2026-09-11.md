@@ -30,4 +30,8 @@ The capture holds **two** residuals per decision, at the note position and the a
 
 ## D. Order of execution
 
-A3, then C5 (the labelled dictionary, because it makes everything after it readable), then C2 (all layers), then C1 and C3 together, then B1, then C6 at the layers the curve names, then C4 when the population grows. B2 and any widening past a few hundred cells belong to the next rental.
+**Ruled by the Research Director, 2026-09-11: the agentic long-context lens goes ahead of the SAE work below.** See [AGENTIC-LENS-BRIEF-2026-09-11.md](AGENTIC-LENS-BRIEF-2026-09-11.md). The reason is that a dictionary trained elsewhere and a lens fitted elsewhere are two separate domain gaps, and the lens one is ours to close: two of the results that limit the bridge — the readout that resolves but has no mass at the action position, and the lens's inability to carry a perturbation — are candidates for a domain fix that no amount of dictionary work reaches. The SAE queue below resumes once that lens exists and has been read on the same 600 cells, so the comparison is paired.
+
+What continues meanwhile, because it is already running or costs nothing: A3's feature intervention and its dose-response follow-up, and the layer sweep started at 09:02Z, since both are on data we hold and the sweep is CPU alongside whatever the lens work needs.
+
+Then, after the lens: A3's remainder, then C5 (the labelled dictionary, because it makes everything after it readable), then C2 (all layers), then C1 and C3 together, then B1, then C6 at the layers the curve names, then C4 when the population grows. B2 and any widening past a few hundred cells belong to the next rental.
