@@ -11,6 +11,8 @@ No capture, model, residual or estimand is touched: every fixture is synthetic o
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import shutil
 import sys
@@ -166,13 +168,99 @@ def f6_labels() -> list[str]:
     return problems
 
 
+def _synthetic_record(tmp: Path) -> Path:
+    """A record with the real seal and a synthetic addendum that lists this reader — admission only."""
+    rec = tmp / "research" / "records" / HERE.name
+    rec.parent.mkdir(parents=True)
+    shutil.copytree(HERE, rec, ignore=shutil.ignore_patterns("__pycache__", "addendum-*"))
+    import hashlib
+    seal = json.loads((HERE / "seal.json").read_text())
+    digest = lambda q: hashlib.sha256(q.read_bytes()).hexdigest()
+    rule = HERE.parents[2] / read_e2.RULE_MODULE
+    shutil.copytree(HERE.parents[2] / "src", tmp / "src")
+    (rec / "addendum-9.json").write_text(json.dumps({
+        "schema_version": 1, "baseline_commit": "0" * 40,
+        "amends": {"sha256": hashlib.sha256((HERE / "seal.json").read_bytes()).hexdigest()},
+        "files": {read_e2.READER: digest(rec / "read_e2.py"), read_e2.RULE_MODULE: digest(rule)},
+    }, indent=2))
+    return rec
+
+
+def f2_entry_points() -> list[str]:
+    """F2 (Codex recheck2): the declared pair, and a gate that refuses incomplete coverage."""
+    problems = []
+    declared = read_e2.declared_models(HERE)
+    if len(declared) != 2:
+        problems.append(f"F2: the sealed budget declares {len(declared)} models, not 2")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        rec = _synthetic_record(Path(tmp))
+        captures = Path(tmp) / "captures"
+        for case, present in (("no models", []), ("one model only", declared[:1])):
+            captures.mkdir(exist_ok=True)
+            for existing in captures.iterdir():
+                shutil.rmtree(existing)
+            for name in present:
+                (captures / name).mkdir(parents=True)
+                (captures / name / "manifest.jsonl").write_text("")
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    read_e2.main(["--record", str(rec), "--captures", str(captures),
+                                  "--out", str(Path(tmp) / "out.json")])
+                problems.append(f"F2: '{case}' was admitted")
+            except read_e2.Refused as exc:
+                if "declared pair" not in str(exc):
+                    problems.append(f"F2: '{case}' refused for the wrong reason: {exc}")
+            except Exception as exc:
+                problems.append(f"F2: '{case}' failed before the pair check: {type(exc).__name__}")
+
+    # An incomplete gate population must fail even at fraction 1.0.
+    gate = {"fraction": 1.0, "requested": 100, "scored": 20, "complete": False,
+            "folds_unavailable": [1, 2, 3, 4]}
+    covered = gate["complete"] and gate["scored"] == gate["requested"] > 0
+    if covered or (gate["fraction"] >= read_e2.GATE and covered):
+        problems.append("F2: a 20-of-100 gate population counts as covered")
+    return problems
+
+
+def f3_bootstrap_and_verdict() -> list[str]:
+    """F3 (Codex recheck2): the declared interval refits and is stratified; the verdict uses it."""
+    problems = []
+    if "straddle" not in read_e2.verdict(-0.4, 0.6, 0.15):
+        problems.append("F3: an interval of [-0.4, 0.6] against ε = 0.15 does not read as straddling")
+    if "wholly beyond" not in read_e2.verdict(0.3, 0.5, 0.15):
+        problems.append("F3: an interval wholly beyond ε does not read as resolved")
+    if "wholly within" not in read_e2.verdict(-0.05, 0.10, 0.15):
+        problems.append("F3: an interval wholly within ε does not read as resolved")
+    cheap = {"low": -0.1, "high": 0.1}
+    wide = {"low": -0.4, "high": 0.6, "refitted": True}
+    if read_e2.governing(cheap, wide)[2] != "paired, refitted within each resample":
+        problems.append("F3: the wider interval does not govern")
+    if read_e2.governing({"low": -0.7, "high": 0.7}, wide)[2] != "paired, fit held still":
+        problems.append("F3: the wider interval does not govern when it is the cheap one")
+
+    # The declared interval must resample within strata and refit, not hold the fit still.
+    rng = np.random.default_rng(7)
+    features = rng.normal(size=(24, 4)).astype(np.float32)
+    moves = [dict(task_id=f"t{i}", source=2 * i, target=2 * i + 1, m=1, fold=i % 2,
+                  candidates=[2 * i, 2 * i + 1]) for i in range(8)]
+    strata = {f"t{i}": ("train", "fam", "clean") for i in range(8)}
+    out = read_e2.refitting_bootstrap(features, moves, moves, {f"t{i}": i % 2 for i in range(8)},
+                                      strata, rank=1, resamples=5, seed=1)
+    if out.get("stratified_by") != "(split, family, variant)" or not out.get("refitted"):
+        problems.append(f"F3: the declared interval is not stratified-and-refitted: {out}")
+    return problems
+
+
 def main() -> int:
     checks = (("F1 addendum required", f1_addendum_required),
               ("F2 the gate gates", f2_gate_gates),
               ("F3 tolerances attached", f3_tolerances_attached),
               ("F4 short-rank coverage", f4_short_rank_coverage),
               ("F5 float32 at the boundary", f5_float32_at_the_boundary),
-              ("F6 labels", f6_labels))
+              ("F6 labels", f6_labels),
+              ("F2b declared pair and gate coverage", f2_entry_points),
+              ("F3b refitting bootstrap and verdict", f3_bootstrap_and_verdict))
     failures = []
     for name, check in checks:
         try:
@@ -183,7 +271,7 @@ def main() -> int:
         for problem in found:
             print(f"          {problem}")
         failures += found
-    print(f"\n{'FAILED' if failures else 'all six of Codex 3af4c56 fixed'}: "
+    print(f"\n{'FAILED' if failures else 'all of Codex 3af4c56 and da24c8b fixed'}: "
           f"{len(failures)} problem(s)")
     return 1 if failures else 0
 

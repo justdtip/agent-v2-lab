@@ -43,7 +43,7 @@ from local_llm_lab.pipeline.state_programme.read_gate import (  # noqa: E402
     require_addendum, require_seal,
 )
 from local_llm_lab.pipeline.state_programme.tolerances import (  # noqa: E402
-    paired_bootstrap_bounds, required_n,
+    ALPHA, RESAMPLES, paired_bootstrap_bounds, required_n,
 )
 from local_llm_lab.pipeline.state_programme.transport import fit, nearer_the_successor  # noqa: E402
 from read_e1 import load_cells, load_layers  # noqa: E402
@@ -58,6 +58,12 @@ STRATA = (("ordinary_train", "ε_ord"),
           ("ordinary_test", None))
 RULE_MODULE = "src/local_llm_lab/pipeline/state_programme/transport.py"
 READER = "research/records/STATE-PLAN-PROGRESS-2026-09-09/read_e2.py"
+
+
+def declared_models(record: Path) -> list[str]:
+    """The model pair the programme declares, from the sealed budget rather than from a constant."""
+    budget = json.loads((record / "capture-budget.json").read_text())
+    return sorted(budget["models"])
 
 
 class Refused(RuntimeError):
@@ -170,6 +176,74 @@ def capability(features: np.ndarray, ordinary_train: list[dict], per_fold: dict,
             "folds_unavailable": sorted(unreached), "complete": not unreached}
 
 
+def refitting_bootstrap(features: np.ndarray, subset: list[dict], ordinary_train: list[dict],
+                        folds: dict[str, int], strata: dict[str, tuple], *, rank: int,
+                        resamples: int, seed: int, alpha: float = ALPHA) -> dict:
+    """§7 as sealed: episodes resampled **within `(split, family, variant)`**, and the rule
+    **refitted out of fold inside every resample**.
+
+    The cheap interval resamples fixed per-episode numbers and holds the fit still, so it describes
+    the spread of a score computed once; this one carries the fit's own variability, which is where
+    a transport rule's uncertainty actually lives. It is therefore the expensive one, and §7 declares
+    it rather than the cheap one.
+    """
+    episodes = sorted({m["task_id"] for m in subset})
+    by_stratum: dict[tuple, list[str]] = defaultdict(list)
+    for task in episodes:
+        by_stratum[strata[task]].append(task)
+    rng = np.random.default_rng(seed)
+    means = []
+    for _ in range(resamples):
+        drawn: list[str] = []
+        for _key, members in sorted(by_stratum.items()):
+            drawn += [members[i] for i in rng.integers(0, len(members), len(members))]
+        multiplicity = defaultdict(int)
+        for task in drawn:
+            multiplicity[task] += 1
+        per_fold = {}
+        for held_out in sorted(set(folds.values())):
+            rows = [m for m in ordinary_train
+                    for _ in range(multiplicity.get(m["task_id"], 0)) if m["fold"] != held_out]
+            if len(rows) <= rank:
+                per_fold[held_out] = None
+                continue
+            per_fold[held_out] = transport_rule(
+                np.array([features[m["source"]] for m in rows]),
+                np.array([features[m["target"]] for m in rows]), rank)
+        rules = {task: per_fold[fold] for task, fold in folds.items() if per_fold[fold] is not None}
+        rows, _ = score(features, [m for m in subset if multiplicity.get(m["task_id"], 0)], rules, rank)
+        if not rows:
+            continue
+        hits, chance, _ = by_episode(rows)
+        means.append(float((hits - chance).mean()))
+    if not means:
+        return {"low": None, "high": None, "resamples": 0,
+                "note": "no resample produced a scorable population"}
+    values = np.array(means)
+    return {"low": float(np.quantile(values, alpha / 2)),
+            "high": float(np.quantile(values, 1 - alpha / 2)),
+            "resamples": len(means), "stratified_by": "(split, family, variant)",
+            "refitted": True}
+
+
+def governing(cheap: dict, refit: dict | None) -> tuple[float, float, str]:
+    """Both intervals are reported; the **wider** governs the reading."""
+    if refit is None or refit.get("low") is None:
+        return cheap["low"], cheap["high"], "paired, fit held still"
+    if (refit["high"] - refit["low"]) >= (cheap["high"] - cheap["low"]):
+        return refit["low"], refit["high"], "paired, refitted within each resample"
+    return cheap["low"], cheap["high"], "paired, fit held still"
+
+
+def verdict(low: float, high: float, epsilon: float) -> str:
+    """Resolved only when the governing interval lies wholly beyond ε or wholly within it."""
+    if min(abs(low), abs(high)) > epsilon and low * high > 0:
+        return "resolved: the governing interval lies wholly beyond ε"
+    if max(abs(low), abs(high)) <= epsilon:
+        return "resolved: the governing interval lies wholly within ε"
+    return "not resolvable at this n: the governing interval straddles ε"
+
+
 def tolerance_for(seal: dict, key: str | None) -> dict | None:
     """The stratum's tolerance, from the seal rather than from a constant here."""
     if key is None:
@@ -187,7 +261,8 @@ def tolerance_for(seal: dict, key: str | None) -> dict | None:
 
 
 def evaluate(subset: list[dict], features: np.ndarray, rules: dict, rank: int,
-             tolerance: dict | None, seed: int, registered: bool) -> dict | None:
+             tolerance: dict | None, seed: int, registered: bool,
+             refit: dict | None = None) -> dict | None:
     """One (stratum, depth, rank) cell, with its coverage, its tolerance and its bound."""
     rows, unreached = score(features, subset, rules, rank)
     if not rows:
@@ -211,7 +286,12 @@ def evaluate(subset: list[dict], features: np.ndarray, rules: dict, rank: int,
         "per_episode_over_chance": over.tolist(),
     }
     low, high = paired_bootstrap_bounds(hits, chance, seed=seed)
-    cell["paired_bootstrap"] = {"low": low, "high": high}
+    cell["paired_bootstrap"] = {"low": low, "high": high, "refitted": False,
+                                "note": "the fit is held still; §7's declared interval refits"}
+    cell["refitting_bootstrap"] = refit
+    governs = governing(cell["paired_bootstrap"], refit)
+    cell["governing_interval"] = {"low": governs[0], "high": governs[1], "from": governs[2],
+                                  "rule": "the wider of the two intervals governs the reading"}
     if tolerance is None:
         cell["tolerance"] = None
         cell["reading"] = "descriptive; this stratum carries no pre-registered tolerance"
@@ -231,11 +311,10 @@ def evaluate(subset: list[dict], features: np.ndarray, rules: dict, rank: int,
     if not sufficient:
         cell["reading"] = (f"insufficient: {len(hits)} episodes against {needed} required at "
                            f"ε = {tolerance['epsilon']}; no verdict is read at this resolution")
-    elif abs(cell["over_chance"]) > tolerance["epsilon"]:
-        cell["reading"] = f"resolved: |{cell['over_chance']:.3f}| exceeds ε = {tolerance['epsilon']}"
     else:
-        cell["reading"] = (f"not resolvable at this n: |{cell['over_chance']:.3f}| is within "
-                           f"ε = {tolerance['epsilon']}; this is not evidence of no effect")
+        cell["reading"] = verdict(governs[0], governs[1], tolerance["epsilon"])
+        if "straddles" in cell["reading"]:
+            cell["reading"] += "; this is not evidence of no effect"
     return cell
 
 
@@ -250,8 +329,10 @@ def load_for(name: str, directory: Path, folds: dict, fraction: float | None):
     return cells, (features[:, 0, :] if fraction is not None else features), chosen, moves
 
 
-def read_model(name: str, directory: Path, folds: dict, seal: dict, cached: dict) -> dict:
+def read_model(name: str, directory: Path, folds: dict, seal: dict, cached: dict,
+               resamples: int) -> dict:
     cells, features_all, chosen, moves = load_for(name, directory, folds, None)
+    strata = {c["task_id"]: (c["split"], c["family"], c["variant"]) for c in cells}
     ordinary_train = [m for m in moves if m["kind"] == "ordinary" and m["split"] == "train"]
     corrective = [m for m in moves if m["kind"] == "corrective"]
     subsets = {
@@ -279,9 +360,16 @@ def read_model(name: str, directory: Path, folds: dict, seal: dict, cached: dict
         for label, key in STRATA:
             cell[label] = {}
             for rank in LADDER:
-                registered = fraction == HEADLINE_FRACTION and rank == HEADLINE_RANK
+                # `ordinary_test` carries no registered tolerance, so it is descriptive even at the
+                # headline coordinates (Codex F3): registered is about the estimand, not the cell.
+                registered = (fraction == HEADLINE_FRACTION and rank == HEADLINE_RANK
+                              and key is not None)
+                refit = None
+                if registered and resamples:
+                    refit = refitting_bootstrap(features, subsets[label], ordinary_train, folds,
+                                                strata, rank=rank, resamples=resamples, seed=seed)
                 cell[label][str(rank)] = evaluate(subsets[label], features, rules, rank,
-                                                  tolerance_for(seal, key), seed, registered)
+                                                  tolerance_for(seal, key), seed, registered, refit)
         results.append(cell)
     return {"model": name, "depth": int(cells[0]["layers"]), "layers": chosen, "cells": results}
 
@@ -292,6 +380,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--captures", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--expect-seal")
+    parser.add_argument("--bootstrap-resamples", type=int, default=RESAMPLES,
+                        help="§7 seals %(default)s; lower it only under an amendment, never to fit a night")
+    parser.add_argument("--estimate-bootstrap", type=int, metavar="N",
+                        help="time N refitting resamples, project the full cost, and read NOTHING")
     args = parser.parse_args(argv)
 
     root = args.record.resolve().parents[2]
@@ -309,8 +401,15 @@ def main(argv: list[str] | None = None) -> int:
         raise Refused("folds.json is not the assignment the seal fixes")
     folds = {task: int(fold) for task, fold in assignment["fold_of"].items()}
 
+    # F2: the pair is declared by the sealed budget, not by whatever directories happen to exist.
+    declared = declared_models(args.record)
     directories = {p.name: p for p in sorted(args.captures.iterdir())
                    if p.is_dir() and (p / "manifest.jsonl").exists()}
+    missing = [m for m in declared if m not in directories]
+    extra = [m for m in directories if m not in declared]
+    if missing or extra:
+        raise Refused(f"the declared pair is {declared}; missing {missing}, unexpected {extra}. "
+                      "A reading of one model, or of none, is not this comparison.")
 
     # PHASE 1 — the gate, both models, before any stratum of either is scored (F2).
     print(f"\n=== GATE: §5, depth {HEADLINE_FRACTION}, rank {HEADLINE_RANK}, threshold {GATE} ===")
@@ -320,9 +419,12 @@ def main(argv: list[str] | None = None) -> int:
         ordinary_train = [m for m in moves if m["kind"] == "ordinary" and m["split"] == "train"]
         per_fold = fit_out_of_fold(features, ordinary_train, folds)
         result = capability(features, ordinary_train, per_fold, HEADLINE_RANK)
+        # F2: an incomplete gate population is not a conservative gate, it is a different gate.
+        covered = result["complete"] and result["scored"] == result["requested"] > 0
         result.update({"layer": chosen[HEADLINE_FRACTION], "rank": HEADLINE_RANK,
-                       "threshold": GATE,
-                       "passes": bool(result["fraction"] is not None and result["fraction"] >= GATE)})
+                       "threshold": GATE, "coverage_complete": bool(covered),
+                       "passes": bool(result["fraction"] is not None
+                                      and result["fraction"] >= GATE and covered)})
         gates[name] = result
         cached[name] = {HEADLINE_FRACTION: per_fold}
         print(f"  {name:<24} {result['fraction']:.3f}  "
@@ -331,12 +433,33 @@ def main(argv: list[str] | None = None) -> int:
               f"{'' if result['complete'] else ', folds unavailable ' + str(result['folds_unavailable'])})")
     failed = [n for n, g in gates.items() if not g["passes"]]
     if failed:
-        raise Refused(f"§5's gate fails on {failed}; no stratum is scored on either model")
+        reasons = "; ".join(
+            f"{n}: fraction {gates[n]['fraction']}, "
+            f"{gates[n]['scored']}/{gates[n]['requested']} transitions"
+            f"{'' if gates[n]['coverage_complete'] else ', coverage incomplete'}" for n in failed)
+        raise Refused(f"§5's gate fails on {failed} ({reasons}); no stratum is scored on either model")
     print("  gate passes on both models; scoring proceeds")
+
+    if args.estimate_bootstrap:
+        import time
+        name, directory = next(iter(directories.items()))
+        cells, features, chosen, moves = load_for(name, directory, folds, HEADLINE_FRACTION)
+        strata = {c["task_id"]: (c["split"], c["family"], c["variant"]) for c in cells}
+        ordinary_train = [m for m in moves if m["kind"] == "ordinary" and m["split"] == "train"]
+        started = time.time()
+        refitting_bootstrap(features, ordinary_train, ordinary_train, folds, strata,
+                            rank=HEADLINE_RANK, resamples=args.estimate_bootstrap,
+                            seed=int(seal["seed"]))
+        each = (time.time() - started) / args.estimate_bootstrap
+        print(f"\n{name}: {each:.1f}s per refitting resample at rank {HEADLINE_RANK}")
+        print(f"  §7's {args.bootstrap_resamples} resamples on this model alone: "
+              f"{each * args.bootstrap_resamples / 3600:.1f} h, serial")
+        print("NOTHING WAS READ: this mode produces no bound and no stratum.")
+        return 0
 
     # PHASE 2 — the strata, once.
     print("\n=== STRATA ===")
-    results = [read_model(name, directory, folds, seal, cached[name])
+    results = [read_model(name, directory, folds, seal, cached[name], args.bootstrap_resamples)
                for name, directory in directories.items()]
 
     args.out.write_text(json.dumps({
