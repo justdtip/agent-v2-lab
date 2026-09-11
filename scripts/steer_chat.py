@@ -194,17 +194,25 @@ class Chat(Console):
                        "note": note, "tokens": len(emitted)})
 
     def do_ab(self, text: str | None, max_tokens: int) -> None:
+        """The same message, clean and steered, on the SAME history.
+
+        With no argument this re-runs the last user turn — and it must roll the history back past
+        that exchange first. Running the clean arm on a history that already contains the steered
+        reply compares a clean continuation of a steered conversation against a steered one, which
+        is not a control: the model is reacting to its own steered output in both arms.
+        """
+        base = list(self.history)
         if text is None:
-            for item in reversed(self.history):
-                if item["role"] == "user":
-                    text = item["content"]
+            for index in range(len(base) - 1, -1, -1):
+                if base[index]["role"] == "user":
+                    text, base = base[index]["content"], base[:index]
                     break
         if text is None:
             print("nothing to re-run"); return
-        base = [m for m in self.history if True]
         messages = base + [{"role": "user", "content": text}]
-        clean, clean_ids, _, _, _ = self.speak(messages, max_tokens, steered=False)
-        steered, _e, _i, note, _s = self.speak(messages, max_tokens, steered=True)
+        clean, _ce, _ci, _cn, _cs = self.speak(messages, max_tokens, steered=False)
+        steered, _se, _si, note, _ss = self.speak(messages, max_tokens, steered=True)
+        print(f"\n  on {len(base)} message(s) of history, both arms identical up to the desk")
         print(f"\n  A  clean\n     {clean.strip() or '(nothing)'}")
         print(f"\n  B  {note}\n     {steered.strip() or '(nothing)'}")
         same = clean.strip() == steered.strip()
