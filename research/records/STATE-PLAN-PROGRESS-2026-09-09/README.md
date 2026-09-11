@@ -27,7 +27,19 @@ checker. Verified against this seal: thirteen files matched, the baseline re-der
 passing. **No capture is read except through it.** The unknown-horizon control (§4.1) stays deferred
 with its veto disabled; its amendment is a separate reviewed item and the seal does not release it.
 
-## 0.3 Amendment 1 sealed as an addendum, 2026-09-11
+## 0.3 Amendment 1's first addendum, SUPERSEDED before anything was read
+
+`addendum-1.json` (`def0b7e9…`, baseline `1d93608`) is **void**. It sealed `read_e2.py` at a commit
+where that reader still computed the withdrawn `x + m·d` and never imported the rule module, so it
+fixed an amendment and a contradicting implementation in one seal. Every check the builder ran
+passed; none of them asked whether the sealed code implements the sealed rule. The file is kept
+byte-identical — its digest is its identity and editing it would make the reported digest false — and
+`addendum-1-SUPERSEDED.md` beside it carries the reason. `addendum-2.json` replaces it after Codex
+reads `read_e2.py` against §2, the one file their PASS on revision 5 did not cover.
+
+The paragraph below is the report as it was made, kept so a reader sees what was claimed.
+
+## 0.3.1 Amendment 1 sealed as an addendum, 2026-09-11 (the superseded report)
 
 `addendum-1.json`, digest **def0b7e92961f4eb8a6a8634aa68eb65f6e4a0e313e0c07f3ab1a0cdf39d8dcd**,
 against baseline `1d93608` — the commit Codex read (PASS, review `6d9d714`). It amends seal

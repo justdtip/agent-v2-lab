@@ -33,6 +33,9 @@ from local_llm_lab.pipeline.state_programme.read_gate import require_seal  # noq
 
 import check_amendment  # noqa: E402
 
+#: Readers that must carry out the sealed rule rather than merely sit beside it.
+CONFORMING_READERS = ("read_e2.py",)
+
 #: Paths relative to the repository root. The amendment's procedure is exactly these files.
 SEALED_FILES = (
     "research/records/STATE-PLAN-PROGRESS-2026-09-09/AMENDMENT-1-TRANSPORT-RULE.md",
@@ -70,6 +73,61 @@ def printed_table(document: str) -> dict[str, list[float]]:
     return rows
 
 
+def imports_the_rule(path: Path) -> list[str]:
+    """A **proxy**, and named as one: an unused import satisfies it and a drifted rule can keep it.
+
+    It is kept because it is cheap and because addendum 1 sealed a reader with no such import at all,
+    which this would have caught. `conformity` below is the check that is not a proxy.
+    """
+    text = path.read_text(encoding="utf-8")
+    problems = []
+    if "from local_llm_lab.pipeline.state_programme.transport import" not in text:
+        problems.append(f"{path.name} does not import the sealed rule module")
+    if re.search(r"per_step displacement|\+ m \* d\b|\+ move\[.m.\] \* d\b", text):
+        problems.append(f"{path.name} still carries the withdrawn rule's signature")
+    return problems
+
+
+def conformity(directory: Path) -> list[str]:
+    """Not a proxy: the reader's own rule function, on a fixture where the two rules disagree.
+
+    The withdrawn rule is `x + m·d` with `d` the mean displacement of the fitting rows; §2's rule is
+    the rank-r supervised map. The fixture is built so those give different answers, and the builder
+    refuses unless the reader returns §2's. If the fixture ever stops separating them it refuses too,
+    rather than passing on a comparison that has quietly become vacuous.
+    """
+    import numpy as np
+
+    import read_e2
+    from local_llm_lab.pipeline.state_programme.transport import fit as sealed_fit
+
+    rng = np.random.default_rng(20260911)
+    rows, width, rank = 80, 12, 8
+    sources = rng.normal(size=(rows, width))
+    targets = sources @ (np.eye(width) + 0.5 * rng.normal(size=(width, width)))
+    targets += 0.1 * rng.normal(size=(rows, width))
+    points = rng.normal(size=(3, width))
+
+    withdrawn = points + (targets - sources).mean(axis=0)
+    expected = sealed_fit(sources, targets, rank).apply(points, rank=rank, times=1)
+    if np.allclose(withdrawn, expected, atol=1e-6):
+        return ["the conformity fixture no longer separates the withdrawn rule from §2's"]
+
+    rule_of = getattr(read_e2, "transport_rule", None)
+    if rule_of is None:
+        return ["read_e2 exposes no transport_rule, so its rule cannot be executed and checked"]
+    try:
+        got = rule_of(sources, targets, rank).apply(points, rank=rank, times=1)
+    except Exception as exc:  # a rule that cannot run is a rule that cannot be certified
+        return [f"read_e2's rule did not run on the conformity fixture: {type(exc).__name__}: {exc}"]
+    problems = []
+    if not np.allclose(got, expected, atol=1e-8):
+        problems.append("read_e2's rule does not reproduce §2's rule on the conformity fixture")
+    if np.allclose(got, withdrawn, atol=1e-6):
+        problems.append("read_e2's rule reproduces the WITHDRAWN rule on the conformity fixture")
+    return problems
+
+
 def blob_at(commit: str, name: str) -> str | None:
     shown = spawn.run(["git", "-C", str(ROOT), "show", f"{commit}:{name}"], capture_output=True)
     return None if shown.returncode else hashlib.sha256(shown.stdout).hexdigest()
@@ -99,6 +157,12 @@ def build(directory: Path, baseline: str) -> tuple[dict, list[str]]:
         for rank, got, shown in zip((1, 2, 4, 8, 16, 32), measured, printed[key]):
             if got is None or round(got, 3) != shown:
                 refusals.append(f"{model} r={rank}: §5 prints {shown}, gate-table.json holds {got}")
+
+    # Addendum 1 sealed a reader that computed the rule the amendment withdrew, and every check
+    # above passed: they test identity and provenance, never meaning. These two test meaning.
+    for reader in CONFORMING_READERS:
+        refusals += imports_the_rule(directory / reader)
+    refusals += conformity(directory)
 
     resolved = spawn.run(["git", "-C", str(ROOT), "rev-parse", "--verify", f"{baseline}^{{commit}}"],
                          capture_output=True, text=True)
@@ -140,6 +204,8 @@ def build(directory: Path, baseline: str) -> tuple[dict, list[str]]:
             "reader": "no corrective stratum is scored until the gate of §5 passes",
             "table": "§5's printed table must reproduce gate-table.json to the digit it prints",
             "parent": "the addendum is void if the parent seal does not verify",
+            "conformity": "the reader's own rule function returns §2's answer on a fixture where "
+                          "the withdrawn rule differs; the import check beside it is a proxy",
         },
     }
     return payload, refusals
