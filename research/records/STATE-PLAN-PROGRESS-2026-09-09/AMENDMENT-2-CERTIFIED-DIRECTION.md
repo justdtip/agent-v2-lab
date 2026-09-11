@@ -67,6 +67,20 @@ On the card, single-threaded, a full eight-component fit at the production shape
 Every component certified on its own; no fallback fired. The disagreement column is `|1 − |cos|| `
 between the sealed and certified directions, component by component.
 
+**The fitted rule, not only its directions.** A reviewer should ask whether the *coefficients* agree,
+since those are what a reading uses. Measured on the card at the production widths, fitting on 3,298
+rows at rank 8 and applying to 400 held-out rows:
+
+| | coefficients, relative difference | §5's gate quantity, sealed | certified | identical |
+|---|---:|---:|---:|:--:|
+| 4B, 2,560 wide | 2.3 × 10⁻¹¹ | 0.132500 | 0.132500 | yes |
+| 12B, 3,840 wide | 6.4 × 10⁻¹¹ | 0.055000 | 0.055000 | yes |
+
+The coefficient matrices agree to eleven digits, and **the derived quantity §5's table prints is
+bit-identical**, not merely equal to the digits printed. On the conformity fixture `make_addendum.py`
+uses, scaled to the same widths, the coefficients agree to 6.6 × 10⁻¹¹ and 9.6 × 10⁻¹⁴. So the claim
+in §6 that no declared quantity changes is measured rather than argued.
+
 **Projected for §7's interval**, 10,000 refitting resamples at the registered headline: about 40 h on
 the 4B and 119 h on the 12B, **160 h serial, about 20 h across the card's eight physical cores** —
 against 8.2 days for the sealed fitter.

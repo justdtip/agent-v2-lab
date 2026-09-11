@@ -87,6 +87,31 @@ def test_the_schedule_grows_until_certified():
     assert certificate["krylov_steps"] >= small["krylov_steps"]
 
 
+def test_the_fitted_coefficients_and_the_gate_quantity_agree():
+    """§4's claim: the rule a reading uses, not only the directions behind it."""
+    from local_llm_lab.pipeline.state_programme.transport import fit, nearer_the_successor
+    from local_llm_lab.pipeline.state_programme.transport_certified import certified_fit
+
+    rng = np.random.default_rng(20260911)
+    n, p, rank = 600, 512, 8
+    x = rng.normal(size=(n, p)).astype(np.float32)
+    y = x + 0.05 * rng.normal(size=(n, p)).astype(np.float32)
+    held = rng.normal(size=(200, p)).astype(np.float32)
+    held_target = held + 0.05 * rng.normal(size=(200, p)).astype(np.float32)
+
+    sealed = fit(x, y, rank)
+    certified, certificates = certified_fit(x, y, rank)
+    assert all(c["certified"] for c in certificates), certificates
+    a, b = sealed.coefficients(rank), certified.coefficients(rank)
+    assert np.linalg.norm(a - b) / np.linalg.norm(a) < 1e-8
+
+    def gate(fitted):
+        moved = np.asarray(fitted.apply(held, rank=rank), dtype=np.float32)
+        return float(nearer_the_successor(moved, held, held_target).mean())
+
+    assert gate(sealed) == gate(certified), "the quantity §5's table prints must not move"
+
+
 def test_it_is_deterministic():
     cross = cross_product(np.random.default_rng(2), 120, 60)
     a, b = leading_triplet(cross), leading_triplet(cross)
