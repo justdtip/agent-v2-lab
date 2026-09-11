@@ -70,6 +70,9 @@ input[type=range]{padding:0}
 .row{display:flex;gap:8px}.row>*{flex:1}
 #state{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--dim);white-space:pre-wrap}
 .pill{display:inline-block;padding:2px 8px;border-radius:99px;border:1px solid var(--line);font-size:11px;font-family:ui-monospace,monospace}
+.slotrow{display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--line)}
+.sdim{flex:1;font-size:11px;color:var(--dim);font-family:ui-monospace,monospace}
+button.x{padding:1px 7px;font-size:14px;line-height:1;color:var(--dim)}
 </style>
 <main>
   <div id=log></div>
@@ -94,8 +97,15 @@ input[type=range]{padding:0}
     <option value=all>all &mdash; the whole context</option>
   </select>
   <h2>build a vector</h2>
-  <div class=row><input type=text id=word placeholder="word"><button id=mk type=button>concept</button></div>
+  <label>concept &mdash; the paper's recipe</label>
+  <div class=row><input type=text id=word placeholder="a word or phrase"><button id=mk type=button>build</button></div>
   <div class=hint>&ldquo;Tell me about {word}.&rdquo; minus the mean over 24 random words, at the layer above.</div>
+  <label>extract &mdash; a residual from any prompt</label>
+  <input type=text id=xprompt placeholder="a prompt to read the residual from">
+  <div class=row><input type=text id=xslot placeholder="slot name"><input type=number id=xpos placeholder="pos (blank = last)"></div>
+  <div class=row><button id=xgo type=button>extract</button><button id=xhere type=button title="read the residual at the end of the conversation as it stands">from chat</button></div>
+  <div class=hint>&ldquo;from chat&rdquo; reads the live conversation's own last position, which is the move a single-shot console cannot make.</div>
+  <h2>vectors</h2><div id=rack></div>
   <h2>state</h2><div id=state></div>
   <h2></h2><div class=row><button id=undo type=button>undo</button><button id=clear type=button>clear</button></div>
 </aside>
@@ -129,8 +139,15 @@ function turn(who,text,meta,rows){
 function lock(on){busy=on;for(const b of ['send','ab','mk','undo','clear'])$(b).disabled=on;}
 async function refresh(){
   const s=await fetch('/state').then(r=>r.json());
-  $('slot').innerHTML='<option value="">(none)</option>'+s.slots.map(x=>`<option${x===s.desk.slot?' selected':''}>${x}</option>`).join('');
-  $('state').textContent=`${s.model}\\n${s.layers} layers · hidden ${s.hidden}\\ntwo-thirds depth ≈ L${Math.round(s.layers*2/3)}\\n${s.history} message(s)\\n${s.slots.length} vector(s)`;
+  const names=s.detail.map(d=>d.name);
+  $('slot').innerHTML='<option value="">(none)</option>'+names.map(x=>`<option${x===s.desk.slot?' selected':''}>${x}</option>`).join('');
+  $('rack').innerHTML = s.detail.length ? s.detail.map(d=>
+     `<div class=slotrow><span class=pill>${d.name}</span> <span class=sdim>${d.kind} L${d.layer} · |v| ${Math.round(d.norm).toLocaleString()}</span>`
+     + `<button class=x data-slot="${d.name}" title="drop">&times;</button></div>`).join('')
+     : '<div class=sdim>none yet — build a concept or extract one</div>';
+  for(const b of document.querySelectorAll('.x')) b.onclick=async e=>{
+     await post('/drop',{slot:e.target.dataset.slot}); refresh();};
+  $('state').textContent=`${s.model}\\n${s.layers} layers · hidden ${s.hidden}\\ntwo-thirds depth ≈ L${Math.round(s.layers*2/3)}\\n${s.history} message(s)`;
 }
 async function sync(){
   await post('/desk',{slot:$('slot').value||null,layer:+$('layer').value,percent:+$('fader').value,scope:$('scope').value});
@@ -159,6 +176,20 @@ $('mk').onclick=async()=>{
   try{const r=await post('/concept',{word:w,layer:+$('layer').value}); turn('desk',r.note);}
   catch(err){turn('error',String(err));} finally{lock(false); refresh();}
 };
+$('xgo').onclick=async()=>{
+  const prompt=$('xprompt').value.trim(), slot=$('xslot').value.trim();
+  if(!prompt||!slot||busy) return; lock(true);
+  try{const r=await post('/extract',{slot,prompt,layer:+$('layer').value,
+       pos:$('xpos').value===''?null:+$('xpos').value});
+      turn('desk',r.note||r.error);}
+  catch(err){turn('error',String(err));} finally{lock(false); refresh();}
+};
+$('xhere').onclick=async()=>{
+  const slot=$('xslot').value.trim(); if(!slot||busy) return; lock(true);
+  try{const r=await post('/extract_here',{slot,layer:+$('layer').value});
+      turn('desk',r.note||r.error);}
+  catch(err){turn('error',String(err));} finally{lock(false); refresh();}
+};
 $('undo').onclick=async()=>{await post('/undo',{}); turn('desk','rolled back one exchange'); refresh();};
 $('clear').onclick=async()=>{await post('/clear',{}); log.innerHTML=''; refresh();};
 refresh();
@@ -178,6 +209,8 @@ class Service:
         return {"model": c.model.config._name_or_path.split("/")[-1] if hasattr(c.model.config, "_name_or_path") else "model",
                 "layers": c.view.num_layers, "hidden": c.view.hidden_size,
                 "history": len(c.history), "slots": sorted(c.slots),
+                "detail": [{"name": n, "kind": e["kind"], "layer": e["layer"],
+                            "norm": e["norm"]} for n, e in sorted(c.slots.items())],
                 "desk": {"slot": c.desk.slot, "layer": c.desk.layer,
                          "percent": c.desk.percent, "scope": c.desk.scope}}
 
@@ -235,6 +268,41 @@ class Service:
                     "history": len(base), "tokens": rows,
                     "same": clean.strip() == steered.strip()}
 
+    def _captured(self, call) -> str:
+        import contextlib
+        import io
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            call()
+        return buffer.getvalue().strip()
+
+    def extract(self, slot: str, prompt: str, layer: int, position: int | None) -> dict:
+        """An arbitrary prompt in, a residual row out, into a named slot."""
+        with self.lock:
+            note = self._captured(lambda: self.chat.cmd_extract(slot, layer, position, prompt))
+            return {"slot": slot, "note": note}
+
+    def extract_here(self, slot: str, layer: int) -> dict:
+        """The residual at the live conversation's own last position.
+
+        This is the move a single-shot console cannot make: a moment in an actual exchange becomes
+        a steering vector, rather than a vector built from a synthetic carrier sentence.
+        """
+        with self.lock:
+            chat = self.chat
+            if not chat.history:
+                return {"error": "no conversation yet — say something first"}
+            ids = chat.render_chat(chat.history)
+            vector = chat.residual_at(ids, layer, None)
+            chat.slots[slot] = {"vector": vector, "layer": layer, "kind": "from chat",
+                                "norm": float(vector.norm()),
+                                "position": len(ids) - 1,
+                                "prompt": f"<live conversation, {len(chat.history)} message(s)>"}
+            return {"slot": slot,
+                    "note": f"{slot}: residual at L{layer} from the live conversation "
+                            f"(position {len(ids) - 1}), norm {float(vector.norm()):,.0f}"}
+
     def concept(self, word: str, layer: int) -> dict:
         with self.lock:
             slot = "".join(ch for ch in word.lower() if ch.isalnum())[:12] or "concept"
@@ -276,6 +344,14 @@ def handler_for(service: Service):
                     self._send(service.ab())
                 elif self.path == "/desk":
                     self._send(service.set_desk(body))
+                elif self.path == "/extract":
+                    self._send(service.extract(body.get("slot", ""), body.get("prompt", ""),
+                                               int(body.get("layer", 1)), body.get("pos")))
+                elif self.path == "/extract_here":
+                    self._send(service.extract_here(body.get("slot", ""), int(body.get("layer", 1))))
+                elif self.path == "/drop":
+                    service.chat.slots.pop(body.get("slot", ""), None)
+                    self._send(service.state())
                 elif self.path == "/concept":
                     self._send(service.concept(body.get("word", ""), int(body.get("layer", 1))))
                 elif self.path == "/undo":
