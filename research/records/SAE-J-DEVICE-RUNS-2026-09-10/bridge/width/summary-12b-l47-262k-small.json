@@ -1,0 +1,128 @@
+{
+ "status": "complete",
+ "stage": "a2",
+ "layer": null,
+ "a2": {
+  "P_act": {
+   "cells": 300,
+   "raw_reconstruction_share": {
+    "n": 300,
+    "min": 0.11400432921972198,
+    "median": 0.14902573652986123,
+    "p90": 0.17839362658948588,
+    "max": 0.19195355391580576
+   },
+   "lens_score_error_share": {
+    "n": 300,
+    "min": 0.40013649023510095,
+    "median": 0.49002638625713635,
+    "p90": 0.5655581636548285,
+    "max": 0.6264895425413095
+   },
+   "score_share_over_raw_share": {
+    "n": 300,
+    "min": 2.8458985910931562,
+    "median": 3.2895398487546355,
+    "p90": 3.5989651606536666,
+    "max": 4.274697744765833
+   },
+   "identity_gap": {
+    "n": 300,
+    "min": 0.0,
+    "median": 1.4551915228366852e-11,
+    "p90": 2.9103830456733704e-11,
+    "max": 5.820766091346741e-11
+   },
+   "identity_gap_float32": {
+    "n": 300,
+    "min": 0.0,
+    "median": 0.0078125,
+    "p90": 0.015625,
+    "max": 0.03125
+   },
+   "active_features": {
+    "n": 300,
+    "min": 8.0,
+    "median": 13.0,
+    "p90": 18.0,
+    "max": 22.0
+   },
+   "score": {
+    "n": 300,
+    "min": 48734.36289869154,
+    "median": 66292.8078512243,
+    "p90": 71687.82715156597,
+    "max": 80816.59571799052
+   },
+   "raw_admissible": 300,
+   "ranked": 180,
+   "reasons": {
+    "lens score error exceeds its declared threshold: the decomposition describes the dictionary's failure at this position; features are not ranked under it": 120,
+    "ranked": 180
+   }
+  },
+  "P_note": {
+   "cells": 300,
+   "raw_reconstruction_share": {
+    "n": 300,
+    "min": 0.1453687586362687,
+    "median": 0.19383630792823534,
+    "p90": 0.23856269193043278,
+    "max": 0.25559984471614494
+   },
+   "lens_score_error_share": {
+    "n": 300,
+    "min": 0.5068034512625955,
+    "median": 0.6508406211939204,
+    "p90": 0.7509308936559429,
+    "max": 0.8542573039799942
+   },
+   "score_share_over_raw_share": {
+    "n": 300,
+    "min": 2.853667940567283,
+    "median": 3.30999642669697,
+    "p90": 3.5531874561879837,
+    "max": 3.920685078293547
+   },
+   "identity_gap": {
+    "n": 300,
+    "min": 0.0,
+    "median": 7.275957614183426e-12,
+    "p90": 2.1827872842550278e-11,
+    "max": 3.637978807091713e-11
+   },
+   "identity_gap_float32": {
+    "n": 300,
+    "min": 0.0,
+    "median": 0.00390625,
+    "p90": 0.01171875,
+    "max": 0.0234375
+   },
+   "active_features": {
+    "n": 300,
+    "min": 13.0,
+    "median": 28.0,
+    "p90": 40.0,
+    "max": 48.0
+   },
+   "score": {
+    "n": 300,
+    "min": 7656.376922544583,
+    "median": 42271.90465675373,
+    "p90": 63710.60968447114,
+    "max": 82562.29398779798
+   },
+   "raw_admissible": 300,
+   "ranked": 0,
+   "reasons": {
+    "lens score error exceeds its declared threshold: the decomposition describes the dictionary's failure at this position; features are not ranked under it": 300
+   }
+  },
+  "error_budget": {
+   "raw_reconstruction_threshold": 0.5,
+   "lens_score_error_threshold": 0.5,
+   "denominator_floor": 1e-06,
+   "near_zero_policy": "refuse"
+  }
+ }
+}

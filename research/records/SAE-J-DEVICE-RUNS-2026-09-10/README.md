@@ -291,3 +291,42 @@ The first-token result of §4.1 carries through to the call: every first-token f
 **Experiment 4: the two procedures tried gain little.** Exact nonnegative least squares on the same atoms — which certifies the best coefficients for that set — gains half a point of raw share; a greedy nonnegative re-selection with the same number of atoms — which does not certify the best possible set — gains one point with half the atoms different. The encoder's coefficients are near-optimal for the atoms it chose; whether a better twenty-atom set exists is not established by a greedy search, so the claim is the modest one: neither refit nor this re-selection moves the raw share much. Width (§5) and the fine-tuning remedy remain the candidates.
 
 **Consequence for §3.** The A2 refusals stand as what they are — the declared vocabulary-wide budget was not met — but the sentence "the readout-relevant part of these activations lives mostly in the dictionary's error term" is withdrawn as a statement about the decision: where the decision has a margin it does not change; where it is close, the reconstruction at layer 18 changes it about twice as often as a random error of the same size, and at layer 24 less often. What §3 measured, and still shows, is that the dictionaries' error is amplified by the gain-only vocabulary readout in directions that do not bear on this decision. A decision-focused fidelity measure (the review's experiment 1, running as this is written) is the instrument to add beside the budget, not in place of it.
+
+## 5. The dictionary width and sparsity control
+
+Overnight 2026-09-10/11 (22:04Z–02:20Z), on Daniel's fetch authorisation. What the hub ships at `resid_post_all` is 16k and 262k widths at `l0_small` and `l0_big` for every layer; 65k exists only at the `resid_post` site, a different suite covering 4B blocks 9, 17, 22 and 29 (and 12B 12, 24, 31, 41), so the 65k ladder was run at 4B block 17 only and a suite-matched 16k from `resid_post` is queued so that suite is not read as width. Each dictionary went through its own admission dry-run, the runner on the same 600 cells with the same thresholds (both stages where examples ship, A2 alone for 262k which ships none), and the in-domain control on the fit prompts; driver [width_control_run.sh](width_control_run.sh), configs from [bridge_configs_width.py](bridge_configs_width.py), summaries under [bridge/width/](bridge/width/). Read as a paired comparison on identical cells: raw share / lens-score share / ratio / active features / cells ranked under the 0.5 line (the vocabulary-wide line, kept for comparability with §3; §4 says what it does and does not measure).
+
+**4B, out of domain (600 cells)**
+
+| dictionary | P_note | P_act |
+|---|---:|---:|
+| layer 18, 16k small (the §3 run) | 0.064 / 0.70 / 11.1 / 21 / 0 | 0.070 / 0.59 / 8.4 / 20 / 0 |
+| layer 18, 16k big | 0.065 / 0.72 / 11.1 / 98 / 0 | 0.070 / 0.60 / 8.4 / 103 / 0 |
+| layer 18, 262k small | 0.064 / 0.69 / 11.1 / 15 / 0 | 0.067 / 0.55 / 8.3 / 20 / 31 |
+| layer 18, 65k small (`resid_post` suite) | 0.064 / 0.70 / 10.8 / 20 / 0 | 0.068 / 0.57 / 8.5 / 19 / 4 |
+| layer 18, 65k medium (`resid_post`) | 0.055 / 0.54 / 9.9 / 64 / 14 | 0.061 / 0.46 / 7.6 / 56 / 281 |
+| layer 18, 65k big (`resid_post`) | 0.050 / 0.53 / 10.8 / 166 / 85 | 0.054 / 0.45 / 8.1 / 137 / 269 |
+| layer 24, 16k small (the §3 run) | 0.123 / 0.67 / 5.5 / 19 / 0 | 0.135 / 0.71 / 5.4 / 16 / 0 |
+| layer 24, 16k big | 0.100 / 0.51 / 5.1 / 130 / 108 | 0.108 / 0.57 / 5.2 / 107 / 2 |
+| layer 24, 262k small | 0.119 / 0.61 / 5.2 / 18 / 3 | 0.118 / 0.64 / 5.4 / 17 / 0 |
+
+**12B, out of domain (600 cells)**
+
+| dictionary | P_note | P_act |
+|---|---:|---:|
+| layer 24, 16k big | 0.058 / 0.70 / 12.1 / 120 / 0 | 0.064 / 0.67 / 11.2 / 86 / 1 |
+| layer 24, 262k small | 0.059 / 0.70 / 12.8 / 21 / 0 | 0.062 / 0.68 / 10.9 / 18 / 0 |
+| layer 47, 16k small (the §3.4 run) | 0.200 / 0.64 / 3.2 / 32 / 0 | 0.159 / 0.53 / 3.3 / 14 / 90 |
+| layer 47, 16k big | 0.182 / 0.60 / 3.3 / 185 / 8 | 0.152 / 0.50 / 3.4 / 92 / 154 |
+| layer 47, 262k small | 0.194 / 0.65 / 3.3 / 28 / 0 | 0.149 / 0.49 / 3.3 / 13 / 180 |
+
+**In domain (the fit prompts, 1,005 cells per layer)**
+
+| dictionary | 4B L18 | 4B L24 | 12B L24 | 12B L47 |
+|---|---:|---:|---:|---:|
+| 16k small | 0.092 / 0.62 / 6.6 / 19 / 155 | 0.148 / 0.65 / 4.4 / 17 / 63 | 0.088 / 0.77 / 8.5 / 21 / 1 | 0.182 / 0.71 / 3.9 / 7 / 3 |
+| 16k big | 0.086 / 0.65 / 7.4 / 146 / 106 | 0.125 / 0.54 / 4.4 / 135 / 328 | 0.077 / 0.78 / 10.0 / 148 / 5 | 0.167 / 0.61 / 3.6 / 87 / 58 |
+| 262k small | 0.095 / 0.67 / 7.2 / 22 / 91 | 0.150 / 0.65 / 4.4 / 19 / 95 | *pending* | *pending* |
+| 65k small / medium / big (`resid_post`, L18 only) | 0.089 / 0.62 / 6.9 / 21 / 178 · 0.073 / 0.51 / 6.8 / 69 / 470 · 0.068 / 0.49 / 7.2 / 181 / 526 | | | |
+
+**Reading, on the shares.** *Width at fixed sparsity does nothing*: 262k against 16k at about twenty active features leaves the raw share, the lens-score share and the ratio where they were, at every layer of both models, in and out of domain. *Sparsity buys a little reconstruction*: five to seven times more active features lower the raw share by a tenth to a fifth (4B layer 24: 0.123 → 0.100; 65k at layer 18: 0.064 → 0.055 → 0.050 from small to medium to big) and the lens-score share with it, which is why the 65k-medium and 65k-big runs cross the 0.5 line and rank most action cells — a threshold effect, not a change of kind. *The ratio does not move at all*: 8–11 at 4B layer 18, 5 at layer 24, 11–13 at 12B layer 24, 3.3 at 12B layer 47, whatever the dictionary. That is what §4.3 predicts: the ratio is the readout's gain on the error direction relative to the activation, and every one of these dictionaries leaves an error in the same, less-amplified, part of the space. Whether the wider or denser dictionaries preserve *behaviour* better on the close decisions where §4.2 found the 16k-small reconstruction changing calls is the question the shares cannot answer; the substitution and complete-call tests are running on the lowest-margin sample at layer 18 with the 65k-big, 262k-small and 65k-small dictionaries, and the suite-matched 16k ladder follows, so that suite, width and density are read on behaviour.
