@@ -1,102 +1,83 @@
-# Amendment 2 (DRAFT) — a certified leading direction in place of a full decomposition
+# Amendment 2 (DRAFT) — convergence diagnostics with reference fallback
 
-**D-CRO, 2026-09-11, on the Chief's instruction. DRAFT: unsealed, unrun, and `transport.py` is
-untouched.** It proposes one change to Amendment 1 §2. Nothing is read under it and no addendum
-carries it.
+**Revised after review 3cb6247 on 2026-09-11. Unsealed. The optimized bypass is withdrawn.**
+`transport.py` remains the sealed fitter used by the reader. This draft changes no seal or addendum
+and releases no inference. The earlier residual/Ritz-gap certificate was unsound (C1), the wrapper
+changed the rank stopping rule and deflation arithmetic (C2), and numerical agreement did not
+establish universal exact reproduction (C3).
 
-## 1. What it changes, and the reason it is not a mere optimisation
+## 1. Current behavior
 
-Amendment 1 §2 obtains each component's direction from `numpy.linalg.svd` of the deflated
-cross-product: a complete decomposition of a *p*×*p* matrix, to extract **one** singular vector, from
-a matrix whose rank is at most *n* < *p*. Codex's F1 required the direction to be **certified** —
-the defect was a start vector that certified nothing — and a full decomposition was the way that was
-met, not the thing that was asked for.
+`leading_triplet` still computes a deterministic Krylov candidate and reports its residual, projected
+Ritz gap and diagnostic convergence. It **always reports `certified=False`**. A small residual and a
+large gap inside the explored subspace do not control a stronger direction outside it.
 
-This amendment meets the same requirement directly: compute the leading triplet by a Krylov method
-and **attach a certificate**, falling back to the full decomposition whenever the certificate fails.
-The sealed answer is therefore reproduced exactly or reproduced exactly by the fallback; there is no
-third outcome.
+`leading_direction` **always uses the reference full SVD**. The returned direction and singular value
+come from the unchanged sealed `_leading_direction` operation, with `fell_back_to_full_svd=True`.
+Diagnostics cannot authorize a bypass; a diagnostic numerical failure also falls back to the reference.
+There is currently no accelerated certified path. Reference linear-algebra failures remain refusals.
 
-It matters because of §7's declared interval, which refits inside every one of 10,000 resamples. At
-the sealed fitter's cost that is about **8.2 days** across the card's eight cores (§0.4 of the
-record). At this one it is about **20 hours**.
+The draft `certified_fit` name is retained for callers, but it uses that reference fallback and matches
+`transport.fit`'s standardisation, centring, singular-value stop (`sigma < 1e-12`), score-norm stop,
+component-finiteness refusal and the same order of cross-product deflation operations. In particular,
+`8e-13 * I` reaches rank zero, as the sealed fitter requires. An equivalent algebraic simplification
+of deflation is insufficient when floating-point arithmetic and strict retrieval ties are involved.
 
-## 2. The routine
+## 2. Diagnostics and their limits
 
-Lanczos on the symmetric operator `S = A Aᵀ`, applied as two matrix–vector products so `S` is never
-formed, with **full reorthogonalisation** and a **deterministic** start (`A` summed along its
-columns, falling back to its first column). No random number enters the fit, so the ladder stays
-reproducible bit for bit. A Rayleigh–Ritz step on the tridiagonal gives `θ₁ ≥ θ₂`; the direction is
-the corresponding Ritz vector, `σ = √θ₁`, and `v = Aᵀu / σ`.
+The diagnostic schedule remains 48, 96, 192 and 384 Krylov steps, clipped to the source width. It can
+stop on diagnostic convergence, but that result is still uncertified. Thresholds remain relative
+residual `1e-10` and projected squared-singular-value gap `1e-6`, with no leadingness guarantee.
 
-**The Krylov dimension is a declared schedule, not a guess: 48, 96, 192, 384**, tried in order until
-the certificate passes. It is a schedule because the right size depends on the operator's spectral
-gap, which varies by model width and by fold — at the 3,840-wide production size, 24 steps leave the
-direction *wrong*, cosine 0.32 to the true leading vector, and the certificate correctly refuses; 96
-certify. Growing until certified is self-tuning and ends either certified or in the full SVD.
+The decisive counterexample is `[[3,-3,0],[0,0,1],[0,0,0]]`: the start lies entirely in the weaker
+invariant subspace, producing zero residual and projected gap one while missing the leading direction.
+Tighter thresholds or more steps from that start do not supply a global certificate. The near-degenerate
+and width-64 padded examples from C1 are also required regressions.
 
-The sign convention is the sealed fitter's — largest-magnitude entry positive — so the two agree
-elementwise and not merely up to sign.
+A future optimized bypass needs a reviewed global leadingness check controlling the unexplored
+spectrum, plus numerical error and separation analysis. Restarts alone would be probabilistic and
+would require a declared failure budget. None of that is supplied or authorized by this revision.
 
-## 3. The certificate, and what it does not prove
+## 3. Equivalence contract
 
-Reported per component:
+The current reference path preserves the sealed operation and fitter arithmetic. Synthetic tests
+require equal ranks, singular values, weights, loadings, coefficients and predictions with NumPy
+`array_equal` where applicable in the same execution environment. This is regression evidence, not
+a promise of bitwise identity across different BLAS/LAPACK libraries, hardware or versions.
 
-* **relative residual** `max(‖Av − σu‖, ‖Aᵀu − σv‖) / σ`, accepted below **1e-10**. Declared at that
-  value because it is some orders above float64's epsilon at these magnitudes, so it admits ordinary
-  rounding and refuses a direction that has not converged.
-* **Ritz gap** `(θ₁ − θ₂) / θ₁`, accepted above **1e-6**. Below it the top two Ritz values are not
-  distinguishable by the residual alone and the full decomposition decides.
+For a future approximate path, a cosine or coefficient tolerance is only a numerical-agreement test.
+Matching sign conventions cannot remove arithmetic differences or rotations in a repeated singular
+subspace. Agreement at a few gate fixtures cannot prove all strict nearest-neighbour decisions agree
+at arbitrarily small margins. Such a path needs an explicit equivalence contract and retrieval-level
+validation before adoption; the former universal exact-reproduction claim is withdrawn.
 
-**What it establishes.** A small residual bounds the distance to *a* singular triplet of `A`; `θ₁` is
-a Rayleigh quotient, so `σ₁ ≥ σ` always and the routine never overstates. **What it does not
-establish.** It is *not* a proof that the triplet is the **leading** one. This draft does not claim
-one. What is relied on instead is stated plainly: anything failing either threshold falls back to the
-full decomposition, and agreement with it is tested — on fixtures across four seeds, at the 3,840
-production width, and end to end on the card.
+## 4. Historical measurements — not evidence for the revised path
 
-## 4. Evidence, measured rather than argued
+The prior draft reported these single-threaded card measurements on synthetic production shapes
+(3,298 fitting rows, eight components). They describe the **former unsound bypass**, not this revision:
 
-On the card, single-threaded, a full eight-component fit at the production shapes (3,298 fitting rows):
+| Model width | Sealed full SVD | Former draft | Reported speedup |
+|---|---:|---:|---:|
+| 2,560 | 27.0 s | 2.9 s | 9.4× |
+| 3,840 | 85.0 s | 8.6 s | 9.8× |
 
-| | sealed, full SVD | certified | speed-up | components | fallbacks | worst direction disagreement |
-|---|---:|---:|---:|---:|---:|---:|
-| 4B, 2,560 wide | 27.0 s | 2.9 s | **9.4×** | 8 of 8 | 0 | 1.1 × 10⁻¹⁵ |
-| 12B, 3,840 wide | 85.0 s | 8.6 s | **9.8×** | 8 of 8 | 0 | 5.6 × 10⁻¹⁶ |
+It also reported coefficient relative differences of `2.3e-11` and `6.4e-11`, with equal aggregate
+gate fractions on those fixtures. These are fixture observations, not a certificate. The former
+20-hour projection for 10,000 refits is withdrawn: every direction now falls back, and F3 changes
+which training episodes the bootstrap must fit. No card timing or corrected workload cost was
+remeasured in this revision. The Research Director's cost decision remains separate.
 
-Every component certified on its own; no fallback fired. The disagreement column is `|1 − |cos|| `
-between the sealed and certified directions, component by component.
+The earlier SciPy estimate also remains withdrawn. This module uses NumPy and the existing transport
+module; it adds no dependency.
 
-**The fitted rule, not only its directions.** A reviewer should ask whether the *coefficients* agree,
-since those are what a reading uses. Measured on the card at the production widths, fitting on 3,298
-rows at rank 8 and applying to 400 held-out rows:
+## 5. Reader corrections and release boundary
 
-| | coefficients, relative difference | §5's gate quantity, sealed | certified | identical |
-|---|---:|---:|---:|:--:|
-| 4B, 2,560 wide | 2.3 × 10⁻¹¹ | 0.132500 | 0.132500 | yes |
-| 12B, 3,840 wide | 6.4 × 10⁻¹¹ | 0.055000 | 0.055000 | yes |
+The reader independently restores §7's episode weights and fitting population, compares Hoeffding
+with a complete refitted interval, and enforces 10,000 draws. Its explicit unsupported-draw policy is
+that any empty, failed or incompletely scored draw makes the entire interval unavailable; it never
+silently drops or redraws such a sample. Refitted endpoints follow the sealed paired helper's
+one-sided `alpha` and `1-alpha` convention. This is not an amended estimand or permission to release.
 
-The coefficient matrices agree to eleven digits, and **the derived quantity §5's table prints is
-bit-identical**, not merely equal to the digits printed. On the conformity fixture `make_addendum.py`
-uses, scaled to the same widths, the coefficients agree to 6.6 × 10⁻¹¹ and 9.6 × 10⁻¹⁴. So the claim
-in §6 that no declared quantity changes is measured rather than argued.
-
-**Projected for §7's interval**, 10,000 refitting resamples at the registered headline: about 40 h on
-the 4B and 119 h on the 12B, **160 h serial, about 20 h across the card's eight physical cores** —
-against 8.2 days for the sealed fitter.
-
-## 5. Why not `scipy`
-
-`scipy.sparse.linalg.svds` gives the same triplet and was what the first estimate used. **It is not
-installed on the card and is not a declared dependency of this repository**, so a routine built on it
-could not run where the reading runs. That was found by checking rather than assumed, and it is why
-this is a NumPy Lanczos. The first speed-up figure I reported, 14×, came from `scipy` on the laptop
-and is superseded by the table above.
-
-## 6. What this does not change
-
-Not the rule, the ladder, the strata, the tolerances, M, α, the range width, the fold assignment, the
-candidate set, the tie rule, the metric, the arithmetic, or any reading. It changes **one step**
-inside the fitter and attaches a certificate to it. If accepted it edits `transport.py`, which an
-addendum seals and Codex read, so it requires their review and a new addendum; until then the sealed
-fitter is the only one any reader uses, and `transport_certified.py` is a draft that nothing calls.
+The rule, fixed folds, candidate set, float32 retrieval, tie rule, tolerances, M, alpha and sealed
+metadata remain unchanged. Revised reader bytes require a fresh reviewed addendum before real use.
+Neither the correction nor successful synthetic tests authorize Amendment 2 or section 7 execution.

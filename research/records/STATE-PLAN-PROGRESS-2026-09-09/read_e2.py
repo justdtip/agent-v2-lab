@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -179,60 +180,91 @@ def capability(features: np.ndarray, ordinary_train: list[dict], per_fold: dict,
 def refitting_bootstrap(features: np.ndarray, subset: list[dict], ordinary_train: list[dict],
                         folds: dict[str, int], strata: dict[str, tuple], *, rank: int,
                         resamples: int, seed: int, alpha: float = ALPHA) -> dict:
-    """§7 as sealed: episodes resampled **within `(split, family, variant)`**, and the rule
-    **refitted out of fold inside every resample**.
+    """Resample the union of fitting and evaluation episodes within the sealed strata.
 
-    The cheap interval resamples fixed per-episode numbers and holds the fit still, so it describes
-    the spread of a score computed once; this one carries the fit's own variability, which is where
-    a transport rule's uncertainty actually lives. It is therefore the expensive one, and §7 declares
-    it rather than the cheap one.
+    An episode has one multiplicity everywhere it participates. Training rows are repeated by that
+    multiplicity, always excluding the fixed held-out fold; evaluation first averages transitions
+    within each episode, then averages those episode observations with the same multiplicities.
+
+    Unsupported-draw policy: the first empty, incomplete or failed draw makes the entire interval
+    unavailable. Do not discard, replace or partially score a draw. Small positive counts serve
+    synthetic checks/cost estimates only; registered inference additionally requires RESAMPLES.
     """
-    episodes = sorted({m["task_id"] for m in subset})
+    if resamples <= 0:
+        raise Refused("refitting requires a positive resample count")
+    if not 0 < alpha < 0.5:
+        raise Refused("refitting requires 0 < alpha < 0.5")
+    episodes = sorted({m["task_id"] for m in subset + ordinary_train})
     by_stratum: dict[tuple, list[str]] = defaultdict(list)
     for task in episodes:
         by_stratum[strata[task]].append(task)
     rng = np.random.default_rng(seed)
     means = []
-    for _ in range(resamples):
-        drawn: list[str] = []
-        for _key, members in sorted(by_stratum.items()):
-            drawn += [members[i] for i in rng.integers(0, len(members), len(members))]
+    metadata = {"requested_resamples": resamples, "stratified_by": "(split, family, variant)",
+                "refitted": True, "alpha": alpha,
+                "invalid_draw_policy": "entire interval unavailable; no discarded or redrawn draws"}
+
+    def unavailable(reason, draw, folds_unavailable=()):
+        return {**metadata, "low": None, "high": None, "complete": False,
+                "resamples": len(means), "attempted_resamples": draw,
+                "folds_unavailable": sorted(folds_unavailable), "note": reason}
+
+    for draw in range(1, resamples + 1):
         multiplicity = defaultdict(int)
-        for task in drawn:
-            multiplicity[task] += 1
+        for _key, members in sorted(by_stratum.items()):
+            for i in rng.integers(0, len(members), len(members)):
+                multiplicity[members[i]] += 1
+        selected = [m for m in subset if multiplicity[m["task_id"]]]
+        if not selected:
+            return unavailable("draw contains no evaluation episode", draw)
         per_fold = {}
-        for held_out in sorted(set(folds.values())):
-            rows = [m for m in ordinary_train
-                    for _ in range(multiplicity.get(m["task_id"], 0)) if m["fold"] != held_out]
-            if len(rows) <= rank:
-                per_fold[held_out] = None
-                continue
-            per_fold[held_out] = transport_rule(
-                np.array([features[m["source"]] for m in rows]),
-                np.array([features[m["target"]] for m in rows]), rank)
-        rules = {task: per_fold[fold] for task, fold in folds.items() if per_fold[fold] is not None}
-        rows, _ = score(features, [m for m in subset if multiplicity.get(m["task_id"], 0)], rules, rank)
-        if not rows:
-            continue
-        hits, chance, _ = by_episode(rows)
-        means.append(float((hits - chance).mean()))
-    if not means:
-        return {"low": None, "high": None, "resamples": 0,
-                "note": "no resample produced a scorable population"}
+        for held_out in sorted({folds[m["task_id"]] for m in selected}):
+            training = [m for m in ordinary_train
+                        for _ in range(multiplicity[m["task_id"]])
+                        if folds[m["task_id"]] != held_out]
+            if not training:
+                return unavailable("draw has no fitting rows for an evaluation fold", draw,
+                                   [held_out])
+            try:
+                per_fold[held_out] = transport_rule(
+                    np.array([features[m["source"]] for m in training]),
+                    np.array([features[m["target"]] for m in training]), rank)
+            except (ValueError, np.linalg.LinAlgError) as exc:
+                return unavailable(f"draw refit failed: {exc}", draw, [held_out])
+        rules = {m["task_id"]: per_fold[folds[m["task_id"]]] for m in selected}
+        try:
+            rows, unreached = score(features, selected, rules, rank)
+        except (ValueError, np.linalg.LinAlgError) as exc:
+            return unavailable(f"draw scoring failed: {exc}", draw)
+        if unreached or len(rows) != len(selected):
+            return unavailable("draw cannot score every selected transition at the requested rank",
+                               draw, unreached)
+        hits, chance, distance = by_episode(rows)
+        if not (np.isfinite(hits).all() and np.isfinite(chance).all()
+                and np.isfinite(distance).all()):
+            return unavailable("draw contains non-finite scores", draw)
+        weights = np.array([multiplicity[task] for task in sorted({r["task_id"] for r in rows})])
+        means.append(float(np.average(hits - chance, weights=weights)))
     values = np.array(means)
-    return {"low": float(np.quantile(values, alpha / 2)),
-            "high": float(np.quantile(values, 1 - alpha / 2)),
-            "resamples": len(means), "stratified_by": "(split, family, variant)",
-            "refitted": True}
+    # Match the sealed paired_bootstrap_bounds convention: each endpoint is one-sided at 1-alpha.
+    return {**metadata, "low": float(np.quantile(values, alpha)),
+            "high": float(np.quantile(values, 1 - alpha)), "complete": True,
+            "resamples": len(means), "attempted_resamples": resamples,
+            "folds_unavailable": []}
 
 
-def governing(cheap: dict, refit: dict | None) -> tuple[float, float, str]:
-    """Both intervals are reported; the **wider** governs the reading."""
-    if refit is None or refit.get("low") is None:
-        return cheap["low"], cheap["high"], "paired, fit held still"
-    if (refit["high"] - refit["low"]) >= (cheap["high"] - cheap["low"]):
-        return refit["low"], refit["high"], "paired, refitted within each resample"
-    return cheap["low"], cheap["high"], "paired, fit held still"
+def governing(hoeffding: dict, refit: dict | None) -> tuple[float, float, str] | None:
+    """The wider of Hoeffding and a complete mandatory refit interval governs (§7)."""
+    if (refit is None or refit.get("complete") is not True or refit.get("refitted") is not True
+            or refit.get("resamples") != RESAMPLES
+            or refit.get("requested_resamples") != RESAMPLES):
+        return None
+    low, high = refit.get("low"), refit.get("high")
+    if low is None or high is None or not np.isfinite([low, high]).all() or low > high:
+        return None
+    if (high - low) >= (hoeffding["high"] - hoeffding["low"]):
+        return low, high, "paired, refitted within each resample"
+    return hoeffding["low"], hoeffding["high"], "Hoeffding"
 
 
 def verdict(low: float, high: float, epsilon: float) -> str:
@@ -298,9 +330,8 @@ def evaluate(subset: list[dict], features: np.ndarray, rules: dict, rank: int,
     cell["paired_bootstrap"] = {"low": low, "high": high, "refitted": False,
                                 "note": "the fit is held still; §7's declared interval refits"}
     cell["refitting_bootstrap"] = refit
-    governs = governing(cell["paired_bootstrap"], refit)
-    cell["governing_interval"] = {"low": governs[0], "high": governs[1], "from": governs[2],
-                                  "rule": "the wider of the two intervals governs the reading"}
+    cell["hoeffding_interval"] = None
+    cell["governing_interval"] = None
     if tolerance is None:
         cell["tolerance"] = None
         cell["reading"] = "descriptive; this stratum carries no pre-registered tolerance"
@@ -312,6 +343,25 @@ def evaluate(subset: list[dict], features: np.ndarray, rules: dict, rank: int,
                            "than the registered one, and a tolerance derived for the whole stratum "
                            "does not govern a part of it")
         return cell
+    halfwidth = math.sqrt(tolerance["range_width"]
+                          * math.log(2 * tolerance["m"] / tolerance["alpha"]) / len(hits))
+    cell["hoeffding_interval"] = {"low": float(over.mean()) - halfwidth,
+                                  "high": float(over.mean()) + halfwidth,
+                                  "n": len(hits), "m": tolerance["m"],
+                                  "alpha": tolerance["alpha"],
+                                  "range_width": tolerance["range_width"]}
+    if not registered:
+        cell["tolerance"] = {**tolerance, "applied": False}
+        cell["reading"] = "exploratory depth/rank profile; no registered inference"
+        return cell
+    governs = governing(cell["hoeffding_interval"], refit)
+    if governs is None:
+        cell["tolerance"] = {**tolerance, "applied": False}
+        cell["reading"] = ("registered inference unavailable: a complete mandatory refitting "
+                           f"interval with {RESAMPLES} resamples is required")
+        return cell
+    cell["governing_interval"] = {"low": governs[0], "high": governs[1], "from": governs[2],
+                                  "rule": "the wider of Hoeffding and refitted bootstrap governs"}
     needed = required_n(tolerance["m"], tolerance["epsilon"],
                         alpha=tolerance["alpha"], range_width=tolerance["range_width"])
     sufficient = len(hits) >= needed
@@ -373,9 +423,10 @@ def read_model(name: str, directory: Path, folds: dict, seal: dict, cached: dict
                 # headline coordinates (Codex F3): registered is about the estimand, not the cell.
                 registered = is_registered(fraction, rank, key)
                 refit = None
-                if registered and resamples:
+                if registered:
                     refit = refitting_bootstrap(features, subsets[label], ordinary_train, folds,
-                                                strata, rank=rank, resamples=resamples, seed=seed)
+                                                strata, rank=rank, resamples=resamples, seed=seed,
+                                                alpha=seal["tolerances"]["alpha"])
                 cell[label][str(rank)] = evaluate(subsets[label], features, rules, rank,
                                                   tolerance_for(seal, key), seed, registered, refit)
         results.append(cell)
@@ -389,7 +440,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--expect-seal")
     parser.add_argument("--bootstrap-resamples", type=int, default=RESAMPLES,
-                        help="§7 seals %(default)s; lower it only under an amendment, never to fit a night")
+                        help="§7 requires %(default)s; this reader accepts no count override")
     parser.add_argument("--estimate-bootstrap", type=int, metavar="N",
                         help="time N refitting resamples, project the full cost, and read NOTHING")
     args = parser.parse_args(argv)
@@ -403,6 +454,12 @@ def main(argv: list[str] | None = None) -> int:
           "| baseline", addendum["verified"]["baseline_commit"][:12] + "…")
     if addendum["verified"]["superseded_ignored"]:
         print("  superseded, ignored:", addendum["verified"]["superseded_ignored"])
+
+    if args.bootstrap_resamples != RESAMPLES:
+        raise Refused(f"§7 requires {RESAMPLES:,} bootstrap resamples; "
+                      "this reader has no verified count-amendment contract")
+    if args.estimate_bootstrap is not None and args.estimate_bootstrap <= 0:
+        raise Refused("a bootstrap cost estimate requires a positive resample count")
 
     assignment = json.loads((args.record / "folds.json").read_text())
     if assignment["assignment_sha256"] != seal["folds"]["assignment_sha256"]:
@@ -435,7 +492,9 @@ def main(argv: list[str] | None = None) -> int:
                                       and result["fraction"] >= GATE and covered)})
         gates[name] = result
         cached[name] = {HEADLINE_FRACTION: per_fold}
-        print(f"  {name:<24} {result['fraction']:.3f}  "
+        fraction_text = ("unavailable" if result["fraction"] is None
+                         else f"{result['fraction']:.3f}")
+        print(f"  {name:<24} {fraction_text}  "
               f"{'PASS' if result['passes'] else 'FAIL'}  "
               f"({result['scored']}/{result['requested']} transitions"
               f"{'' if result['complete'] else ', folds unavailable ' + str(result['folds_unavailable'])})")
@@ -455,9 +514,13 @@ def main(argv: list[str] | None = None) -> int:
         strata = {c["task_id"]: (c["split"], c["family"], c["variant"]) for c in cells}
         ordinary_train = [m for m in moves if m["kind"] == "ordinary" and m["split"] == "train"]
         started = time.time()
-        refitting_bootstrap(features, ordinary_train, ordinary_train, folds, strata,
-                            rank=HEADLINE_RANK, resamples=args.estimate_bootstrap,
-                            seed=int(seal["seed"]))
+        estimate = refitting_bootstrap(features, ordinary_train, ordinary_train, folds, strata,
+                                       rank=HEADLINE_RANK, resamples=args.estimate_bootstrap,
+                                       seed=int(seal["seed"]))
+        if (not estimate["complete"] or estimate["resamples"] != args.estimate_bootstrap
+                or estimate["requested_resamples"] != args.estimate_bootstrap):
+            raise Refused("bootstrap cost estimate unavailable: "
+                          + estimate.get("note", "not every requested resample completed"))
         each = (time.time() - started) / args.estimate_bootstrap
         print(f"\n{name}: {each:.1f}s per refitting resample at rank {HEADLINE_RANK}")
         print(f"  §7's {args.bootstrap_resamples} resamples on this model alone: "

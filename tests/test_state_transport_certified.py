@@ -1,8 +1,7 @@
-"""The draft certified leading triplet, against the full SVD it would replace.
+"""Krylov diagnostics and the mandatory reference fallback, using synthetic NumPy inputs.
 
-The full decomposition is the reference throughout: every test asks whether the cheap routine
-reproduces it, and the certificate is tested in both directions — that it passes where the answer is
-right, and refuses where it is wrong.
+Diagnostic agreement is measured separately from certification. Even converged candidates must
+remain uncertified until a global leadingness check exists, and the public direction uses full SVD.
 """
 
 from __future__ import annotations
@@ -32,31 +31,31 @@ def cross_product(rng, n: int, p: int, noise: float = 0.05) -> np.ndarray:
 
 
 @pytest.mark.parametrize("seed", [0, 1, 2, 3])
-def test_it_reproduces_the_full_svd_on_the_fixtures(seed):
+def test_diagnostics_agree_numerically_on_the_fixtures(seed):
     cross = cross_product(np.random.default_rng(seed), 120, 60)
     u, sigma, _v, certificate = leading_triplet(cross)
     want_u, want_sigma = reference(cross)
-    assert certificate["certified"], certificate
+    assert certificate["converged"] and not certificate["certified"], certificate
     assert abs(u @ want_u) > 1 - 1e-10
     assert abs(sigma - want_sigma) / want_sigma < 1e-10
 
 
-def test_it_reproduces_the_full_svd_at_the_production_width():
+def test_diagnostics_agree_numerically_at_the_production_width():
     """3,840 wide, the 12B's residual. The width is the point of the change, so it is tested."""
     cross = cross_product(np.random.default_rng(0), 400, 3840)
     u, sigma, _v, certificate = leading_triplet(cross)
     want_u, want_sigma = reference(cross)
-    assert certificate["certified"], certificate
+    assert certificate["converged"] and not certificate["certified"], certificate
     assert abs(u @ want_u) > 1 - 1e-10
     assert abs(sigma - want_sigma) / want_sigma < 1e-10
 
 
-def test_the_certificate_refuses_a_direction_that_has_not_converged():
+def test_diagnostics_detect_a_direction_that_has_not_converged():
     """Codex F1's actual requirement. Twenty-four steps at this width give a wrong vector."""
     cross = cross_product(np.random.default_rng(0), 400, 1024)
     u, _sigma, _v, certificate = leading_triplet(cross, dimension=8)
     want_u, _ = reference(cross)
-    assert not certificate["certified"]
+    assert not certificate["certified"] and not certificate["converged"]
     assert abs(u @ want_u) < 1 - 1e-6, "the fixture no longer separates converged from not"
 
 
@@ -64,10 +63,9 @@ def test_an_uncertified_triplet_falls_back_to_the_full_svd_and_says_so():
     cross = cross_product(np.random.default_rng(0), 400, 1024)
     u, sigma, certificate = leading_direction(cross)
     want_u, want_sigma = reference(cross)
-    if certificate.get("fell_back_to_full_svd"):
-        assert abs(u @ want_u) > 1 - 1e-12 and abs(sigma - want_sigma) / want_sigma < 1e-12
-    else:  # certified directly, which is also correct — but then it must equal the reference
-        assert abs(u @ want_u) > 1 - 1e-10
+    assert certificate["fell_back_to_full_svd"]
+    assert not certificate["certified"]
+    assert np.array_equal(u, want_u) and sigma == want_sigma
 
 
 def test_the_thresholds_are_declared_not_assumed():
@@ -78,10 +76,10 @@ def test_the_thresholds_are_declared_not_assumed():
     assert loose["reason"]
 
 
-def test_the_schedule_grows_until_certified():
+def test_the_schedule_grows_until_diagnostic_convergence():
     cross = cross_product(np.random.default_rng(0), 400, 1024)
     certificate = leading_triplet(cross)[3]
-    assert certificate["certified"]
+    assert certificate["converged"] and not certificate["certified"]
     assert certificate["krylov_steps"] in KRYLOV_SCHEDULE
     small = leading_triplet(cross, dimension=KRYLOV_SCHEDULE[0])[3]
     assert certificate["krylov_steps"] >= small["krylov_steps"]
@@ -101,9 +99,9 @@ def test_the_fitted_coefficients_and_the_gate_quantity_agree():
 
     sealed = fit(x, y, rank)
     certified, certificates = certified_fit(x, y, rank)
-    assert all(c["certified"] for c in certificates), certificates
+    assert all(c["fell_back_to_full_svd"] and not c["certified"] for c in certificates)
     a, b = sealed.coefficients(rank), certified.coefficients(rank)
-    assert np.linalg.norm(a - b) / np.linalg.norm(a) < 1e-8
+    assert np.array_equal(a, b)
 
     def gate(fitted):
         moved = np.asarray(fitted.apply(held, rank=rank), dtype=np.float32)

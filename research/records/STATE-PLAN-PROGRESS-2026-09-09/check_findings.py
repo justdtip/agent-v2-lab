@@ -232,12 +232,13 @@ def f3_bootstrap_and_verdict() -> list[str]:
         problems.append("F3: an interval wholly beyond ε does not read as resolved")
     if "wholly within" not in read_e2.verdict(-0.05, 0.10, 0.15):
         problems.append("F3: an interval wholly within ε does not read as resolved")
-    cheap = {"low": -0.1, "high": 0.1}
-    wide = {"low": -0.4, "high": 0.6, "refitted": True}
-    if read_e2.governing(cheap, wide)[2] != "paired, refitted within each resample":
+    hoeffding = {"low": -0.1, "high": 0.1}
+    wide = {"low": -0.4, "high": 0.6, "refitted": True, "complete": True,
+            "resamples": 10000, "requested_resamples": 10000}
+    if read_e2.governing(hoeffding, wide)[2] != "paired, refitted within each resample":
         problems.append("F3: the wider interval does not govern")
-    if read_e2.governing({"low": -0.7, "high": 0.7}, wide)[2] != "paired, fit held still":
-        problems.append("F3: the wider interval does not govern when it is the cheap one")
+    if read_e2.governing({"low": -0.7, "high": 0.7}, wide)[2] != "Hoeffding":
+        problems.append("F3: the wider interval does not govern when it is Hoeffding")
 
     if read_e2.is_registered(read_e2.HEADLINE_FRACTION, read_e2.HEADLINE_RANK, None):
         problems.append("F3: a stratum with no tolerance is registered at the headline coordinates")

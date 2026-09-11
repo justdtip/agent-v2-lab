@@ -1,46 +1,23 @@
-"""DRAFT, unsealed and unrun: a certified leading triplet in place of a full SVD.
+"""DRAFT, unsealed: Krylov convergence diagnostics with a mandatory reference fallback.
 
-Amendment 1 §2 obtains each component's direction from `numpy.linalg.svd` of the deflated
-cross-product — a complete O(p³) decomposition to extract one singular vector from a matrix whose
-rank is at most n < p. Codex F1 required that the direction be **certified**, not that it be obtained
-by decomposing everything; this module proposes the cheaper route with a certificate attached.
+The former residual/Ritz-gap test can accept an exact non-leading triplet. Neither diagnostic
+controls the spectrum outside the explored subspace, so leading_triplet always reports
+certified=False. leading_direction uses the sealed full-SVD operation on every input. There is
+currently no certified fast path and no supported speedup claim.
 
-**It does not touch `transport.py`.** That file is what an addendum sealed and what Codex read. If
-this draft is accepted, the routine moves there under a new addendum; until then the sealed fitter is
-the only one any reader uses.
-
-**What the certificate does and does not establish, stated plainly because it is the crux.** For a
-candidate triplet `(u, σ, v)` of `A` the routine reports the relative residual
-`max(‖Av − σu‖, ‖Aᵀu − σv‖) / σ`, which bounds the distance to *a* singular triplet of `A`
-(Bauer–Fike for the symmetric dilation). It also reports the Ritz gap `(θ₁ − θ₂) / θ₁`. A small
-residual with a clear gap is strong evidence the triplet is the **leading** one; it is **not a proof
-of leadingness**, and this draft does not claim one. The guarantees actually relied on are:
-
-1. `θ₁` is a Rayleigh quotient, so `σ₁ ≥ sqrt(θ₁)` always — the routine never overstates;
-2. anything failing either declared threshold falls back to the full SVD, so the sealed result is
-   reproduced exactly rather than approximated;
-3. agreement with the full SVD is tested, on the fixtures and at the production width.
-
-`scipy` is deliberately not used: it is absent from the card's environment and is not a declared
-dependency of this repository, so a routine built on it could not run where the reading runs.
+certified_fit retains its draft API but mirrors the sealed fitter's stopping, component-finiteness
+checks and floating-point deflation order. The reference module and reader integration are unchanged.
+Sign agreement and a small direction error do not establish bitwise or strict-retrieval equivalence
+for an approximate solver. A future bypass requires a reviewed global bound and equivalence contract.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-#: A triplet is accepted only below this relative residual. Declared, not assumed: it is three
-#: orders of magnitude above float64's epsilon at these magnitudes, so it admits ordinary rounding
-#: and refuses a direction that has not converged.
+# These are convergence diagnostics only; passing them cannot establish leadingness.
 RESIDUAL_TOLERANCE = 1e-10
-#: ...and only with this much separation from the next Ritz value, relative to the largest. Below
-#: it the two are not distinguishable by the residual alone and the full SVD decides.
 GAP_TOLERANCE = 1e-6
-#: Krylov dimensions tried in order until the certificate passes. Declared as a schedule rather than
-#: a single guess because the right size depends on the operator's spectral gap, which varies by
-#: model width and by fold: at the 3,840-wide production size, 24 steps leave the direction wrong
-#: (cosine 0.32 to the true leading vector) and the certificate correctly refuses; 96 certify.
-#: Growing until certified is self-tuning and always ends either certified or in the full SVD.
 KRYLOV_SCHEDULE = (48, 96, 192, 384)
 
 
@@ -48,13 +25,15 @@ def leading_triplet(cross: np.ndarray, *, residual_tolerance: float = RESIDUAL_T
                     gap_tolerance: float = GAP_TOLERANCE, dimension: int | None = None,
                     schedule: tuple[int, ...] = KRYLOV_SCHEDULE
                     ) -> tuple[np.ndarray, float, np.ndarray, dict]:
-    """Grow the Krylov space until the certificate passes, or hand back an uncertified triplet."""
+    """Grow until diagnostic convergence; return a triplet that remains uncertified."""
+    if not np.isfinite(cross).all():
+        raise ValueError("the cross-product is not finite; the fit refuses rather than carry NaNs")
     if dimension is not None:
         return _at_dimension(cross, residual_tolerance, gap_tolerance, dimension)
     result = None
     for size in schedule:
         result = _at_dimension(cross, residual_tolerance, gap_tolerance, size)
-        if result[3]["certified"]:
+        if result[3].get("converged", False):
             return result
         if size >= cross.shape[0]:
             break
@@ -63,7 +42,7 @@ def leading_triplet(cross: np.ndarray, *, residual_tolerance: float = RESIDUAL_T
 
 def _at_dimension(cross: np.ndarray, residual_tolerance: float, gap_tolerance: float,
                   dimension: int) -> tuple[np.ndarray, float, np.ndarray, dict]:
-    """The leading singular triplet of `cross`, with a certificate. Deterministic: no RNG.
+    """A candidate singular triplet of `cross`, with convergence diagnostics. No RNG.
 
     Lanczos on the symmetric operator `S = A Aᵀ`, applied as two matrix–vector products so `S` is
     never formed. The start vector is `A` summed along its columns, which depends only on `A`.
@@ -118,13 +97,11 @@ def _at_dimension(cross: np.ndarray, residual_tolerance: float, gap_tolerance: f
     certificate = {
         "relative_residual": residual, "ritz_gap": gap, "krylov_steps": used,
         "residual_tolerance": residual_tolerance, "gap_tolerance": gap_tolerance,
-        "certified": bool(residual <= residual_tolerance and gap >= gap_tolerance),
+        "converged": bool(residual <= residual_tolerance and gap >= gap_tolerance),
+        "certified": False,
+        "reason": "global leadingness is not established by residual and projected Ritz gap",
     }
-    if not certificate["certified"]:
-        certificate["reason"] = ("residual above tolerance" if residual > residual_tolerance
-                                 else "Ritz gap below tolerance")
-    # Sign convention identical to the sealed fitter's, so the two agree elementwise and not only
-    # up to sign.
+    # Match the reference's sign convention; this alone does not imply numerical identity.
     pivot = int(np.argmax(np.abs(u)))
     if u[pivot] < 0:
         u, v = -u, -v
@@ -132,23 +109,22 @@ def _at_dimension(cross: np.ndarray, residual_tolerance: float, gap_tolerance: f
 
 
 def leading_direction(cross: np.ndarray) -> tuple[np.ndarray, float, dict]:
-    """The sealed fitter's contract, served by the certified routine with a full-SVD fallback."""
-    u, sigma, _v, certificate = leading_triplet(cross)
-    if certificate["certified"]:
-        return u, sigma, certificate
-    reference, values, _ = np.linalg.svd(cross, full_matrices=False)
-    u = reference[:, 0]
-    pivot = int(np.argmax(np.abs(u)))
-    if u[pivot] < 0:
-        u = -u
-    return u, float(values[0]), {**certificate, "fell_back_to_full_svd": True}
+    """Return the reference full-SVD direction; diagnostics never authorize a bypass."""
+    from local_llm_lab.pipeline.state_programme.transport import _leading_direction
+
+    try:
+        _u, _sigma, _v, certificate = leading_triplet(cross)
+    except (ValueError, np.linalg.LinAlgError, FloatingPointError) as exc:
+        certificate = {"certified": False, "reason": f"diagnostics unavailable: {exc}"}
+    u, sigma = _leading_direction(cross)
+    return u, sigma, {**certificate, "fell_back_to_full_svd": True}
 
 
 def certified_fit(sources: np.ndarray, targets: np.ndarray, max_rank: int):
-    """`transport.fit`'s procedure with the certified direction in place of the full SVD.
+    """Mirror transport.fit, with reference fallback and diagnostics for each retained component.
 
-    Identical in every other respect — the same standardisation, centring, deflation, cross-product
-    update and stopping rules — so the two differ in exactly one step and can be compared directly.
+    Keep the reference's arithmetic order, stop tests and refusals. Do not simplify the deflation:
+    an algebraically equal expression can change floating-point results at strict retrieval ties.
     """
     from local_llm_lab.pipeline.state_programme.transport import DEFLATION_FLOOR, Transport
 
@@ -165,21 +141,26 @@ def certified_fit(sources: np.ndarray, targets: np.ndarray, max_rank: int):
     loadings = np.zeros((features, max_rank))
     target_loadings = np.zeros((width, max_rank))
     singular, certificates = [], []
-    for _component in range(max_rank):
-        if np.linalg.norm(cross) < DEFLATION_FLOOR:
-            break
+    for component in range(max_rank):
         w, sigma, certificate = leading_direction(cross)
+        if sigma < DEFLATION_FLOOR:
+            break
         t = x @ w
         tt = float(t @ t)
         if tt < DEFLATION_FLOOR:
             break
         p_load = (x.T @ t) / tt
         c_load = (y.T @ t) / tt
+        if not (np.isfinite(p_load).all() and np.isfinite(c_load).all()):
+            raise ValueError(f"component {component + 1} is not finite; the fit refuses")
         index = len(singular)
         weights[:, index], loadings[:, index], target_loadings[:, index] = w, p_load, c_load
         singular.append(float(sigma))
         certificates.append(certificate)
-        cross = cross - tt * np.outer(p_load, c_load)
+        xt = x.T @ t
+        ty = y.T @ t
+        cross = (cross - np.outer(xt, c_load) - np.outer(p_load, ty)
+                 + tt * np.outer(p_load, c_load))
         x -= np.outer(t, p_load)
         y -= np.outer(t, c_load)
     kept = len(singular)
