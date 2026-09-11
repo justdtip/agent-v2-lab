@@ -320,6 +320,23 @@ Every behavioural number above came from cells chosen for small margins, which s
 
 **The effect is confined to the lowest quintile, and only at layer 18.** Below about 12 logits the reconstruction flips 27% of decisions at layer 18 against 12% for a random error of the same norm and 8% for an angle-matched one — a little over twice the matched rate, consistent with the 9-of-32 seen on the selected tail. Above that margin it flips one cell in 240. **At layer 24 the reconstruction flips nothing in 300 cells**, while random errors of the same size flip 1.8% and angle-matched 1.3%: the dictionary's error there is not merely harmless, it is gentler than chance. That is the same ordering the saved-array controls gave for lens-score amplification, now on behaviour and on the whole population rather than on a tail.
 
+### 4.5 The complete call over the whole population
+
+[call_test.py](call_test.py) on the same 300 action cells at both layers, two controls each, forty-eight generated tokens per arm, 08:24Z–09:06Z (41 minutes; [bridge/calltest-4b-all.json](bridge/calltest-4b-all.json)). Baselines: 288 of 300 emit the expert's tool and all 300 are valid JSON.
+
+| cohort | cells | reconstruction changes the tool | random, same norm | angle-matched | same-state | malformed |
+|---|---:|---:|---:|---:|---:|---:|
+| layer 18, margin below 11.9 | 61 | 16 of 61 | 15 of 122 | 9 of 122 | 0 of 61 | 0 |
+| layer 18, margin 11.9 and above | 239 | 1 of 239 | 3 of 478 | 2 of 478 | 0 of 239 | 0 |
+| layer 18, all | 300 | 17 of 300 | 18 of 600 | 11 of 600 | 0 of 300 | 0 |
+| layer 24, margin below 11.9 | 61 | 0 of 61 | 9 of 122 | 6 of 122 | 0 of 61 | 0 |
+| layer 24, margin 11.9 and above | 239 | 0 of 239 | 2 of 478 | 2 of 478 | 0 of 239 | 4 |
+| layer 24, all | 300 | 0 of 300 | 11 of 600 | 8 of 600 | 0 of 300 | 4 |
+
+**Every first-token flip is a changed call and nothing else moves.** The counts reproduce §4.4 exactly — 17 of 300 at layer 18, all but one in the lowest margin quintile, and 0 of 300 at layer 24 against 11 of 600 random. The same-state arm reproduces the baseline call text in all 1,200 cell-arms and no arm at either layer produces malformed JSON except two random draws at layer 24.
+
+**The arguments do not move independently of the tool.** A complete-call test can see something the next-token test cannot: a call that keeps its tool and changes its path. Across 600 reconstruction cells there is exactly one, a leading slash dropped from `/workspace/train1/0004/config.ini` at layer 18 on a 12.2-logit margin, against one such case in 1,200 angle-matched controls and none in 1,200 random ones. So the reconstruction either changes the whole decision or changes nothing; it does not quietly redirect an action to a different file. That is a cleaner negative than the first-token test could have given, and it is the one the extension to whole calls was for.
+
 ## 5. The dictionary width and sparsity control
 
 Overnight 2026-09-10/11 (22:04Z–02:20Z), on Daniel's fetch authorisation. What the hub ships at `resid_post_all` is 16k and 262k widths at `l0_small` and `l0_big` for every layer; 65k exists only at the `resid_post` site, a different suite covering 4B blocks 9, 17, 22 and 29 (and 12B 12, 24, 31, 41), so the 65k ladder was run at 4B block 17 only and a suite-matched 16k from `resid_post` is queued so that suite is not read as width. Each dictionary went through its own admission dry-run, the runner on the same 600 cells with the same thresholds (both stages where examples ship, A2 alone for 262k which ships none), and the in-domain control on the fit prompts; driver [width_control_run.sh](width_control_run.sh), configs from [bridge_configs_width.py](bridge_configs_width.py), summaries under [bridge/width/](bridge/width/). Read as a paired comparison on identical cells: raw share / lens-score share / ratio / active features / cells ranked under the 0.5 line (the vocabulary-wide line, kept for comparability with §3; §4 says what it does and does not measure).
