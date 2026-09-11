@@ -1,0 +1,69 @@
+{
+  "status": "verified-model-free",
+  "manifest_path": "/Users/daniel.tipton/Desktop/An app/outputs/agentic-lens/corpus/manifest.json",
+  "manifest_file_sha256": "4fbdbc8b2e1cee12bbf7e261e91b3aff6bc1f0115712467efbc69ec7726778c0",
+  "counts": {
+    "capture_rows": 7629,
+    "comparison_cells": 600,
+    "eligible_rows": 3927,
+    "fit": 599
+  },
+  "excluded_episode_count": 300,
+  "family_counts": {
+    "aggregate_report": 49,
+    "batch_update": 49,
+    "calculate": 50,
+    "conditional_update": 50,
+    "cross_reference": 50,
+    "ledger_reconcile": 50,
+    "list": 50,
+    "pointer_chain": 50,
+    "read": 50,
+    "search": 50,
+    "synthesis": 51,
+    "update": 50
+  },
+  "candidate_context_min": 438,
+  "candidate_context_max": 3827,
+  "context_bands": {
+    "above_window": 186,
+    "below_window": 375,
+    "long": 38
+  },
+  "calibration_rows": [
+    {
+      "index": 267,
+      "task_id": "train-read-0288-clean",
+      "context_tokens": 438
+    },
+    {
+      "index": 3538,
+      "task_id": "train1-search-0193-wrong_path",
+      "context_tokens": 757
+    },
+    {
+      "index": 5313,
+      "task_id": "train2-batch_update-0118-failed_edit",
+      "context_tokens": 3827
+    }
+  ],
+  "sources": {
+    "corpus": {
+      "path": "/Users/daniel.tipton/Desktop/An app/outputs/agentic-lens/input/all-splits.jsonl",
+      "sha256": "790cefffc29b73d1ba3383bc2ea19759b5cfed156c849cde3cc338194210cbcd"
+    },
+    "index": {
+      "path": "/Users/daniel.tipton/Desktop/An app/outputs/agentic-lens/input/index.jsonl",
+      "sha256": "8a9199a11ee366d2396112ea970167917eeb17c14219ef9ff925016f0686eba8"
+    },
+    "positions": {
+      "path": "/Users/daniel.tipton/Desktop/An app/outputs/agentic-lens/input/positions-sample.json",
+      "sha256": "b63334eb1acad1788173ecbfd037d4d1a4b599ab480a5fc42721c7631f805b84"
+    },
+    "tokenizer": {
+      "path": "/Users/daniel.tipton/Desktop/An app/outputs/agentic-lens/input/tokenizer.json",
+      "sha256": "4667f2089529e8e7657cfb6d1c19910ae71ff5f28aa7ab2ff2763330affad795"
+    }
+  },
+  "device_fit": "unexecuted"
+}

@@ -1,0 +1,28 @@
+{
+  "status": "cpu_verified_device_unexecuted",
+  "tests": {
+    "passed": 368,
+    "failed": 0,
+    "elapsed_seconds": 53.19,
+    "command": "LLL_BACKEND=torch .venv/bin/python -m pytest -o addopts='' -q tests/test_agentic_lens.py tests/test_agentic_plan_validation.py tests/test_agentic_lens_compare.py tests/test_agentic_live_readout.py tests/test_agentic_cell_pairings.py tests/test_agentic_directions.py tests/test_workspace_lens_corpus.py tests/test_lens_corpus.py tests/test_device_lens_admission.py tests/test_measure_pairings.py tests/test_lens_upstream.py tests/test_lens_fit_torch.py tests/torch/test_torch_jacobian.py tests/test_repository_rules.py"
+  },
+  "checks": {
+    "ruff": "passed",
+    "git_diff_check": "passed",
+    "fixture_graph_once_vs_sequential_max_abs": {
+      "eager": 0.0,
+      "sdpa": 0.0
+    },
+    "ruff_format": "passed"
+  },
+  "limits": [
+    "CPU fixtures; no real checkpoint calibration or fitted agentic lens.",
+    "Laptop timing is not an idle-box or production throughput claim.",
+    "No scientific results or existing capture arrays were modified."
+  ],
+  "independent_review": {
+    "scope": "launch, input identity, source residuals, layer conventions, pairing and same-state checks",
+    "remaining_findings": 0,
+    "last_fixed_witness": "Float32 softmax mass exceeded one by rounding; log-partition ratio bounded at zero; regression reproduced failure then passed."
+  }
+}

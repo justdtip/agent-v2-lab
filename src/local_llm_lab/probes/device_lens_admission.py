@@ -94,6 +94,17 @@ class _Source:
         return self.manifest["d_model"]
 
 
+def _source_layers(manifest: dict) -> list[int]:
+    """Legacy sources cover every interior layer; partial sources must say so."""
+    depth = _int(manifest.get("n_layers"), "manifest n_layers", minimum=2)
+    if "source_layers_repo" not in manifest:
+        return list(range(1, depth))
+    layers = _rows(manifest["source_layers_repo"], "source_layers_repo")
+    if layers != sorted(layers) or any(not 1 <= layer < depth for layer in layers):
+        raise ValueError("source_layers_repo must be sorted interior repository layers")
+    return layers
+
+
 def _single_declaration(manifest: dict, nu: dict) -> list[dict]:
     depth = _int(manifest.get("n_layers"), "manifest n_layers", minimum=2)
     _int(manifest.get("d_model"), "manifest d_model")
@@ -102,9 +113,10 @@ def _single_declaration(manifest: dict, nu: dict) -> list[dict]:
     if nu.get("estimator") != "upstream-exact-autograd":
         raise ValueError("device admission requires the declared upstream-exact-autograd estimator")
     end = _mapping(nu.get("endpoint"), "nu endpoint")
+    layers = _source_layers(manifest)
     for key, expected in {
-        "source_layers_repo": list(range(1, depth)),
-        "source_layers_upstream": list(range(depth - 1)),
+        "source_layers_repo": layers,
+        "source_layers_upstream": [layer - 1 for layer in layers],
         "target_layer_repo": depth,
         "target_layer_upstream": depth - 1,
         "target_is_pre_final_norm": True,
@@ -161,17 +173,28 @@ def _single_declaration(manifest: dict, nu: dict) -> list[dict]:
         # Earlier as-run manifests omitted anchor_batch; nu itself must always carry it.
         if (key != "anchor_batch" or key in manifest) and manifest.get(key) != widths[key]:
             raise ValueError(f"manifest {key} disagrees with nu")
+    schedule = manifest.get("estimator_schedule", "sequential")
+    if schedule != nu.get("estimator_schedule", "sequential"):
+        raise ValueError("manifest estimator_schedule disagrees with nu")
+    if schedule == "graph-once":
+        if widths["forward_batch"] != 1 or widths["anchor_batch"] != 1:
+            raise ValueError("graph-once requires forward_batch and anchor_batch equal to one")
+    elif schedule == "sequential":
+        if len(set(widths.values())) != 1:
+            raise ValueError("sequential requires dim_batch, forward_batch and anchor_batch equal")
+    else:
+        raise ValueError("estimator_schedule must be sequential or graph-once")
     _hashes(manifest.get("load_report_sha256"))
     return [widths | {"n_prompts": count, "rows": rows, "weight": 1.0}]
 
 
-def _maps(path: Path, depth: int, hidden: int) -> dict[str, np.ndarray]:
+def _maps(path: Path, layers: list[int], hidden: int) -> dict[str, np.ndarray]:
     if not path.is_file():
         raise ValueError(f"source archive absent: {path}")
-    expected = {f"J{i}" for i in range(1, depth)}
+    expected = {f"J{i}" for i in layers}
     with np.load(path, allow_pickle=False) as archive:
         if set(archive.files) != expected or len(archive.files) != len(expected):
-            raise ValueError(f"source map keys must be repository layers J1 through J{depth - 1}")
+            raise ValueError(f"source map keys must be declared repository layers {layers}")
         arrays = {}
         for key in sorted(expected, key=lambda k: int(k[1:])):
             value = archive[key]
@@ -208,7 +231,7 @@ def _read_source(root: Path, *, allow_merge: bool = True) -> _Source:
                 raise ValueError(f"merged manifest {key} disagrees with source chunk provenance")
     else:
         widths = _single_declaration(man, nu)
-    arrays = _maps(root / "exact-maps.npz", man["n_layers"], man["d_model"])
+    arrays = _maps(root / "exact-maps.npz", _source_layers(man), man["d_model"])
     recorded_sha = man.get("exact_maps_sha256")
     if recorded_sha is not None and recorded_sha != file_sha256(root / "exact-maps.npz"):
         raise ValueError("source archive hash disagrees with manifest")
@@ -298,7 +321,7 @@ def _merge_declarations(chunks: list[_Source]) -> tuple[dict, dict, list[dict]]:
         "n_prompts": total,
         "n_layers": first.depth,
         "d_model": first.hidden,
-        "layers": list(range(1, first.depth)),
+        "layers": _source_layers(first.manifest),
         "checkpoint": first.manifest["checkpoint"],
         "load_report_sha256": first.manifest["load_report_sha256"],
         "corpus": merged["corpus"],
@@ -306,6 +329,10 @@ def _merge_declarations(chunks: list[_Source]) -> tuple[dict, dict, list[dict]]:
         "max_seq_len": first.manifest["max_seq_len"],
         "chunks": [{k: v for k, v in row.items() if k != "nu"} for row in records],
     }
+    if "source_layers_repo" in first.manifest:
+        manifest["source_layers_repo"] = _source_layers(first.manifest)
+    if "estimator_schedule" in first.manifest:
+        manifest["estimator_schedule"] = first.manifest["estimator_schedule"]
     return merged, manifest, widths
 
 
@@ -459,8 +486,8 @@ def load_admitted_device_lens(
         num_layers=source.depth,
         identity=LensIdentity.from_dict(identity),
     )
-    if set(lens.maps) != set(range(1, source.depth)):
-        raise ValueError("admitted map keys omit an interior layer")
+    if set(lens.maps) != set(_source_layers(source.manifest)):
+        raise ValueError("admitted map keys differ from declared source layers")
     for layer, matrix in lens.maps.items():
         if not np.array_equal(matrix, source.maps[f"J{layer}"]):
             raise ValueError(f"admitted matrix at repository layer {layer} differs from source")

@@ -146,8 +146,30 @@ def _admit(args):
         lens, metadata = load_admitted_device_lens(
             archive, checkpoint=snapshot, model_base=metadata["model"]["base"]
         )
+        reference_archive = args.get("capture_reference_archive")
+        reference_sidecar = args.get("capture_reference_sidecar")
+        if (reference_archive is None) != (reference_sidecar is None):
+            raise ValueError("capture reference archive and sidecar must be supplied together")
+        reference_lens, reference_metadata = lens, metadata
+        if reference_archive is not None:
+            reference_archive, reference_sidecar = Path(reference_archive), Path(reference_sidecar)
+            if reference_sidecar.resolve(strict=True) != reference_archive.with_suffix(
+                ".json"
+            ).resolve(strict=True):
+                raise ValueError("capture reference sidecar is not its admitted archive's sidecar")
+            reference_lens, reference_metadata = load_admitted_device_lens(
+                reference_archive, checkpoint=snapshot, model_base=metadata["model"]["base"]
+            )
     except (ValueError, KeyError, OSError) as exc:
         raise PairingRefusal("hash_mismatch", str(exc)) from exc
+    if (
+        not args["layers"]
+        or len(set(args["layers"])) != len(args["layers"])
+        or any(type(layer) is not int or layer not in lens.maps for layer in args["layers"])
+    ):
+        raise PairingRefusal(
+            "cell_outside_capture", "requested layers must be unique admitted source layers"
+        )
     try:
         # Check the seal before parsing: damaged JSON is still a capture hash mismatch.
         seal = D._json(args["positions"])
@@ -166,8 +188,8 @@ def _admit(args):
             args["positions"],
             args["corpus"],
             snapshot,
-            metadata,
-            lens,
+            reference_metadata,
+            reference_lens,
             {"checkpoint_sha256": expected, "capture_model": manifest.get("model")},
             args["layers"],
         )
@@ -181,10 +203,21 @@ def _admit(args):
             else "cell_outside_capture"
         )
         raise PairingRefusal(name, detail) from exc
-    if len(set(args["layers"])) != len(args["layers"]) or any(
-        type(layer) is not int for layer in args["layers"]
-    ):
-        raise PairingRefusal("cell_outside_capture", "layers must be unique repository integers")
+    # The historical lens verifies the capture event. The new lens identifies the
+    # proposed pairing; substituting its digest into the old event would forge history.
+    cells = [
+        {
+            **item,
+            "identity": B.reading_identity(
+                metadata["nu"],
+                lens_sha256=lens.sha256,
+                capture_dtype=manifest["precision"],
+                capture_batch=manifest["width"],
+                reading=item["reading"],
+            ),
+        }
+        for item in cells
+    ]
     if metadata["nu"]["precision"]["fit_dtype"] != "float32" or manifest["width"] != 1:
         raise PairingRefusal("path_mismatch", "T5 requires float32 fit and float32 width-1 capture")
     if not isinstance(manifest.get("device"), str) or not manifest["device"]:
@@ -216,6 +249,14 @@ def _admit(args):
             "fit_widths": metadata["fit_widths"],
         }
     )
+    if reference_archive is not None:
+        provenance["capture_reference"] = {
+            "archive": str(reference_archive),
+            "lens_sha256": reference_lens.sha256,
+            "sidecar_sha256": D._hash(reference_sidecar),
+            "nu_sha256": reference_metadata["nu_sha256"],
+            "source_archive_sha256": reference_metadata["source_archive_sha256"],
+        }
     return cells, metadata, provenance
 
 
@@ -247,6 +288,8 @@ def measure_pairings(
     corpus,
     layers,
     output,
+    capture_reference_archive=None,
+    capture_reference_sidecar=None,
 ):
     """Write a new model-keyed registration table after every requested cell succeeds."""
     args = {
@@ -266,6 +309,8 @@ def measure_pairings(
     if output.exists() or output.is_symlink():
         raise PairingRefusal("existing_output", str(output))
     args["layers"] = list(layers)
+    args["capture_reference_archive"] = capture_reference_archive
+    args["capture_reference_sidecar"] = capture_reference_sidecar
     layers = args["layers"]
     cells, metadata, provenance = _admit(args)
     commit, source_hashes = _source()
@@ -373,6 +418,8 @@ def main(argv=None):
     ):
         parser.add_argument(f"--{name}", required=True, type=Path)
     parser.add_argument("--layers", required=True, type=int, nargs="+")
+    parser.add_argument("--capture-reference-archive", type=Path)
+    parser.add_argument("--capture-reference-sidecar", type=Path)
     try:
         result = measure_pairings(**vars(parser.parse_args(argv)))
     except PairingRefusal as exc:

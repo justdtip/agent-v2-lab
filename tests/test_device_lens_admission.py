@@ -320,6 +320,122 @@ def test_chunk_merger_preserves_full_declarations_weights_and_admits(tmp_path):
     api().load_admitted_device_lens(merged / "admitted-maps.npz", checkpoint=cp, model_base=BASE)
 
 
+def subset_fit(tmp_path, checkpoint, *, name="subset", rows=(0, 1), width=8):
+    source, maps = fit(tmp_path, checkpoint, name=name, rows=rows, width=width)
+    maps = {"J18": maps["J1"], "J24": maps["J3"]}
+    np.savez_compressed(source / "exact-maps.npz", **maps)
+    man = json.loads((source / "manifest.json").read_text())
+    nu = json.loads((source / "nu.json").read_text())
+    man.update(
+        n_layers=34,
+        source_layers_repo=[18, 24],
+        estimator_schedule="graph-once",
+        forward_batch=1,
+        anchor_batch=1,
+    )
+    nu.update(decoder_depth=34, estimator_schedule="graph-once")
+    nu["endpoint"].update(
+        source_layers_repo=[18, 24],
+        source_layers_upstream=[17, 23],
+        target_layer_repo=34,
+        target_layer_upstream=33,
+    )
+    nu["precision"].update(forward_batch=1, anchor_batch=1)
+    write_json(source / "manifest.json", man)
+    write_json(source / "nu.json", nu)
+    return source, maps
+
+
+def subset_snapshot(tmp_path):
+    cp = snapshot(tmp_path)
+    config = json.loads((cp / "config.json").read_text())
+    config["num_hidden_layers"] = 34
+    write_json(cp / "config.json", config)
+    return cp
+
+
+def test_subset_graph_once_roundtrip_and_merge_keep_real_depth(tmp_path):
+    cp = subset_snapshot(tmp_path)
+    a, maps = subset_fit(tmp_path, cp)
+    b, _ = subset_fit(tmp_path, cp, name="second", rows=(3,), width=4)
+    merged = tmp_path / "merged"
+    api().merge_device_lens_chunks(merged, [a, b])
+    for source in (a, merged):
+        meta = api().admit_device_lens(source, checkpoint=cp, model_base=BASE)
+        lens, _ = api().load_admitted_device_lens(
+            source / "admitted-maps.npz", checkpoint=cp, model_base=BASE
+        )
+        assert lens.identity.num_layers == 34
+        assert set(lens.maps) == {18, 24}
+        assert meta["source_manifest"]["content"]["source_layers_repo"] == [18, 24]
+        assert meta["nu"]["estimator_schedule"] == "graph-once"
+        assert all(w["forward_batch"] == w["anchor_batch"] == 1 for w in meta["fit_widths"])
+        assert meta["fit_widths"][0]["dim_batch"] == 8
+        for layer in (18, 24):
+            np.testing.assert_array_equal(lens.maps[layer], maps[f"J{layer}"])
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "missing",
+        "extra",
+        "undeclared",
+        "unsorted",
+        "duplicate",
+        "target",
+        "nu_layers",
+        "schedule",
+        "unknown_schedule",
+        "forward",
+        "anchor",
+    ],
+)
+def test_subset_and_graph_once_false_declarations_refuse(tmp_path, mutation):
+    cp = subset_snapshot(tmp_path)
+    source, maps = subset_fit(tmp_path, cp)
+    man = json.loads((source / "manifest.json").read_text())
+    nu = json.loads((source / "nu.json").read_text())
+    if mutation == "missing":
+        del maps["J18"]
+    elif mutation == "extra":
+        maps["J1"] = maps["J18"]
+    elif mutation == "undeclared":
+        del man["source_layers_repo"]
+    elif mutation in {"unsorted", "duplicate", "target"}:
+        layers = {"unsorted": [24, 18], "duplicate": [18, 18], "target": [18, 34]}[mutation]
+        man["source_layers_repo"] = nu["endpoint"]["source_layers_repo"] = layers
+        nu["endpoint"]["source_layers_upstream"] = [layer - 1 for layer in layers]
+    elif mutation == "nu_layers":
+        nu["endpoint"]["source_layers_repo"] = [18]
+    elif mutation == "schedule":
+        del man["estimator_schedule"]
+    elif mutation == "unknown_schedule":
+        man["estimator_schedule"] = nu["estimator_schedule"] = "unknown"
+    else:
+        key = mutation + "_batch"
+        man[key] = nu["precision"][key] = 8
+    write_json(source / "manifest.json", man)
+    write_json(source / "nu.json", nu)
+    np.savez_compressed(source / "exact-maps.npz", **maps)
+    with pytest.raises(ValueError):
+        api().admit_device_lens(source, checkpoint=cp, model_base=BASE)
+    assert not (source / "admitted-maps.npz").exists()
+
+
+def test_legacy_sequential_cannot_claim_different_forward_width(tmp_path):
+    cp = snapshot(tmp_path)
+    source, _ = fit(tmp_path, cp)
+    man = json.loads((source / "manifest.json").read_text())
+    nu = json.loads((source / "nu.json").read_text())
+    man["forward_batch"] = nu["precision"]["forward_batch"] = 1
+    nu["precision"]["anchor_batch"] = 1
+    write_json(source / "manifest.json", man)
+    write_json(source / "nu.json", nu)
+    with pytest.raises(ValueError, match="sequential"):
+        api().admit_device_lens(source, checkpoint=cp, model_base=BASE)
+
+
 @pytest.mark.parametrize(
     "kind",
     ["overlap", "different_corpus", "different_positions", "different_checkpoint", "missing_width"],

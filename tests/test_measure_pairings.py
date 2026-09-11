@@ -152,6 +152,85 @@ def test_intact_capture_produces_cell_layer_registrations(case, monkeypatch):
     assert provenance["runtime"]["torch_version"] == torch.__version__
 
 
+def replacement_lens(case, tmp_path):
+    original = (case["lens_archive"], case["lens_sidecar"])
+    source, maps = fit(tmp_path, case["model_snapshot"], name="new-agentic", width=8, offset=9)
+    maps = {key: maps[key] for key in ("J1", "J3")}
+    np.savez_compressed(source / "exact-maps.npz", **maps)
+    man, nu = D._json(source / "manifest.json"), D._json(source / "nu.json")
+    man["load_report_sha256"].pop("tokenizer.json")
+    man.update(
+        source_layers_repo=[1, 3], estimator_schedule="graph-once", forward_batch=1, anchor_batch=1
+    )
+    nu["endpoint"].update(source_layers_repo=[1, 3], source_layers_upstream=[0, 2])
+    nu["estimator_schedule"] = "graph-once"
+    nu["precision"].update(forward_batch=1, anchor_batch=1)
+    write_json(source / "manifest.json", man)
+    write_json(source / "nu.json", nu)
+    api().admit_device_lens(source, checkpoint=case["model_snapshot"], model_base=BASE)
+    case.update(
+        lens_archive=source / "admitted-maps.npz",
+        lens_sidecar=source / "admitted-maps.json",
+        capture_reference_archive=original[0],
+        capture_reference_sidecar=original[1],
+        layers=[1, 3],
+    )
+    return original
+
+
+def test_new_subset_lens_pairs_to_original_capture_without_rewriting_history(
+    case, monkeypatch, tmp_path
+):
+    before = {p: p.read_bytes() for p in case["capture_dir"].iterdir() if p.is_file()}
+    before[case["positions"]] = case["positions"].read_bytes()
+    original = replacement_lens(case, tmp_path)
+    install_tiny(monkeypatch, case)
+    result = measurement().measure_pairings(**case)
+    new_meta = D._json(case["lens_sidecar"])
+    old_meta = D._json(original[1])
+    for records in result[BASE]["measured_pairings"].values():
+        for record in records:
+            assert record["pair"]["lens_sha256"] == new_meta["npz_sha256"]
+            assert record["pair"]["nu_sha256"] == new_meta["nu_sha256"]
+            assert record["pair"]["fit_width"] == 1
+            assert record["relative"] == 0
+    assert result["_provenance"]["capture_reference"]["lens_sha256"] == old_meta["npz_sha256"]
+    assert all(path.read_bytes() == payload for path, payload in before.items())
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "missing_reference",
+        "half_reference",
+        "wrong_reference",
+        "tampered_reference",
+        "unfitted_layer",
+    ],
+)
+def test_replacement_cannot_bypass_capture_or_admitted_subset(case, monkeypatch, tmp_path, damage):
+    replacement_lens(case, tmp_path)
+    calls = install_tiny(monkeypatch, case)
+    if damage == "missing_reference":
+        case.pop("capture_reference_archive")
+        case.pop("capture_reference_sidecar")
+    elif damage == "half_reference":
+        case.pop("capture_reference_sidecar")
+    elif damage == "wrong_reference":
+        case["capture_reference_archive"] = case["lens_archive"]
+        case["capture_reference_sidecar"] = case["lens_sidecar"]
+    elif damage == "tampered_reference":
+        data = D._json(case["capture_reference_sidecar"])
+        data["nu_sha256"] = "0" * 64
+        write_json(case["capture_reference_sidecar"], data)
+    else:
+        case["layers"] = [2]
+    with pytest.raises(ValueError):
+        measurement().measure_pairings(**case)
+    assert not calls
+    assert not case["output"].exists()
+
+
 @pytest.mark.parametrize(
     "damage", ["checkpoint", "sidecar", "capture", "tokenizer", "positions", "manifest"]
 )

@@ -41,7 +41,49 @@ def main(argv: list[str] | None = None) -> None:
         type=int,
         help=f"prose window length, recorded in the manifest (default: {PROSE_CHUNK_TOKENS})",
     )
+    parser.add_argument("--workspace-corpus", type=Path)
+    parser.add_argument("--capture-index", type=Path)
+    parser.add_argument("--positions", type=Path)
+    parser.add_argument("--tokenizer-json", type=Path)
+    parser.add_argument(
+        "--max-tokens", type=int, help="workspace context refusal cap; never truncates"
+    )
     args = parser.parse_args(argv)
+    workspace_inputs = (
+        args.workspace_corpus,
+        args.capture_index,
+        args.positions,
+        args.tokenizer_json,
+    )
+    if any(workspace_inputs):
+        if (
+            not all(workspace_inputs)
+            or args.corpus != "agentic"
+            or args.evals
+            or args.files
+            or args.download_prose
+            or args.prose_chunk_tokens
+        ):
+            parser.error(
+                "workspace input requires agentic, corpus/index/positions/tokenizer, "
+                "and no other source"
+            )
+        from local_llm_lab.pipeline.lens_fitting.workspace_corpus import build_workspace_corpus
+
+        manifest = build_workspace_corpus(*workspace_inputs, args.out, max_tokens=args.max_tokens)
+        print(
+            json.dumps(
+                {
+                    "manifest": str(args.out.absolute()),
+                    "domain": manifest["domain"],
+                    "counts": manifest["counts"],
+                    "dropped": 0,
+                }
+            )
+        )
+        return
+    if args.max_tokens is not None:
+        parser.error("--max-tokens requires workspace inputs")
     if args.prose_chunk_tokens is not None and (
         args.corpus != "prose" or args.prose_chunk_tokens <= 0
     ):

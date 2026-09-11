@@ -125,7 +125,6 @@ class MissingDeclaredNu(ValueError):
 # ----------------------------------------------------------------------- the upstream clone
 
 
-
 # ------------------------------------------------------------------- layer index conventions
 
 
@@ -511,6 +510,7 @@ def fit_upstream_jacobian(
     max_rows: int | None = None,
     upstream: Upstream | None = None,
     progress: Callable[[dict], None] | None = None,
+    estimator_schedule: str = "sequential",
 ) -> UpstreamJacobianFit:
     """Accumulate upstream's per-prompt Jacobian over our corpus rows.
 
@@ -554,6 +554,8 @@ def fit_upstream_jacobian(
         CotangentSelectionError: a selector chose nothing for some row.
         ValueError: no row was long enough, or the declared precision is not the observed one.
     """
+    if estimator_schedule not in ("sequential", "graph-once"):
+        raise ValueError(f"unknown estimator schedule: {estimator_schedule}")
     import torch
 
     up = upstream or load_upstream()
@@ -628,7 +630,12 @@ def fit_upstream_jacobian(
             wrapped.register(key, row["ids"])
             before = wrapped.encode_calls
             try:
-                jacobians, seq_len, n_valid = up.fitting.jacobian_for_prompt(
+                estimator = up.fitting.jacobian_for_prompt
+                if estimator_schedule == "graph-once":
+                    from local_llm_lab.torch_jacobian import jacobian_for_prompt_vjp
+
+                    estimator = jacobian_for_prompt_vjp
+                jacobians, seq_len, n_valid = estimator(
                     wrapped,
                     key,
                     sources,
@@ -705,8 +712,9 @@ def fit_upstream_jacobian(
             # difference of 76.4 at the target (`WSD-FD-CALIBRATION-2026-09-10`). Two estimators at
             # two widths are therefore two estimates of two functions, and the comparability gate
             # has to be able to see that.
-            "forward_batch": int(dim_batch),
-            "anchor_batch": int(dim_batch),
+            "forward_batch": 1 if estimator_schedule == "graph-once" else int(dim_batch),
+            "anchor_batch": 1 if estimator_schedule == "graph-once" else int(dim_batch),
+            "estimator_schedule": estimator_schedule,
             "backward_accumulation_dtype": observed["dtype"],
             "position_mean_dtype": "float32",
             "prompt_accumulation_dtype": "float64",
@@ -767,6 +775,7 @@ def declare_nu(
     return {
         "schema_version": 1,
         "estimator": estimator,
+        "estimator_schedule": fit.precision.get("estimator_schedule", "sequential"),
         "endpoint": {
             "target_layer_upstream": fit.target_layer,
             "target_layer_repo": repo_layer_of_upstream(fit.target_layer),

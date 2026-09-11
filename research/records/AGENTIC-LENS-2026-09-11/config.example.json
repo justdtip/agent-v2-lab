@@ -1,0 +1,39 @@
+{
+  "_template": "NONEXECUTABLE TEMPLATE: replace every <...> path and both null fields before device readout or directional execution. No new archive, pairing, threshold or measured result is implied.",
+  "model_snapshot": "<ABSOLUTE_PINNED_OFFICIAL_GEMMA3_4B_SNAPSHOT_DIRECTORY>",
+  "checkpoint_manifest": "<ABSOLUTE_CHECKPOINT_FILENAME_TO_SHA256_JSON>",
+  "capture_dir": "<ABSOLUTE_ORIGINAL_4B_CAPTURE_DIRECTORY>",
+  "positions": "<ABSOLUTE_SEALED_600_CELL_POSITIONS_JSON>",
+  "corpus": "<ABSOLUTE_ORIGINAL_WORKSPACE_ALL_SPLITS_JSONL>",
+  "layers": [18, 24],
+  "maximum_pairing_relative": null,
+  "tool_token_ids": null,
+  "prose": {
+    "lens_archive": "<ABSOLUTE_ORIGINAL_PROSE_ADMITTED_MAPS_NPZ>",
+    "lens_sidecar": "<ABSOLUTE_MATCHING_ORIGINAL_PROSE_ADMITTED_MAPS_JSON>",
+    "pairings": "<ABSOLUTE_PROSE_PAIRING_MEASUREMENTS_FOR_THE_SAME_600_CELLS_JSON>"
+  },
+  "agentic": {
+    "lens_archive": "<ABSOLUTE_NEW_AGENTIC_ADMITTED_MAPS_NPZ_AFTER_FIT_AND_ADMISSION>",
+    "lens_sidecar": "<ABSOLUTE_MATCHING_NEW_AGENTIC_ADMITTED_MAPS_JSON>",
+    "pairings": "<ABSOLUTE_NEW_AGENTIC_PAIRING_MEASUREMENTS_FOR_THE_SAME_600_CELLS_JSON>"
+  },
+  "scores": "<ABSOLUTE_NEW_FULL_MODEL_SCORES_JSON_OUTPUT>",
+  "output": "<ABSOLUTE_NEW_READOUT_COMPARISON_DIRECTORY>",
+  "directions_manifest": "<ABSOLUTE_NEW_FROZEN_DIRECTIONS_JSON_OUTPUT>",
+  "directions_output": "<ABSOLUTE_NEW_DIRECTIONAL_RESPONSES_JSON_OUTPUT>",
+  "dictionaries": {
+    "18": {
+      "directory": "<ABSOLUTE_EXISTING_ADMITTED_LAYER_17_16K_SMALL_DICTIONARY_DIRECTORY>",
+      "receipt": "<ABSOLUTE_MATCHING_LAYER_17_DICTIONARY_DIGEST_JSON>",
+      "repo": "google/gemma-scope-2-4b-it",
+      "folder": "resid_post_all/layer_17_width_16k_l0_small"
+    },
+    "24": {
+      "directory": "<ABSOLUTE_EXISTING_ADMITTED_LAYER_23_16K_SMALL_DICTIONARY_DIRECTORY>",
+      "receipt": "<ABSOLUTE_MATCHING_LAYER_23_DICTIONARY_DIGEST_JSON>",
+      "repo": "google/gemma-scope-2-4b-it",
+      "folder": "resid_post_all/layer_23_width_16k_l0_small"
+    }
+  }
+}
