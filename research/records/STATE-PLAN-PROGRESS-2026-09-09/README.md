@@ -27,6 +27,39 @@ checker. Verified against this seal: thirteen files matched, the baseline re-der
 passing. **No capture is read except through it.** The unknown-horizon control (§4.1) stays deferred
 with its veto disabled; its amendment is a separate reviewed item and the seal does not release it.
 
+## 0.4 What §7's declared interval costs, measured before running it
+
+Codex's recheck2 F3 requires §7 as sealed: episodes resampled within `(split, family, variant)` and
+**the rule refitted out of fold inside every resample**, 10,000 of them, at the registered headline
+(depth 0.5, rank 8, eight components).
+
+Measured on the card, an AMD Ryzen 7 9700X with **8 physical cores** — sixteen threads thrash, so the
+parallel configuration is eight workers of one thread each:
+
+| | one 8-component fit | one resample (5 folds) | 10,000 resamples, serial |
+|---|---:|---:|---:|
+| 4B, 2,560 wide | 27.7 s | 138.5 s | 385 h |
+| 12B, 3,840 wide | 85.7 s | 428.5 s | 1,190 h |
+
+**1,575 hours serial, about 66 days. Across all eight cores, about 197 hours — 8.2 days.** That is
+not a night, and the resample count is sealed, so it is reported rather than trimmed.
+
+Two levers change **no declared quantity**, and neither is mine to take:
+
+1. **Run the resamples in parallel.** They are independent; the 8.2-day figure above already assumes
+   it. Execution only.
+2. **Replace the full *p*×*p* SVD in the fitter with a certified leading triplet.** The fitter
+   computes a complete SVD of the deflated cross-product to obtain one singular vector, which is
+   `O(p³)` for a matrix of rank at most *n* < *p*. A Krylov method returns the same triplet with a
+   residual certificate — which is what Codex's F1 actually required. Measured on a 3,840² case: the
+   same leading singular value to every printed digit, cosine to the full SVD's vector
+   1.0000000000, residual 1.8 × 10⁻¹⁵, and **14× faster on that step**. The SVD is about 97% of the
+   fit, so roughly 10× overall, putting the run near **20 hours** with parallelism. This edits
+   `transport.py`, which an addendum seals, so it needs an amendment and a Codex review.
+
+At 8.2 days of wall clock on a rented card the cost is also a spending decision, which is neither the
+Chief's nor mine.
+
 ## 0.3 Amendment 1's first addendum, SUPERSEDED before anything was read
 
 `addendum-1.json` (`def0b7e9…`, baseline `1d93608`) is **void**. It sealed `read_e2.py` at a commit
