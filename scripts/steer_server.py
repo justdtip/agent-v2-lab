@@ -893,8 +893,13 @@ def _model_name(path: str) -> str:
 class Service:
     """The model, behind one lock, because there is one card."""
 
-    def __init__(self, chat: Chat, max_tokens: int, log_path: Path | None = None):
+    def __init__(self, chat: Chat, max_tokens: int, log_path: Path | None = None,
+                 replay_chunk: int = 256):
         self.chat, self.max_tokens = chat, max_tokens
+        #: How many reply tokens the clean replay pushes through at once. 0 walks it one token at a
+        #: time, matching the steered run's arithmetic schedule exactly; anything larger trades
+        #: bitwise agreement for not making the user wait through a second full decode.
+        self.replay_chunk = replay_chunk
         self.lock = threading.Lock()
         self.log_path = log_path
         if log_path is not None:
@@ -973,7 +978,7 @@ class Service:
         """
         if not emitted:
             return []
-        rows = self.chat.clean_replay(prompt_ids, emitted)
+        rows = self.chat.clean_replay(prompt_ids, emitted, chunk=self.replay_chunk)
         # A reply cut off mid-thought carries the open marker and no close: it is all thought.
         out, phase = [], ("thought" if opens_thought(reply) else "answer")
         for r in rows:
@@ -1060,15 +1065,25 @@ class Service:
                 try:
                     done["result"] = chat.speak(messages, self.max_tokens, on_token=collect)
                 except Exception as exc:  # surfaced to the page rather than dying silently
+                    traceback.print_exc()
                     done["error"] = f"{type(exc).__name__}: {exc}"
 
             worker = threading.Thread(target=run, daemon=True)
             worker.start()
-            while worker.is_alive() or queue:
-                while queue:
-                    yield queue.pop(0)
-                if worker.is_alive():
-                    worker.join(0.05)
+            try:
+                while worker.is_alive() or queue:
+                    while queue:
+                        yield queue.pop(0)
+                    if worker.is_alive():
+                        worker.join(0.05)
+            finally:
+                # The client can vanish mid-reply -- a reload, a closed tab, a dropped tunnel --
+                # and the server then closes this generator, which raises GeneratorExit at the
+                # yield and unwinds the `with self.lock` above. The worker would still be running
+                # the model. The next request would take the freed lock and read a residual while
+                # that orphan was mid-decode, capturing a one-token step and indexing a position
+                # into it: "index 17 is out of bounds for dimension 0 with size 1".
+                worker.join()
             if "error" in done:
                 yield {"t": "error", "error": done["error"]}
                 return
@@ -1332,6 +1347,10 @@ def main(argv: list[str] | None = None) -> int:
     # 200 cut most replies off mid-thought; 512 still did on anything with history behind it, and
     # the A/B card then showed two empty arms with no explanation.
     parser.add_argument("--max-tokens", type=int, default=2048)
+    parser.add_argument("--replay-chunk", type=int, default=256,
+                        help="reply tokens per forward pass in the clean replay. 0 walks it one "
+                             "token at a time, which matches the steered run's arithmetic exactly "
+                             "and costs one pass per token")
     parser.add_argument("--concept-baseline", type=int, default=24)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--log", type=Path, default=None,
@@ -1346,7 +1365,7 @@ def main(argv: list[str] | None = None) -> int:
 
     chat = Chat(args.model, device=args.device, dtype=args.dtype,
                 baseline_words=args.concept_baseline, seed=args.seed)
-    service = Service(chat, args.max_tokens, log_path)
+    service = Service(chat, args.max_tokens, log_path, replay_chunk=args.replay_chunk)
     if log_path:
         print(f"transcript: {log_path.resolve()}", flush=True)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), handler_for(service))

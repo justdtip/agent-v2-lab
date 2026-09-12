@@ -250,7 +250,7 @@ class Chat(Console):
         return emitted
 
     # -- the instrument ------------------------------------------------------------------------
-    def clean_replay(self, prompt_ids: list[int], emitted: list[int]) -> list[dict]:
+    def clean_replay(self, prompt_ids: list[int], emitted: list[int], chunk: int = 0) -> list[dict]:
         """What the unsteered model would have said at each context the steered run visited.
 
         The steered tokens are forced rather than resampled, so both runs see an identical context
@@ -263,21 +263,49 @@ class Chat(Console):
         with torch.no_grad():
             logits = self.model(input_ids=self.view._ids(list(prompt_ids)),
                                 past_key_values=cache, use_cache=True).logits
+            if chunk and len(emitted) > 1:
+                # Teacher forcing: every token is already fixed, so the whole reply goes through in
+                # a few wide passes instead of one pass per token. Causal masking means position k
+                # sees exactly the prefix it saw before.
+                #
+                # It is not BITWISE the same. A bf16 forward is not batch-invariant on this stack
+                # and the steered run decoded one token at a time, so a wide replay does not share
+                # its arithmetic schedule. For the interactive bench that is the right trade: the
+                # replay is dead time after the stream has stopped, and a two-thousand-token reply
+                # was paying two thousand extra forward passes for it. Anything written down as a
+                # result passes chunk=0 and takes the slow path.
+                #
+                # `preds[k]` is the row that predicts `emitted[k]`: the prompt's last row predicts
+                # the first token, and the row produced by consuming emitted[i] predicts
+                # emitted[i+1], so feeding emitted[:-1] supplies exactly the rest.
+                preds = [logits[0, -1]]
+                fed = list(emitted[:-1])
+                for begin in range(0, len(fed), chunk):
+                    out = self.model(input_ids=self.view._ids(fed[begin:begin + chunk]),
+                                     past_key_values=cache, use_cache=True).logits
+                    preds.extend(out[0, j] for j in range(out.shape[1]))
+                if len(preds) != len(emitted):
+                    raise ValueError(f"replay produced {len(preds)} predictions for "
+                                     f"{len(emitted)} tokens")
+                return [self._replay_row(k, preds[k], emitted[k]) for k in range(len(emitted))]
             for index, token in enumerate(emitted):
-                step = logits[0, -1].float().log_softmax(-1)
-                order = step.argsort(descending=True)
-                rank = int((order == token).nonzero()[0])
-                rows.append({
-                    "position": index,
-                    "steered_token": self.tokenizer.decode([token]),
-                    "clean_top": self.tokenizer.decode([int(order[0])]),
-                    "clean_rank_of_steered": rank,
-                    "logprob_steered_token": float(step[token]),
-                    "logprob_clean_top": float(step[int(order[0])]),
-                })
+                rows.append(self._replay_row(index, logits[0, -1], token))
                 logits = self.model(input_ids=self.view._ids([token]),
                                     past_key_values=cache, use_cache=True).logits
         return rows
+
+    def _replay_row(self, index: int, row_logits, token: int) -> dict:
+        """One position's evidence: what the clean model wanted, and where the steered token ranked."""
+        step = row_logits.float().log_softmax(-1)
+        order = step.argsort(descending=True)
+        return {
+            "position": index,
+            "steered_token": self.tokenizer.decode([token]),
+            "clean_top": self.tokenizer.decode([int(order[0])]),
+            "clean_rank_of_steered": int((order == token).nonzero()[0]),
+            "logprob_steered_token": float(step[token]),
+            "logprob_clean_top": float(step[int(order[0])]),
+        }
 
     # -- commands ------------------------------------------------------------------------------
     def do_message(self, text: str, max_tokens: int, *, commit: bool = True) -> None:
