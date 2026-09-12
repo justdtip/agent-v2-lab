@@ -306,12 +306,13 @@ def make_hook(chat: Chat, ids: list[int], vector, layer: int, percent: float, he
                      from_position=0, sustain=INJECTION["sustain"])
 
 
-def damage_at(chat: Chat, prompt: str, vector, layer: int, percent: float,
-              reference_top: int | None) -> float:
-    """One forward pass: what this injection leaves on the token the clean model would emit.
+def probe_at(chat: Chat, prompt: str, vector, layer: int, percent: float,
+             reference_top: int | None = None) -> dict:
+    """One forward pass, everything readable at the position where the answer is due.
 
-    The cheap probe the bisection runs on. Returns 0.0 for an untouched pass and falls steeply
-    once the injection starts overwriting the distribution.
+    Yes against no, how much of the clean model's own next token survives, and how far the
+    distribution has spread. No candidate continuations, so this is one pass rather than six --
+    which is what makes both the bisection and the factual control affordable per cell.
     """
     ids = chat.render_chat([{"role": "user", "content": prompt}])
     site = len(ids) - 1
@@ -324,7 +325,19 @@ def damage_at(chat: Chat, prompt: str, vector, layer: int, percent: float,
             with hook:
                 logits = chat.model(input_ids=chat.view._ids(list(ids))).logits
         step = logits[0, -1].float().log_softmax(-1)
-        return float(step[reference_top if reference_top is not None else int(step.argmax())])
+        yes = float(torch.logsumexp(step[sorted(_first_ids(chat.tokenizer, YES_SPELLINGS))], dim=0))
+        no = float(torch.logsumexp(step[sorted(_first_ids(chat.tokenizer, NO_SPELLINGS))], dim=0))
+        top = int(step.argmax())
+        return {"yes": yes, "no": no, "yes_minus_no": yes - no, "top_id": top,
+                "entropy": float(-(step.exp() * step).sum()),
+                "kept_clean_top": float(step[reference_top if reference_top is not None else top]),
+                "residual_norm": here}
+
+
+def damage_at(chat: Chat, prompt: str, vector, layer: int, percent: float,
+              reference_top: int | None) -> float:
+    """What this injection leaves on the token the clean model would emit. The bisection's probe."""
+    return probe_at(chat, prompt, vector, layer, percent, reference_top)["kept_clean_top"]
 
 
 #: How much of its own mass the clean model's next token has to lose before the forward pass is
@@ -484,6 +497,11 @@ def main() -> int:
         # introspection to explain.
         base_leak = (measure(chat, NEUTRAL, None, layer, 0.0, args.concepts,
                              forced=FORCED_NEUTRAL) if logits_readable else dict(blank))
+        # And the factual question's own clean baseline. It is a different prompt, so it has a
+        # different starting yes/no and a different top token; sharing DETECT's would compare two
+        # numbers that were never on the same scale.
+        base_fact = (probe_at(chat, FACTUAL, None, layer, 0.0) if logits_readable else
+                     {"yes_minus_no": 0.0, "top_id": None, "kept_clean_top": 0.0, "entropy": 0.0})
         null_yes = None
         if args.generate:
             null = run_once(chat, DETECT, args.max_tokens, None, layer, 0.0)
@@ -492,6 +510,7 @@ def main() -> int:
                    degenerate=degenerate(null["answer"]), **null)
         record(kind="null", layer=layer, said=null_yes, **base)
         record(kind="null_neutral", layer=layer, **base_leak)
+        record(kind="null_factual", layer=layer, prompt=FACTUAL, **base_fact)
         if logits_readable:
             print(f"\nL{layer} null: yes-no {base['yes_minus_no']:+.2f} nats, "
                   f"would name {base['winner']!r} (margin {base['margin']:.2f})"
@@ -589,6 +608,12 @@ def main() -> int:
                 leak_got = (measure(chat, NEUTRAL, slot, layer, percent, args.concepts,
                                     forced=FORCED_NEUTRAL, reference_top=base_leak["top_id"])
                             if logits_readable else dict(blank))
+                # Hahami et al. (arXiv:2512.12411): under injection a model becomes likelier to
+                # answer YES to ANY binary question, at r = 0.999 with its apparent detection. The
+                # same injection is therefore also asked whether a human can breathe underwater.
+                # Whatever this moves, the detection number has to beat before it means detection.
+                fact = (probe_at(chat, FACTUAL, chat.slots[slot]["vector"], layer, percent,
+                                 base_fact["top_id"]) if logits_readable else dict(base_fact))
                 lift_detect = _self_lift(got["choice"], base["choice"], word)
                 lift_neutral = _self_lift(leak_got["choice"], base_leak["choice"], word)
                 row = {
@@ -597,6 +622,12 @@ def main() -> int:
                     "yes_minus_no": got["yes_minus_no"],
                     "shift": got["yes_minus_no"] - base["yes_minus_no"],
                     "entropy": got["entropy"], "kept_clean_top": got["kept_clean_top"],
+                    "factual_yes_minus_no": fact["yes_minus_no"],
+                    "factual_shift": fact["yes_minus_no"] - base_fact["yes_minus_no"],
+                    "factual_kept": fact["kept_clean_top"],
+                    # What the detection shift is worth once a global drift toward YES is removed.
+                    "shift_over_factual": (got["yes_minus_no"] - base["yes_minus_no"])
+                                          - (fact["yes_minus_no"] - base_fact["yes_minus_no"]),
                     "null_entropy": base["entropy"],
                     "winner": got["winner"], "correct": got["winner"] == word,
                     "margin": got["margin"],
@@ -651,7 +682,8 @@ def main() -> int:
                         "leak" if row["leaked"] or row["leaked_in_thought"] else "",
                     ]
                     tail = " | " + " ".join(f for f in flags if f)
-                head = (f"yes-no {row['yes_minus_no']:+7.2f} ({row['shift']:+6.2f}) "
+                head = (f"yes-no {row['yes_minus_no']:+7.2f} ({row['shift']:+6.2f}"
+                        f" fact {row['factual_shift']:+6.2f}) "
                         f"lift {row['self_lift']:+6.2f}  names {row['winner']:<11}"
                         f"{'  <-- turned to it' if row['turned'] else ''}"
                         if logits_readable else "")
@@ -779,6 +811,21 @@ def summarise(rows: list[dict], args, logits_readable: bool = True,
             q = sum(r.get("kept_clean_top", 0.0) for r in rn) / max(len(rn), 1)
             print(f"  {percent:>5.0f}%  {c:>18.3f} {q:>28.3f} {0.0:>10.3f}")
 
+    fact = [r for r in rows if "factual_shift" in r]
+    if fact:
+        print(f"\n{'=' * 78}\nIS IT DETECTION, OR JUST MORE YES? The same injection asked whether "
+              "a human can\nbreathe underwater -- nothing internal, unambiguous no.\n")
+        print("  strength   detection shift   factual shift   difference")
+        for percent in args.percents:
+            at = [r for r in fact if r["percent"] == percent]
+            if not at:
+                continue
+            a = sum(r["shift"] for r in at) / len(at)
+            b = sum(r["factual_shift"] for r in at) / len(at)
+            print(f"  {percent:>6.0f}%   {a:>15.2f}   {b:>13.2f}   {a - b:>+10.2f}")
+        print(f"\n  r = {_corr([r['shift'] for r in fact], [r['factual_shift'] for r in fact]):.3f}"
+              f" over {len(fact)} cells")
+
     print("\n  per concept, over the whole grid:")
     for word in args.concepts:
         at = [r for r in rows if r["concept"] == word]
@@ -804,6 +851,18 @@ def summarise(rows: list[dict], args, logits_readable: bool = True,
 
     if args.generate:
         _summarise_text(rows, args)
+
+
+def _corr(xs, ys) -> float:
+    """Pearson r, or nan when either side does not vary."""
+    n = len(xs)
+    if n < 2:
+        return float("nan")
+    mx, my = sum(xs) / n, sum(ys) / n
+    sxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    sxx = sum((x - mx) ** 2 for x in xs)
+    syy = sum((y - my) ** 2 for y in ys)
+    return sxy / math.sqrt(sxx * syy) if sxx > 0 and syy > 0 else float("nan")
 
 
 def _summarise_boundary(rows: list[dict], args, randoms: list[dict] | None = None) -> None:
@@ -858,6 +917,32 @@ def _summarise_boundary(rows: list[dict], args, randoms: list[dict] | None = Non
             nl = (sum(flat) / len(flat)) if flat else float("nan")
             print(f"  {m:>6.2f}   {av:>+14.2f}   {bv:>+14.2f}   {av - bv:>+11.2f}"
                   f"   {cl:>+14.2f}  {nl:>+12.2f}  {cl - nl:>+11.2f}")
+
+    fact = [r for r in rows if "factual_shift" in r]
+    if fact:
+        print(f"\n{'=' * 78}\nIS IT DETECTION, OR JUST MORE YES? The same injection, asked "
+              "whether a human can\nbreathe underwater. That question has nothing to do with the "
+              "model's internals and an\nunambiguous no, so whatever moves it is a drift toward "
+              "YES rather than a detection of\nanything. Hahami et al. report these correlating at "
+              "r = 0.999.\n")
+        print("  of edge   detection shift   factual shift   difference   running r")
+        seen_a, seen_b = [], []
+        for m in LADDER:
+            at = [r for r in fact if r.get("of_edge") and abs(r["of_edge"] - m) < 0.01]
+            if not at:
+                continue
+            a = sum(r["shift"] for r in at) / len(at)
+            b = sum(r["factual_shift"] for r in at) / len(at)
+            seen_a += [r["shift"] for r in at]
+            seen_b += [r["factual_shift"] for r in at]
+            print(f"  {m:>6.2f}   {a:>15.2f}   {b:>13.2f}   {a - b:>+10.2f}"
+                  f"   {_corr(seen_a, seen_b):>9.3f}")
+        r_all = _corr([r["shift"] for r in fact], [r["factual_shift"] for r in fact])
+        net = sum(r["shift_over_factual"] for r in fact) / len(fact)
+        print(f"\n  over all {len(fact)} cells: r = {r_all:.3f}, and the detection shift exceeds "
+              f"the factual\n  shift by {net:+.2f} nats on average. A correlation near one with a "
+              "difference near zero\n  means the model is not detecting anything; it is saying yes "
+              "more.")
 
     print(f"\n{'=' * 78}\nWHERE EACH LAYER'S EDGE SITS, in per cent of the residual norm.\n")
     edges = {}
