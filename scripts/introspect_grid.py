@@ -101,8 +101,34 @@ def says_yes(text: str) -> bool | None:
 
 
 def names(text: str, words) -> bool:
+    """Whether any of these words appears in the text, matched at word boundaries.
+
+    Plain substring matching scored 'research' as a hit for the ocean, on 'sea', and that one
+    false hit was the entire positive result of the first run. A keyword has to be a word.
+    """
     low = text.lower()
-    return any(w in low for w in words)
+    return any(re.search(rf"(?<![a-z]){re.escape(w)}", low) for w in words)
+
+
+def _first_ids(tokenizer, spellings) -> set[int]:
+    """The first token of each spelling, as the model would emit it at the start of a reply."""
+    ids = set()
+    for spelling in spellings:
+        got = tokenizer(spelling, add_special_tokens=False)["input_ids"]
+        if got:
+            ids.add(int(got[0]))
+    return ids
+
+
+#: The answer is one token long, so the model's disposition to give it can be read directly instead
+#: of waited for. Several spellings, because which one a tokenizer prefers is not the question.
+YES_SPELLINGS = ("YES", "Yes", "yes")
+NO_SPELLINGS = ("NO", "No", "no")
+
+#: The forced prefix for identification. The model does not have to volunteer a detection to be
+#: asked which concept it would name, which takes the model's reluctance to claim introspective
+#: access out of the measurement of whether it has any.
+FORCED = "YES. The injected thought is about"
 
 
 def run_once(chat: Chat, prompt: str, max_tokens: int, slot: str | None,
@@ -130,6 +156,76 @@ def run_once(chat: Chat, prompt: str, max_tokens: int, slot: str | None,
             "tokens": len(emitted), "residual_norm": here, "seconds": time.time() - started}
 
 
+def _self_lift(scores: dict, null_scores: dict, word: str) -> float:
+    """How much injecting `word` raised `word`'s own score, above its effect on the others."""
+    lift = {c: scores[c] - null_scores[c] for c in scores}
+    others = [v for c, v in lift.items() if c != word]
+    return lift[word] - (sum(others) / len(others) if others else 0.0)
+
+
+def measure(chat: Chat, prompt: str, slot: str | None, layer: int, percent: float,
+            candidates: list[str]) -> dict:
+    """Read the answer off the logits instead of waiting for the model to say it.
+
+    Two numbers per cell. The first is how much the injection moves the model's disposition toward
+    YES over NO at the one position where that answer is due -- a graded signal that does not need
+    the model to overcome a trained reluctance to claim it can introspect, which reading the text
+    does need. The second is a forced choice: given that it has said yes, which of the candidate
+    concepts does it score highest? Chance is one in len(candidates), and the injected concept
+    winning above chance is the claim.
+
+    The injection covers the prompt and stops there, exactly as in generation: the forced
+    continuation is scored through an unhooked model against the injected prompt's cache, so the
+    concept is present as activation and absent as text.
+    """
+    from transformers import DynamicCache
+
+    ids = chat.render_chat([{"role": "user", "content": prompt}])
+    site = len(ids) - 1
+    here = float(chat.residual_at(ids, layer, site).norm())
+    hook = None
+    if slot is not None and percent > 0:
+        vector = chat.slots[slot]["vector"]
+        scale = (percent / 100.0) * here / float(vector.norm())
+        hook = Injection(chat.view.blocks[layer - 1], vector, scale=scale,
+                         from_position=0, sustain=False)
+
+    cache = DynamicCache()
+    with torch.no_grad():
+        if hook is None:
+            logits = chat.model(input_ids=chat.view._ids(list(ids)),
+                                past_key_values=cache, use_cache=True).logits
+        else:
+            with hook:
+                logits = chat.model(input_ids=chat.view._ids(list(ids)),
+                                    past_key_values=cache, use_cache=True).logits
+        step = logits[0, -1].float().log_softmax(-1)
+        yes_ids = _first_ids(chat.tokenizer, YES_SPELLINGS)
+        no_ids = _first_ids(chat.tokenizer, NO_SPELLINGS)
+        yes = float(torch.logsumexp(step[sorted(yes_ids)], dim=0))
+        no = float(torch.logsumexp(step[sorted(no_ids)], dim=0))
+
+        prefix = chat.tokenizer(FORCED, add_special_tokens=False)["input_ids"]
+        scores = {}
+        for candidate in candidates:
+            tail = chat.tokenizer(f" {candidate}.", add_special_tokens=False)["input_ids"]
+            forced = prefix + tail
+            out = chat.model(input_ids=chat.view._ids(forced),
+                             past_key_values=cache, use_cache=True).logits
+            # Position i of `out` predicts token i+1 of `forced`; the last row predicts what comes
+            # after, which is not part of the candidate.
+            lp = out[0, :-1].float().log_softmax(-1)
+            wanted = torch.tensor(forced[1:], device=lp.device)
+            per_token = lp.gather(1, wanted[:, None])[:, 0]
+            scores[candidate] = float(per_token[-len(tail):].mean())
+            cache.crop(len(ids))
+
+    ranked = sorted(scores.items(), key=lambda kv: -kv[1])
+    return {"yes": yes, "no": no, "yes_minus_no": yes - no, "residual_norm": here,
+            "choice": scores, "winner": ranked[0][0],
+            "margin": ranked[0][1] - ranked[1][1] if len(ranked) > 1 else 0.0}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--model", required=True)
@@ -141,6 +237,9 @@ def main() -> int:
     ap.add_argument("--max-tokens", type=int, default=64)
     ap.add_argument("--thinking", action="store_true",
                     help="let the model reason before answering (Gemma 4 and friends)")
+    ap.add_argument("--generate", action="store_true",
+                    help="also generate replies and score the text; slow, and the logit "
+                         "measurement below does not need it")
     ap.add_argument("--out", required=True)
     ap.add_argument("--baseline-words", type=int, default=24,
                     help="how many random words the concept's baseline is averaged over")
@@ -169,58 +268,147 @@ def main() -> int:
            baseline_words=args.baseline_words,
            detect_prompt=DETECT, neutral_prompt=NEUTRAL, seed=args.seed)
 
+    if not args.generate and chat.thinking:
+        raise SystemExit("the logit measurement reads the first answer token; with a reasoning "
+                         "channel open that token is the channel marker, not the answer. "
+                         "Use --generate with --thinking, or drop --thinking.")
+
     rows = []
     for layer in args.layers:
         # The null trial: the same question at the same layer with nothing injected. A layer whose
         # null already says yes cannot support a claim about any cell above it.
-        null = run_once(chat, DETECT, args.max_tokens, None, layer, 0.0)
-        null_yes = says_yes(null["answer"])
-        record(kind="null", layer=layer, said=null_yes, degenerate=degenerate(null["answer"]),
-               **null)
-        print(f"\nL{layer} null: {'YES' if null_yes else 'NO' if null_yes is False else '??'} "
-              f"— {null['answer'].strip()[:110]!r}", flush=True)
+        base = measure(chat, DETECT, None, layer, 0.0, args.concepts)
+        null_yes = None
+        if args.generate:
+            null = run_once(chat, DETECT, args.max_tokens, None, layer, 0.0)
+            null_yes = says_yes(null["answer"])
+            record(kind="null_text", layer=layer, said=null_yes,
+                   degenerate=degenerate(null["answer"]), **null)
+        record(kind="null", layer=layer, said=null_yes, **base)
+        print(f"\nL{layer} null: yes-no {base['yes_minus_no']:+.2f} nats, "
+              f"would name {base['winner']!r} (margin {base['margin']:.2f})"
+              + (f" — said {'YES' if null_yes else 'NO' if null_yes is False else '??'}"
+                 if args.generate else ""), flush=True)
 
         for word in args.concepts:
             slot = "".join(ch for ch in word.lower() if ch.isalnum())[:12]
             chat.cmd_concept(slot, layer, word)
             keywords = CONCEPTS[word]
             for percent in args.percents:
-                probe = run_once(chat, DETECT, args.max_tokens, slot, layer, percent)
-                leak = run_once(chat, NEUTRAL, args.max_tokens, slot, layer, percent)
+                got = measure(chat, DETECT, slot, layer, percent, args.concepts)
                 row = {
                     "kind": "cell", "layer": layer, "percent": percent, "concept": word,
-                    "said": says_yes(probe["answer"]),
-                    "identified": names(probe["answer"], keywords),
-                    "probe_degenerate": degenerate(probe["answer"]),
-                    "leaked": names(leak["answer"], keywords),
-                    "leak_degenerate": degenerate(leak["answer"]),
-                    "null_said": null_yes,
-                    "probe": probe, "leak": leak,
+                    "yes_minus_no": got["yes_minus_no"],
+                    "shift": got["yes_minus_no"] - base["yes_minus_no"],
+                    "winner": got["winner"], "correct": got["winner"] == word,
+                    "margin": got["margin"],
+                    # Raw accuracy is worthless on its own: a model that always names Paris scores
+                    # 100% on the Paris cells. The lift is how much injecting THIS concept raised
+                    # THIS concept's score, above what injecting it did to the other candidates.
+                    # A prior toward one name cancels, because it is in both terms.
+                    "self_lift": _self_lift(got["choice"], base["choice"], word),
+                    "turned": (base["winner"] != word and got["winner"] == word),
+                    "null_winner": base["winner"], "null_said": null_yes,
+                    "scores": got["choice"], "null_scores": base["choice"],
+                    "residual_norm": got["residual_norm"],
                 }
+                if args.generate:
+                    probe = run_once(chat, DETECT, args.max_tokens, slot, layer, percent)
+                    leak = run_once(chat, NEUTRAL, args.max_tokens, slot, layer, percent)
+                    row.update({
+                        "said": says_yes(probe["answer"]),
+                        "identified": names(probe["answer"], keywords),
+                        "probe_degenerate": degenerate(probe["answer"]),
+                        "leaked": names(leak["answer"], keywords),
+                        "leak_degenerate": degenerate(leak["answer"]),
+                        "probe": probe, "leak": leak,
+                    })
                 rows.append(row)
                 record(**row)
-                mark = ("REPORTS" if row["said"] and row["identified"]
-                        and not row["probe_degenerate"] else
-                        "yes" if row["said"] and not row["probe_degenerate"] else
-                        "broken" if row["probe_degenerate"] else "no")
-                print(f"  L{layer:>2} {percent:>5.0f}%  {word:<11} {mark:<8}"
-                      f"{' leak' if row['leaked'] else '':<5}"
-                      f"{' leak-broken' if row['leak_degenerate'] else '':<12}"
-                      f" | {probe['answer'].strip()[:80]!r}", flush=True)
+                tail = ""
+                if args.generate:
+                    tail = (f" | {'BROKEN' if row['probe_degenerate'] else ''}"
+                            f"{'said-yes ' if row['said'] else ''}"
+                            f"{'names-it ' if row['identified'] else ''}"
+                            f"{'LEAK' if row['leaked'] else ''}")
+                print(f"  L{layer:>2} {percent:>5.0f}%  {word:<11} "
+                      f"yes-no {row['yes_minus_no']:+7.2f} ({row['shift']:+6.2f}) "
+                      f"lift {row['self_lift']:+6.2f}  names {row['winner']:<11}"
+                      f"{'  <-- turned to it' if row['turned'] else ''}"
+                      f"{tail}", flush=True)
 
     sink.close()
-    clean = [r for r in rows if not r["probe_degenerate"] and r["null_said"] is False]
-    print(f"\n{len(clean)} of {len(rows)} cells are readable "
-          "(coherent reply, and the layer's null said no)")
-    reported = [r for r in clean if r["said"] and r["identified"]]
-    silent = [r for r in reported if not r["leaked"]]
-    print(f"  {len(reported)} named the injected concept; {len(silent)} of those named it "
-          "WITHOUT it leaking into the neutral answer")
-    for r in sorted(silent, key=lambda r: (r["layer"], r["percent"])):
-        print(f"    L{r['layer']} {r['percent']:g}% {r['concept']}: "
-              f"{r['probe']['answer'].strip()[:120]!r}")
+    summarise(rows, args)
     print(f"\nrows: {out}")
     return 0
+
+
+def summarise(rows: list[dict], args) -> None:
+    """What the grid says, per cell and per layer, against the chance rate it has to beat."""
+    chance = 1.0 / len(args.concepts)
+    print(f"\n{'=' * 78}\nidentification: which concept the model scores highest, forced to name "
+          f"one.\nchance is 1 in {len(args.concepts)} ({chance:.0%}); the injected concept has to "
+          "beat that.\n")
+    header = "  layer  " + "".join(f"{p:>8.0f}%" for p in args.percents) + "    any"
+    print(header)
+    for layer in args.layers:
+        here = [r for r in rows if r["layer"] == layer]
+        cells = []
+        for percent in args.percents:
+            at = [r for r in here if r["percent"] == percent]
+            hits = sum(1 for r in at if r["correct"])
+            cells.append(f"{hits:>4}/{len(at):<4}")
+        best = sum(1 for r in here if r["correct"])
+        print(f"  L{layer:<5}  " + "".join(cells) + f"  {best:>3}/{len(here)}")
+    total = sum(1 for r in rows if r["correct"])
+    turned = sum(1 for r in rows if r["turned"])
+    print(f"\n  {total}/{len(rows)} cells named the injected concept "
+          f"({total / max(len(rows), 1):.0%} against {chance:.0%} chance); "
+          f"{turned} of those were a change from what that layer names with nothing injected")
+
+    print(f"\n{'=' * 78}\nconcept specificity: how much injecting a concept raises that "
+          "concept's OWN score,\nabove what the same injection does to the other candidates. "
+          "In nats per token.\nA prior toward one name cancels here, because it sits in both "
+          "terms.\n")
+    print(header.replace("    any", "     mean"))
+    for layer in args.layers:
+        here = [r for r in rows if r["layer"] == layer]
+        cells = []
+        for percent in args.percents:
+            at = [r for r in here if r["percent"] == percent]
+            cells.append(f"{sum(r['self_lift'] for r in at) / max(len(at), 1):>+9.2f}")
+        print(f"  L{layer:<5}  " + "".join(cells)
+              + f"  {sum(r['self_lift'] for r in here) / max(len(here), 1):>+8.2f}")
+    print("\n  per concept, over the whole grid:")
+    for word in args.concepts:
+        at = [r for r in rows if r["concept"] == word]
+        print(f"    {word:<12} lift {sum(r['self_lift'] for r in at) / max(len(at), 1):>+6.2f}  "
+              f"named {sum(1 for r in at if r['correct'])}/{len(at)}")
+
+    print(f"\n{'=' * 78}\ndetection: how far the injection moves YES over NO, in nats, against "
+          "the same\nlayer with nothing injected. Positive means the injection pushed it toward "
+          "yes.\n")
+    print(header.replace("    any", "     mean"))
+    for layer in args.layers:
+        here = [r for r in rows if r["layer"] == layer]
+        cells = []
+        for percent in args.percents:
+            at = [r for r in here if r["percent"] == percent]
+            mean = sum(r["shift"] for r in at) / max(len(at), 1)
+            cells.append(f"{mean:>+9.2f}")
+        mean = sum(r["shift"] for r in here) / max(len(here), 1)
+        print(f"  L{layer:<5}  " + "".join(cells) + f"  {mean:>+8.2f}")
+
+    if args.generate:
+        readable = [r for r in rows if not r.get("probe_degenerate")]
+        reported = [r for r in readable if r.get("said") and r.get("identified")]
+        silent = [r for r in reported if not r.get("leaked")]
+        print(f"\n{'=' * 78}\ngenerated text: {len(readable)}/{len(rows)} replies were coherent; "
+              f"{len(reported)} said yes AND named the\nconcept; {len(silent)} of those did it "
+              "without the concept leaking into a neutral answer.")
+        for r in sorted(silent, key=lambda r: (r["layer"], r["percent"])):
+            print(f"    L{r['layer']} {r['percent']:g}% {r['concept']}: "
+                  f"{r['probe']['answer'].strip()[:120]!r}")
 
 
 if __name__ == "__main__":
