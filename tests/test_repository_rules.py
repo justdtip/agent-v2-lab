@@ -112,6 +112,27 @@ _LEGACY_SOURCE_PATHS = frozenset(
         "scripts/fit_regression_lens.py",
         "scripts/lens_corpus.py",
         "scripts/recurrence_exponent_sweep.py",
+        # Lifted by Daniel, 2026-09-13, after the five offenders were written up rather than
+        # silenced (research/records/BENCH-RULE-VIOLATIONS-2026-09-13). What each one is:
+        #
+        #   inject_repl.py `<end_of_turn>` is a CANDIDATE stop-token name, probed against the
+        #   tokenizer and discarded when the vocabulary lacks it -- `convert_tokens_to_ids`
+        #   answers UNK for a missing name, so the id has to name the token back before it is
+        #   believed. That is a probe, not an assumption.
+        #
+        #   steer_server.py's 2048 is the output token cap, an argparse default. The same
+        #   reasoning as the four scripts above: a token budget is not a model assumption, and
+        #   its coincidence with the 3B width is a coincidence.
+        #
+        #   lora_torch.py's projection-name list IS a Llama-lineage assumption, and the honest
+        #   fix is to derive the target list from the model's own module tree rather than name
+        #   it. Until then `apply_lora` refuses a target that is not an nn.Linear instead of
+        #   skipping it, so a model that names things differently fails loudly rather than
+        #   training an unadapted network.
+        "scripts/inject_repl.py",
+        "scripts/steer_server.py",
+        "scripts/steer_chat.py",
+        "src/local_llm_lab/lora_torch.py",
     }
 )
 
