@@ -70,6 +70,17 @@ CONCEPTS = {
 _YES = re.compile(r"^\W*(yes|y\b)", re.I)
 _NO = re.compile(r"^\W*(no\b|n\b|nope)", re.I)
 
+#: Language a reasoning trace uses when it is entertaining the idea that something is off, short of
+#: naming what. Scored separately from naming the concept, because noticing and identifying are
+#: different claims and the paper separates them too.
+NOTICING = (
+    "unusual", "strange", "odd", "odd-", "anomal", "intrusive", "injected", "injection",
+    "interference", "perturb", "out of place", "out of nowhere", "unprompted", "not mine",
+    "foreign", "intrud", "something is", "something was", "something odd", "unexpected",
+    "i notice", "i'm noticing", "i am noticing", "i detect", "i do detect", "feels like",
+    "there is a", "bias toward", "drawn toward", "pull toward", "fixat", "preoccup",
+)
+
 
 def degenerate(text: str) -> bool:
     """Whether the reply has collapsed into repetition and can no longer be read as an answer.
@@ -152,7 +163,10 @@ def run_once(chat: Chat, prompt: str, max_tokens: int, slot: str | None,
             emitted = chat.generate_tokens(ids, max_tokens)
     text = chat.tokenizer.decode(emitted)
     thought, answer = split_thought(text)
-    return {"text": text, "thought": thought, "answer": answer or text,
+    # `answer` stays empty when the cap cut the thought off. Falling back to the whole text would
+    # score reasoning as if it were the answer, which is the one thing the split exists to prevent.
+    return {"text": text, "thought": thought, "answer": answer,
+            "truncated": bool(thought) and not answer,
             "tokens": len(emitted), "residual_norm": here, "seconds": time.time() - started}
 
 
@@ -268,16 +282,20 @@ def main() -> int:
            baseline_words=args.baseline_words,
            detect_prompt=DETECT, neutral_prompt=NEUTRAL, seed=args.seed)
 
-    if not args.generate and chat.thinking:
-        raise SystemExit("the logit measurement reads the first answer token; with a reasoning "
-                         "channel open that token is the channel marker, not the answer. "
-                         "Use --generate with --thinking, or drop --thinking.")
+    # The logit measurement reads the token where the answer is due. With a reasoning channel open
+    # that position holds the thought, not the answer, so the measurement is skipped rather than
+    # quietly reporting the first word of some reasoning as a yes or a no.
+    logits_readable = not chat.thinking
+    if not args.generate and not logits_readable:
+        raise SystemExit("--thinking leaves nothing to measure unless --generate is given too")
 
     rows = []
     for layer in args.layers:
         # The null trial: the same question at the same layer with nothing injected. A layer whose
         # null already says yes cannot support a claim about any cell above it.
-        base = measure(chat, DETECT, None, layer, 0.0, args.concepts)
+        base = (measure(chat, DETECT, None, layer, 0.0, args.concepts) if logits_readable
+                else {"yes_minus_no": 0.0, "winner": None, "margin": 0.0,
+                      "choice": {c: 0.0 for c in args.concepts}})
         null_yes = None
         if args.generate:
             null = run_once(chat, DETECT, args.max_tokens, None, layer, 0.0)
@@ -285,17 +303,25 @@ def main() -> int:
             record(kind="null_text", layer=layer, said=null_yes,
                    degenerate=degenerate(null["answer"]), **null)
         record(kind="null", layer=layer, said=null_yes, **base)
-        print(f"\nL{layer} null: yes-no {base['yes_minus_no']:+.2f} nats, "
-              f"would name {base['winner']!r} (margin {base['margin']:.2f})"
-              + (f" — said {'YES' if null_yes else 'NO' if null_yes is False else '??'}"
-                 if args.generate else ""), flush=True)
+        if logits_readable:
+            print(f"\nL{layer} null: yes-no {base['yes_minus_no']:+.2f} nats, "
+                  f"would name {base['winner']!r} (margin {base['margin']:.2f})"
+                  + (f" — said {'YES' if null_yes else 'NO' if null_yes is False else '??'}"
+                     if args.generate else ""), flush=True)
+        else:
+            said = "YES" if null_yes else "NO" if null_yes is False else "??"
+            print(f"\nL{layer} null: said {said} — "
+                  f"thought {null['thought'].strip()[:120]!r}", flush=True)
 
         for word in args.concepts:
             slot = "".join(ch for ch in word.lower() if ch.isalnum())[:12]
             chat.cmd_concept(slot, layer, word)
             keywords = CONCEPTS[word]
             for percent in args.percents:
-                got = measure(chat, DETECT, slot, layer, percent, args.concepts)
+                got = (measure(chat, DETECT, slot, layer, percent, args.concepts)
+                       if logits_readable else
+                       {"yes_minus_no": 0.0, "winner": None, "margin": 0.0,
+                        "choice": {c: 0.0 for c in args.concepts}, "residual_norm": 0.0})
                 row = {
                     "kind": "cell", "layer": layer, "percent": percent, "concept": word,
                     "yes_minus_no": got["yes_minus_no"],
@@ -317,35 +343,51 @@ def main() -> int:
                     leak = run_once(chat, NEUTRAL, args.max_tokens, slot, layer, percent)
                     row.update({
                         "said": says_yes(probe["answer"]),
+                        # Thought and answer are scored apart. A reasoning model can turn the
+                        # concept over in the thought and still answer NO, and that dissociation is
+                        # the whole reason to run this with the channel open.
                         "identified": names(probe["answer"], keywords),
-                        "probe_degenerate": degenerate(probe["answer"]),
+                        "identified_in_thought": names(probe["thought"], keywords),
+                        "noticed_in_thought": names(probe["thought"], NOTICING),
+                        "noticed_in_answer": names(probe["answer"], NOTICING),
+                        "probe_degenerate": degenerate(probe["text"]),
+                        "probe_truncated": probe["truncated"],
                         "leaked": names(leak["answer"], keywords),
-                        "leak_degenerate": degenerate(leak["answer"]),
+                        "leaked_in_thought": names(leak["thought"], keywords),
+                        "leak_degenerate": degenerate(leak["text"]),
                         "probe": probe, "leak": leak,
                     })
                 rows.append(row)
                 record(**row)
                 tail = ""
                 if args.generate:
-                    tail = (f" | {'BROKEN' if row['probe_degenerate'] else ''}"
-                            f"{'said-yes ' if row['said'] else ''}"
-                            f"{'names-it ' if row['identified'] else ''}"
-                            f"{'LEAK' if row['leaked'] else ''}")
-                print(f"  L{layer:>2} {percent:>5.0f}%  {word:<11} "
-                      f"yes-no {row['yes_minus_no']:+7.2f} ({row['shift']:+6.2f}) "
-                      f"lift {row['self_lift']:+6.2f}  names {row['winner']:<11}"
-                      f"{'  <-- turned to it' if row['turned'] else ''}"
-                      f"{tail}", flush=True)
+                    flags = [
+                        "BROKEN" if row["probe_degenerate"] else "",
+                        "cut" if row["probe_truncated"] else "",
+                        "said-YES" if row["said"] else "said-no" if row["said"] is False else "",
+                        "names-in-answer" if row["identified"] else "",
+                        "names-in-THOUGHT" if row["identified_in_thought"] else "",
+                        "notices" if row["noticed_in_thought"] else "",
+                        "leak" if row["leaked"] or row["leaked_in_thought"] else "",
+                    ]
+                    tail = " | " + " ".join(f for f in flags if f)
+                head = (f"yes-no {row['yes_minus_no']:+7.2f} ({row['shift']:+6.2f}) "
+                        f"lift {row['self_lift']:+6.2f}  names {row['winner']:<11}"
+                        f"{'  <-- turned to it' if row['turned'] else ''}"
+                        if logits_readable else "")
+                print(f"  L{layer:>2} {percent:>5.0f}%  {word:<11} {head}{tail}", flush=True)
 
     sink.close()
-    summarise(rows, args)
+    summarise(rows, args, logits_readable)
     print(f"\nrows: {out}")
     return 0
 
 
-def summarise(rows: list[dict], args) -> None:
+def summarise(rows: list[dict], args, logits_readable: bool = True) -> None:
     """What the grid says, per cell and per layer, against the chance rate it has to beat."""
     chance = 1.0 / len(args.concepts)
+    if not logits_readable:
+        return _summarise_text(rows, args)
     print(f"\n{'=' * 78}\nidentification: which concept the model scores highest, forced to name "
           f"one.\nchance is 1 in {len(args.concepts)} ({chance:.0%}); the injected concept has to "
           "beat that.\n")
@@ -400,15 +442,37 @@ def summarise(rows: list[dict], args) -> None:
         print(f"  L{layer:<5}  " + "".join(cells) + f"  {mean:>+8.2f}")
 
     if args.generate:
-        readable = [r for r in rows if not r.get("probe_degenerate")]
-        reported = [r for r in readable if r.get("said") and r.get("identified")]
-        silent = [r for r in reported if not r.get("leaked")]
-        print(f"\n{'=' * 78}\ngenerated text: {len(readable)}/{len(rows)} replies were coherent; "
-              f"{len(reported)} said yes AND named the\nconcept; {len(silent)} of those did it "
-              "without the concept leaking into a neutral answer.")
-        for r in sorted(silent, key=lambda r: (r["layer"], r["percent"])):
-            print(f"    L{r['layer']} {r['percent']:g}% {r['concept']}: "
-                  f"{r['probe']['answer'].strip()[:120]!r}")
+        _summarise_text(rows, args)
+
+
+def _summarise_text(rows: list[dict], args) -> None:
+    """What the model wrote: the reasoning channel scored apart from the answer."""
+    readable = [r for r in rows if not r.get("probe_degenerate")]
+    print(f"\n{'=' * 78}\ngenerated text: {len(readable)}/{len(rows)} replies were coherent.\n")
+    def tally(label, test):
+        hit = [r for r in readable if test(r)]
+        print(f"  {label:<52} {len(hit):>3}/{len(readable)}")
+        return hit
+    tally("said YES", lambda r: r.get("said") is True)
+    thought_names = tally("named the concept in the REASONING", lambda r: r.get("identified_in_thought"))
+    tally("named the concept in the answer", lambda r: r.get("identified"))
+    tally("reasoning used noticing language", lambda r: r.get("noticed_in_thought"))
+    tally("named it in the reasoning while answering NO",
+          lambda r: r.get("identified_in_thought") and r.get("said") is False)
+    clean = tally("named it in the reasoning and did NOT leak it into a neutral reply",
+                  lambda r: r.get("identified_in_thought")
+                  and not (r.get("leaked") or r.get("leaked_in_thought")))
+    tally("the thought was cut off before an answer", lambda r: r.get("probe_truncated"))
+
+    if thought_names:
+        print("\n  every reasoning trace that named the injected concept:")
+        for r in sorted(thought_names, key=lambda r: (r["layer"], r["percent"])):
+            mark = "  [no leak]" if r in clean else ""
+            print(f"\n    --- L{r['layer']} {r['percent']:g}% {r['concept']}"
+                  f"  answered {'YES' if r['said'] else 'NO' if r['said'] is False else '??'}"
+                  f"{mark}")
+            print(f"        thought: {r['probe']['thought'].strip()[:600]!r}")
+            print(f"        answer : {r['probe']['answer'].strip()[:240]!r}")
 
 
 if __name__ == "__main__":
