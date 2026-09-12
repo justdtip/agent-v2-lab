@@ -141,6 +141,13 @@ NO_SPELLINGS = ("NO", "No", "no")
 #: access out of the measurement of whether it has any.
 FORCED = "YES. The injected thought is about"
 
+#: The leakage control's forced prefix. Same five candidates, same injection, but the model is not
+#: being asked about its own internals at all -- it is just continuing a sentence. Adding a concept
+#: direction to the residual stream can raise that concept's output logits on its own, with the
+#: model knowing nothing, and that alone would produce the whole identification result. What the
+#: introspection prompt buys OVER this is the only part that needs introspection to explain.
+FORCED_NEUTRAL = "The first word that comes to mind is"
+
 
 def run_once(chat: Chat, prompt: str, max_tokens: int, slot: str | None,
              layer: int, percent: float) -> dict:
@@ -177,8 +184,9 @@ def _self_lift(scores: dict, null_scores: dict, word: str) -> float:
     return lift[word] - (sum(others) / len(others) if others else 0.0)
 
 
-def measure(chat: Chat, prompt: str, slot: str | None, layer: int, percent: float,
-            candidates: list[str]) -> dict:
+def measure(chat: Chat, prompt: str, slot, layer: int, percent: float,
+            candidates: list[str], *, forced: str = FORCED,
+            reference_top: int | None = None) -> dict:
     """Read the answer off the logits instead of waiting for the model to say it.
 
     Two numbers per cell. The first is how much the injection moves the model's disposition toward
@@ -198,8 +206,10 @@ def measure(chat: Chat, prompt: str, slot: str | None, layer: int, percent: floa
     site = len(ids) - 1
     here = float(chat.residual_at(ids, layer, site).norm())
     hook = None
-    if slot is not None and percent > 0:
-        vector = chat.slots[slot]["vector"]
+    # `slot` is a name in the rack, or a tensor already in hand -- the random-direction control
+    # passes a vector rather than filing one slot per cell.
+    vector = (chat.slots[slot]["vector"] if isinstance(slot, str) else slot)
+    if vector is not None and percent > 0:
         scale = (percent / 100.0) * here / float(vector.norm())
         hook = Injection(chat.view.blocks[layer - 1], vector, scale=scale,
                          from_position=0, sustain=False)
@@ -219,7 +229,15 @@ def measure(chat: Chat, prompt: str, slot: str | None, layer: int, percent: floa
         yes = float(torch.logsumexp(step[sorted(yes_ids)], dim=0))
         no = float(torch.logsumexp(step[sorted(no_ids)], dim=0))
 
-        prefix = chat.tokenizer(FORCED, add_special_tokens=False)["input_ids"]
+        # How badly the injection has disturbed the forward pass, so that a yes/no shift produced
+        # by wrecking the distribution can be told from one produced by moving it. Two readings:
+        # what the injection leaves on the token the clean model would have emitted, and how much
+        # the distribution has spread.
+        top = int(step.argmax())
+        entropy = float(-(step.exp() * step).sum())
+        kept = float(step[reference_top]) if reference_top is not None else float(step[top])
+
+        prefix = chat.tokenizer(forced, add_special_tokens=False)["input_ids"]
         scores = {}
         for candidate in candidates:
             tail = chat.tokenizer(f" {candidate}.", add_special_tokens=False)["input_ids"]
@@ -236,7 +254,8 @@ def measure(chat: Chat, prompt: str, slot: str | None, layer: int, percent: floa
 
     ranked = sorted(scores.items(), key=lambda kv: -kv[1])
     return {"yes": yes, "no": no, "yes_minus_no": yes - no, "residual_norm": here,
-            "choice": scores, "winner": ranked[0][0],
+            "choice": scores, "winner": ranked[0][0], "top_id": top,
+            "entropy": entropy, "kept_clean_top": kept,
             "margin": ranked[0][1] - ranked[1][1] if len(ranked) > 1 else 0.0}
 
 
@@ -289,13 +308,20 @@ def main() -> int:
     if not args.generate and not logits_readable:
         raise SystemExit("--thinking leaves nothing to measure unless --generate is given too")
 
-    rows = []
+    rows, randoms = [], []  # cells, and the random-direction control rows, kept apart
     for layer in args.layers:
         # The null trial: the same question at the same layer with nothing injected. A layer whose
         # null already says yes cannot support a claim about any cell above it.
-        base = (measure(chat, DETECT, None, layer, 0.0, args.concepts) if logits_readable
-                else {"yes_minus_no": 0.0, "winner": None, "margin": 0.0,
-                      "choice": {c: 0.0 for c in args.concepts}})
+        blank = {"yes_minus_no": 0.0, "winner": None, "margin": 0.0, "top_id": None,
+                 "entropy": 0.0, "kept_clean_top": 0.0, "residual_norm": 0.0,
+                 "choice": {c: 0.0 for c in args.concepts}}
+        base = (measure(chat, DETECT, None, layer, 0.0, args.concepts)
+                if logits_readable else dict(blank))
+        # The same forced choice with the model not being asked about itself at all. Whatever lift
+        # survives here is the concept raising its own logits directly; only the difference needs
+        # introspection to explain.
+        base_leak = (measure(chat, NEUTRAL, None, layer, 0.0, args.concepts,
+                             forced=FORCED_NEUTRAL) if logits_readable else dict(blank))
         null_yes = None
         if args.generate:
             null = run_once(chat, DETECT, args.max_tokens, None, layer, 0.0)
@@ -303,6 +329,7 @@ def main() -> int:
             record(kind="null_text", layer=layer, said=null_yes,
                    degenerate=degenerate(null["answer"]), **null)
         record(kind="null", layer=layer, said=null_yes, **base)
+        record(kind="null_neutral", layer=layer, **base_leak)
         if logits_readable:
             print(f"\nL{layer} null: yes-no {base['yes_minus_no']:+.2f} nats, "
                   f"would name {base['winner']!r} (margin {base['margin']:.2f})"
@@ -313,26 +340,66 @@ def main() -> int:
             print(f"\nL{layer} null: said {said} — "
                   f"thought {null['thought'].strip()[:120]!r}", flush=True)
 
+        slots = {}
         for word in args.concepts:
-            slot = "".join(ch for ch in word.lower() if ch.isalnum())[:12]
-            chat.cmd_concept(slot, layer, word)
+            slots[word] = "".join(ch for ch in word.lower() if ch.isalnum())[:12]
+            chat.cmd_concept(slots[word], layer, word)
+
+        # A random direction as long as this layer's concept vectors are, injected the same way. If
+        # it moves the yes/no answer as far as a real concept does, the movement is damage rather
+        # than detection, and the detection table at that strength says nothing.
+        if logits_readable:
+            mean_norm = sum(float(chat.slots[slots[w]]["vector"].norm())
+                            for w in args.concepts) / len(args.concepts)
+            generator = torch.Generator().manual_seed(args.seed * 1000 + layer)
+            noise = torch.randn(chat.view.hidden_size, generator=generator, dtype=torch.float32)
+            noise = (noise / noise.norm() * mean_norm).to(chat.model.dtype).to(chat.device)
+            shifts = []
+            for percent in args.percents:
+                rnd = measure(chat, DETECT, noise, layer, percent, args.concepts,
+                              reference_top=base["top_id"])
+                shifts.append(rnd["yes_minus_no"] - base["yes_minus_no"])
+                control = {"kind": "random", "layer": layer, "percent": percent,
+                           "yes_minus_no": rnd["yes_minus_no"], "shift": shifts[-1],
+                           "entropy": rnd["entropy"], "kept_clean_top": rnd["kept_clean_top"],
+                           "winner": rnd["winner"], "scores": rnd["choice"]}
+                randoms.append(control)
+                record(**control)
+            print(f"  random direction |v|={mean_norm:,.1f}, yes-no shift by strength: "
+                  + "  ".join(f"{p:g}% {v:+.1f}" for p, v in zip(args.percents, shifts)),
+                  flush=True)
+
+        for word in args.concepts:
+            slot = slots[word]
             keywords = CONCEPTS[word]
             for percent in args.percents:
-                got = (measure(chat, DETECT, slot, layer, percent, args.concepts)
-                       if logits_readable else
-                       {"yes_minus_no": 0.0, "winner": None, "margin": 0.0,
-                        "choice": {c: 0.0 for c in args.concepts}, "residual_norm": 0.0})
+                got = (measure(chat, DETECT, slot, layer, percent, args.concepts,
+                               reference_top=base["top_id"])
+                       if logits_readable else dict(blank))
+                leak_got = (measure(chat, NEUTRAL, slot, layer, percent, args.concepts,
+                                    forced=FORCED_NEUTRAL, reference_top=base_leak["top_id"])
+                            if logits_readable else dict(blank))
+                lift_detect = _self_lift(got["choice"], base["choice"], word)
+                lift_neutral = _self_lift(leak_got["choice"], base_leak["choice"], word)
                 row = {
                     "kind": "cell", "layer": layer, "percent": percent, "concept": word,
                     "yes_minus_no": got["yes_minus_no"],
                     "shift": got["yes_minus_no"] - base["yes_minus_no"],
+                    "entropy": got["entropy"], "kept_clean_top": got["kept_clean_top"],
+                    "null_entropy": base["entropy"],
                     "winner": got["winner"], "correct": got["winner"] == word,
                     "margin": got["margin"],
+                    "lift_neutral": lift_neutral,
+                    # What the introspection prompt buys over simply continuing a sentence. The
+                    # part of the identification signal that direct output bias cannot explain.
+                    "introspective_lift": lift_detect - lift_neutral,
+                    "neutral_scores": leak_got["choice"],
+                    "null_neutral_scores": base_leak["choice"],
                     # Raw accuracy is worthless on its own: a model that always names Paris scores
                     # 100% on the Paris cells. The lift is how much injecting THIS concept raised
                     # THIS concept's score, above what injecting it did to the other candidates.
                     # A prior toward one name cancels, because it is in both terms.
-                    "self_lift": _self_lift(got["choice"], base["choice"], word),
+                    "self_lift": lift_detect,
                     "turned": (base["winner"] != word and got["winner"] == word),
                     "null_winner": base["winner"], "null_said": null_yes,
                     "scores": got["choice"], "null_scores": base["choice"],
@@ -378,12 +445,13 @@ def main() -> int:
                 print(f"  L{layer:>2} {percent:>5.0f}%  {word:<11} {head}{tail}", flush=True)
 
     sink.close()
-    summarise(rows, args, logits_readable)
+    summarise(rows, args, logits_readable, randoms)
     print(f"\nrows: {out}")
     return 0
 
 
-def summarise(rows: list[dict], args, logits_readable: bool = True) -> None:
+def summarise(rows: list[dict], args, logits_readable: bool = True,
+              randoms: list[dict] | None = None) -> None:
     """What the grid says, per cell and per layer, against the chance rate it has to beat."""
     chance = 1.0 / len(args.concepts)
     if not logits_readable:
@@ -421,10 +489,61 @@ def summarise(rows: list[dict], args, logits_readable: bool = True) -> None:
             cells.append(f"{sum(r['self_lift'] for r in at) / max(len(at), 1):>+9.2f}")
         print(f"  L{layer:<5}  " + "".join(cells)
               + f"  {sum(r['self_lift'] for r in here) / max(len(here), 1):>+8.2f}")
+    print(f"\n{'=' * 78}\nTHE CONTROL THAT DECIDES IT: the same forced choice with the model not "
+          "asked about\nitself. Left is the lift under the introspection prompt, middle is the "
+          "lift under a\nplain sentence continuation, right is what the introspection prompt buys "
+          "over it.\nOnly the right column needs introspection to explain.\n")
+    print("  layer    introspective prompt      neutral prompt        difference")
+    for layer in args.layers:
+        here = [r for r in rows if r["layer"] == layer]
+        a = sum(r["self_lift"] for r in here) / max(len(here), 1)
+        b = sum(r.get("lift_neutral", 0.0) for r in here) / max(len(here), 1)
+        print(f"  L{layer:<5}  {a:>+18.3f} {b:>+21.3f} {a - b:>+17.3f}")
+    a = sum(r["self_lift"] for r in rows) / max(len(rows), 1)
+    b = sum(r.get("lift_neutral", 0.0) for r in rows) / max(len(rows), 1)
+    print(f"  {'all':<6}  {a:>+18.3f} {b:>+21.3f} {a - b:>+17.3f}")
+    print("\n  by strength:")
+    print("  strength introspective prompt      neutral prompt        difference")
+    for percent in args.percents:
+        at = [r for r in rows if r["percent"] == percent]
+        a = sum(r["self_lift"] for r in at) / max(len(at), 1)
+        b = sum(r.get("lift_neutral", 0.0) for r in at) / max(len(at), 1)
+        print(f"  {percent:>5.0f}%  {a:>+18.3f} {b:>+21.3f} {a - b:>+17.3f}")
+
+    if randoms:
+        print(f"\n{'=' * 78}\nDAMAGE CONTROL: a random direction of the same length, injected the "
+              "same way.\nWhere it moves the yes/no answer as far as a concept does, that cell's "
+              "detection\nnumber is damage. 'kept' is the logprob the injection leaves on the "
+              "token the\nclean model would have emitted; near zero means the forward pass "
+              "survived.\n")
+        print("  layer   " + "".join(f"{p:>10.0f}%" for p in args.percents))
+        for layer in args.layers:
+            cells = [r for r in rows if r["layer"] == layer]
+            rnd = {r["percent"]: r for r in randoms if r["layer"] == layer}
+            line = []
+            for percent in args.percents:
+                at = [r for r in cells if r["percent"] == percent]
+                concept = sum(r["shift"] for r in at) / max(len(at), 1)
+                line.append(f"{concept:>+5.1f}/{rnd[percent]['shift']:>+5.1f}" if percent in rnd
+                            else "     -     ")
+            print(f"  L{layer:<5}  " + "".join(f"{c:>11}" for c in line))
+        print("  (concept shift / random shift, in nats)")
+        print("\n  logprob left on the clean model's own next token, by strength:")
+        print("  strength   under a concept      under a random direction      clean")
+        for percent in args.percents:
+            at = [r for r in rows if r["percent"] == percent]
+            rn = [r for r in randoms if r["percent"] == percent]
+            c = sum(r.get("kept_clean_top", 0.0) for r in at) / max(len(at), 1)
+            q = sum(r.get("kept_clean_top", 0.0) for r in rn) / max(len(rn), 1)
+            print(f"  {percent:>5.0f}%  {c:>18.3f} {q:>28.3f} {0.0:>10.3f}")
+
     print("\n  per concept, over the whole grid:")
     for word in args.concepts:
         at = [r for r in rows if r["concept"] == word]
-        print(f"    {word:<12} lift {sum(r['self_lift'] for r in at) / max(len(at), 1):>+6.2f}  "
+        lift = sum(r["self_lift"] for r in at) / max(len(at), 1)
+        neutral = sum(r.get("lift_neutral", 0.0) for r in at) / max(len(at), 1)
+        print(f"    {word:<12} lift {lift:>+6.2f}  neutral {neutral:>+6.2f}  "
+              f"difference {lift - neutral:>+6.2f}  "
               f"named {sum(1 for r in at if r['correct'])}/{len(at)}")
 
     print(f"\n{'=' * 78}\ndetection: how far the injection moves YES over NO, in nats, against "
