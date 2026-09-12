@@ -100,9 +100,16 @@ class Injection:
         self.applications, self.positions_touched = 0, 0
         self._seen = 0  # absolute position of the first row in the current slice
         self._handle = None
+        self._delta = None
+        self._unit = None
 
     def __enter__(self):
         self._handle = self.block.register_forward_hook(self._hook)
+        # Precomputed once. `self.vector` lives on the CPU -- residual_at returns it there -- so
+        # rebuilding this inside the hook meant a host multiply and a pageable copy on every
+        # decode step of a sustained injection.
+        self._delta = None
+        self._unit = None
         return self
 
     def __exit__(self, *_):
@@ -121,13 +128,14 @@ class Injection:
         if first >= width:
             return output
         if self.local_fraction is None:
-            delta = (self.vector * self.scale).to(hidden.dtype).to(hidden.device)
-            hidden[:, first:, :] = hidden[:, first:, :] + delta
+            if self._delta is None:
+                self._delta = (self.vector * self.scale).to(hidden.dtype).to(hidden.device)
+            hidden[:, first:, :].add_(self._delta)
         else:
-            unit = (self.vector / self.vector.norm()).to(hidden.dtype).to(hidden.device)
+            if self._unit is None:
+                self._unit = (self.vector / self.vector.norm()).to(hidden.dtype).to(hidden.device)
             here = hidden[:, first:, :].float().norm(dim=-1, keepdim=True)
-            step = (here * self.local_fraction).to(hidden.dtype)
-            hidden[:, first:, :] = hidden[:, first:, :] + unit * step
+            hidden[:, first:, :].add_(self._unit * here.to(hidden.dtype) * self.local_fraction)
         self.applications += 1
         self.positions_touched += width - first
         return (hidden, *output[1:]) if isinstance(output, tuple) else hidden
@@ -177,16 +185,22 @@ class Console:
 
         def hook(_m, _a, output):
             hidden = output[0] if isinstance(output, tuple) else output
-            captured["h"] = hidden.detach()[0].float().cpu()
+            # Slice first, THEN upcast and copy. Taking the whole layer meant an fp32 allocation of
+            # sequence x hidden and a full device-to-host transfer to obtain one row of it -- at
+            # 8k tokens that is 172 MB moved to read 21 KB, and cmd_concept does it 25 times.
+            width = hidden.shape[1]
+            at = width - 1 if position is None else position
+            if not -width <= at < width:
+                raise IndexError(f"position {position} is outside a {width}-token forward")
+            captured["h"] = hidden.detach()[0, at].float().cpu()
 
         handle = self.view.blocks[layer - 1].register_forward_hook(hook)
         try:
             with torch.no_grad():
-                self.model(self.view._ids(ids))
+                self.model(self.view._ids(ids), use_cache=False)
         finally:
             handle.remove()
-        rows = captured["h"]
-        return rows[position if position is not None else rows.shape[0] - 1].clone()
+        return captured["h"].clone()
 
     def generate(self, ids: list[int], max_tokens: int) -> str:
         """Greedy decode with a KV cache, one forward per step so hooks fire on every token.

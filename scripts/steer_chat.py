@@ -124,6 +124,7 @@ class Chat(Console):
         #: identity, so re-tokenising forces the clean model through a token sequence the steered
         #: run never visited -- which is the one thing the replay exists to rule out.
         self.last_turn: dict | None = None
+        self._keep_kw: dict | None = None
         #: Server state, never `history[0]`. The system prompt and any carried summary are
         #: re-rendered every turn; putting either in the history would make `undo`, `clear`, `ab`
         #: and the page's message count all disagree about what a conversation contains.
@@ -293,8 +294,11 @@ class Chat(Console):
         cache = DynamicCache()
         emitted = []
         with torch.no_grad():
-            logits = self.model(input_ids=self.view._ids(list(ids)),
-                                past_key_values=cache, use_cache=True).logits
+            # Only the last row is ever read, but the default keeps one 262,144-wide row per
+            # position and this model then makes three more full-size copies for its logit
+            # softcapping. At eight thousand tokens that is gigabytes allocated to read one row.
+            logits = self.model(input_ids=self.view._ids(list(ids)), past_key_values=cache,
+                                use_cache=True, **self._keep_last()).logits
             for _ in range(max_tokens):
                 token = int(logits[0, -1].float().argmax())
                 if token in self.stop_ids:
@@ -322,7 +326,7 @@ class Chat(Console):
         rows, cache = [], DynamicCache()
         with torch.no_grad():
             logits = self.model(input_ids=self.view._ids(list(prompt_ids)),
-                                past_key_values=cache, use_cache=True).logits
+                                past_key_values=cache, use_cache=True, **self._keep_last()).logits
             if chunk and len(emitted) > 1:
                 # Teacher forcing: every token is already fixed, so the whole reply goes through in
                 # a few wide passes instead of one pass per token. Causal masking means position k
@@ -360,6 +364,20 @@ class Chat(Console):
                 logits = self.model(input_ids=self.view._ids([token]),
                                     past_key_values=cache, use_cache=True).logits
         return rows
+
+    def _keep_last(self) -> dict:
+        """Ask for one row of logits where only one row is used, if this transformers knows how.
+
+        Probed once and cached rather than assumed: the keyword has been spelled differently across
+        versions, and passing an unknown one raises inside the model rather than being ignored.
+        """
+        if getattr(self, "_keep_kw", None) is None:
+            import inspect
+            names = set(inspect.signature(type(self.model).forward).parameters)
+            self._keep_kw = ({"logits_to_keep": 1} if "logits_to_keep" in names
+                             else {"num_logits_to_keep": 1} if "num_logits_to_keep" in names
+                             else {})
+        return self._keep_kw
 
     def _score(self, logits, tokens: list[int]):
         """Four small tensors per position, computed on device and brought back once.
