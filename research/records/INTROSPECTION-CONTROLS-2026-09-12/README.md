@@ -65,18 +65,39 @@ the model is being asked to introspect — the right column is the same injectio
 internals buys 7 points over simply continuing a sentence, and at the two strengths that leave the
 forward pass intact it buys nothing at all (−7 and +6).
 
-Per concept, over the whole grid, the lift in nats per token:
+**Retracted, 2026-09-12, later the same day.** This section carried a per-concept table with butt
+holes showing the largest lift at +2.68 and a claim of concept specificity built on it. Two defects
+found by the harness audit, both confirmed by re-running the saved rows:
 
-| concept | asked about itself | not asked | difference |
+* candidate scores were MEANS over each name's tokens, so a three-token name needed half again the
+  effect of a two-token one. Scored as sums, the headline moves from 54 per cent to 49;
+* the lift does not cancel the prior. Flattening a distribution raises whatever the model liked
+  least, and `butt holes` sits forty-nine nats below the other candidates, which is why it won the
+  forced choice in 272 of 650 cells while being injected in 130. Its apparent specificity was that
+  and nothing else.
+
+Rescored with sums and double-centred, the concept-specific readout is real and survives. The
+per-concept ordering does not, and no ordering is claimed here now.
+
+**Also retracted: the way the surviving result was reported.** It was given as a double-centred
+diagonal of +2.65 against an off-diagonal of −0.66. Double-centring a five-by-five matrix forces the
+off-diagonal mean to be exactly minus the diagonal over four; measured, −0.6622 against −2.6489/4 =
+−0.6622, identical to machine precision. The two figures were one number printed twice in a form
+that reads as two measurements agreeing, when they could not have disagreed. The same goes for "the
+injected concept is the row maximum in 5 of 5 rows", which holds 5 of 5 under the introspection
+prompt AND 5 of 5 under the neutral one, and so separates nothing.
+
+What the 310 intact cells actually support, by three estimators of different things:
+
+| statistic | asked about itself | not asked | difference |
 |---|---|---|---|
-| bread | +0.98 | +0.38 | +0.59 |
-| the ocean | +0.90 | +0.69 | +0.21 |
-| Paris | +1.43 | +1.55 | −0.12 |
-| betrayal | +1.83 | +2.31 | −0.48 |
-| butt holes | +2.68 | +1.32 | +1.36 |
+| double-centred diagonal (nats) | +2.65 | +2.44 | +0.21, 8% of the effect |
+| paired lift per cell (nats) | — | — | −0.69, 95% CI [−1.14, −0.24] |
+| paired argmax agreement | 55 | 55 | 0 |
 
-Two of the five are negative: the introspection prompt raises the injected concept *less* than a
-plain sentence continuation does.
+None of the three says asking the model about its own internals helps. The middle one says it
+hurts, and its interval should be read as optimistic: five concepts share each layer, and it assumes
+an independence they do not have.
 
 ## The detection result is damage
 
