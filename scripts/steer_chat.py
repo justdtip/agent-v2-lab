@@ -338,34 +338,63 @@ class Chat(Console):
                 # `preds[k]` is the row that predicts `emitted[k]`: the prompt's last row predicts
                 # the first token, and the row produced by consuming emitted[i] predicts
                 # emitted[i+1], so feeding emitted[:-1] supplies exactly the rest.
-                preds = [logits[0, -1]]
+                parts, done = [], 0
+                # The prompt's last row predicts emitted[0]; the row produced by consuming
+                # emitted[i] predicts emitted[i+1], so feeding emitted[:-1] supplies the rest.
+                parts.append(self._score(logits[:, -1:, :], emitted[:1]))
+                done += 1
                 fed = list(emitted[:-1])
                 for begin in range(0, len(fed), chunk):
                     out = self.model(input_ids=self.view._ids(fed[begin:begin + chunk]),
                                      past_key_values=cache, use_cache=True).logits
-                    preds.extend(out[0, j] for j in range(out.shape[1]))
-                if len(preds) != len(emitted):
-                    raise ValueError(f"replay produced {len(preds)} predictions for "
-                                     f"{len(emitted)} tokens")
-                return [self._replay_row(k, preds[k], emitted[k]) for k in range(len(emitted))]
+                    width = out.shape[1]
+                    parts.append(self._score(out, emitted[done:done + width]))
+                    done += width
+                    del out  # a view into this would pin the whole 262k-wide tensor for the run
+                if done != len(emitted):
+                    raise ValueError(f"replay scored {done} of {len(emitted)} tokens")
+                return self._rows_from(parts, emitted)
             for index, token in enumerate(emitted):
-                rows.append(self._replay_row(index, logits[0, -1], token))
+                rows.extend(self._rows_from([self._score(logits[:, -1:, :], [token])], [token],
+                                            start=index))
                 logits = self.model(input_ids=self.view._ids([token]),
                                     past_key_values=cache, use_cache=True).logits
         return rows
 
-    def _replay_row(self, index: int, row_logits, token: int) -> dict:
-        """One position's evidence: what the clean model wanted, and where the steered token ranked."""
-        step = row_logits.float().log_softmax(-1)
-        order = step.argsort(descending=True)
-        return {
-            "position": index,
-            "steered_token": self.tokenizer.decode([token]),
-            "clean_top": self.tokenizer.decode([int(order[0])]),
-            "clean_rank_of_steered": int((order == token).nonzero()[0]),
-            "logprob_steered_token": float(step[token]),
-            "logprob_clean_top": float(step[int(order[0])]),
-        }
+    def _score(self, logits, tokens: list[int]):
+        """Four small tensors per position, computed on device and brought back once.
+
+        RANK IS THE NUMBER OF TOKENS STRICTLY ABOVE, changed 2026-09-12 (method entry 36). It was
+        the steered token's index in a full argsort, which for a tie broke in unspecified order --
+        so one of two tokens the clean model valued identically was reported as displaced, and
+        `N of M changed` counted it. Measured over 16,886 saved replay rows, 45 of 1,847 changed
+        rows (2.4%) were exact ties of this kind. This checkpoint makes them: final_logit_softcapping
+        30.0 saturates the top of the distribution and bf16 rounding then collapses neighbours onto
+        one value. Counts from before that date read about 2.4% high.
+        """
+        rows = logits[0].float().log_softmax(-1)
+        want = torch.tensor(list(tokens), device=rows.device)
+        tok_lp = rows.gather(1, want[:, None])[:, 0]
+        top_lp, top_id = rows.max(-1)
+        rank = (rows > tok_lp[:, None]).sum(-1)
+        return (want.cpu(), tok_lp.cpu(), top_lp.cpu(), top_id.cpu(), rank.cpu())
+
+    def _rows_from(self, parts, emitted: list[int], start: int = 0) -> list[dict]:
+        want = torch.cat([p[0] for p in parts])
+        tok_lp = torch.cat([p[1] for p in parts])
+        top_lp = torch.cat([p[2] for p in parts])
+        top_id = torch.cat([p[3] for p in parts])
+        rank = torch.cat([p[4] for p in parts])
+        steered = self.tokenizer.batch_decode(want[:, None].tolist())
+        tops = self.tokenizer.batch_decode(top_id[:, None].tolist())
+        return [{
+            "position": start + i,
+            "steered_token": steered[i],
+            "clean_top": tops[i],
+            "clean_rank_of_steered": int(rank[i]),
+            "logprob_steered_token": float(tok_lp[i]),
+            "logprob_clean_top": float(top_lp[i]),
+        } for i in range(len(emitted))]
 
     # -- commands ------------------------------------------------------------------------------
     def do_message(self, text: str, max_tokens: int, *, commit: bool = True) -> None:

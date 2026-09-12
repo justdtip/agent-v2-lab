@@ -1101,3 +1101,44 @@ construction than a result. The withdrawn transport rule scored exactly 0.000 in
 degenerate fixture scored exactly 0.000000 in both arms. Neither was a finding. An exact number in a
 noisy measurement is a question, not an answer.
 
+
+---
+
+## 36. Two names for one number: the rank a replay reports
+
+2026-09-12, the steering bench. Approved as a dated change by Daniel before it was made.
+
+`clean_rank_of_steered` answers "how far down the clean model's list was the token the steered run
+actually emitted". There are two ways to compute that, they are not the same function, and the code
+had been using the one nobody would choose on purpose.
+
+**What it did.** `step.argsort(descending=True)`, then the steered token's *index in that array*.
+**What it does now.** `(step > step[token]).sum()` — the count of tokens strictly above it.
+
+They differ exactly when something is tied, and then they differ badly. Three tokens tied for first
+get ranks 0, 1 and 2 from the argsort — in an order `torch.argsort` does not specify and does not
+promise to repeat — and rank 0, 0, 0 from the count. So two of three tokens the clean model valued
+*identically* were reported as displaced by the injection, and `changed = sum(1 for r in rows if
+r["rank"])` counted them. The page's own legend already said what the new rule means: "rank 0 — the
+clean model wanted this too."
+
+**This checkpoint manufactures the ties.** Gemma 4 has `final_logit_softcapping: 30.0`, so every
+logit passes through `30·tanh(x/30)`, which saturates; raw logits of 120, 100, 95 and 90 come out as
+29.98, 29.92, 29.89, 29.85, and bf16 rounding then collapses three of those four onto one value.
+Ties cluster precisely where the model is most confident, which is where a displaced token is most
+interesting.
+
+**Measured, not assumed.** Across 16,886 saved replay rows from every steered reply on disk, 1,847
+rows were reported as changed and **45 of them (2.4%) scored exactly what the clean top scored** —
+`Just` against `But`, `lists` against `list`, `),` against `).`, every one at rank 1 and Δ exactly
+0.000000. Every "N of M changed" recorded before this date reads about 2.4% high.
+
+**The fixture contains a tie, and that is the whole point** (entry 35). The two rules agree on every
+row where nothing is tied, so a test built from ordinary rows passes under either and establishes
+nothing. `tests/test_replay_rank.py` asserts the new answer *and* asserts that the old rule gave a
+different one, so the test would fail if the change were reverted.
+
+**Left open.** How flat the deep tail is on this model is unmeasured. If large numbers of tail
+tokens share a value then a headline like "rank 258,453" was mostly counting ties rather than tokens
+that genuinely beat it, and the new rule will report a much smaller and more honest number. Check
+one real distribution before quoting a deep rank again.
