@@ -161,3 +161,18 @@ def test_the_clean_baseline_can_be_invalidated(pair):
     assert m.clean() is first
     m.reset_clean()
     assert m.clean() is not first
+
+
+def test_the_batched_curve_equals_the_one_at_a_time_one(pair):
+    """The sweep is seventy-two rows in one forward; it must measure what nine forwards measured."""
+    model, tok = pair
+    m = meter_mod.DamageMeter(model, tok, device=torch.device("cpu"), dtype=torch.float32,
+                              battery=meter_mod.BATTERY[:4])
+    torch.manual_seed(0)
+    v = torch.randn(32)
+    scales = [0.0, 2.0, 8.0, 32.0]
+    batched = m.curve(v, 2, scales)
+    singly = [(s, m.damage(v, 2, s).damage) for s in scales]
+    for (s_a, d_a), (s_b, d_b) in zip(batched, singly):
+        assert s_a == s_b
+        assert d_a == pytest.approx(d_b, abs=1e-4), (s_a, d_a, d_b)

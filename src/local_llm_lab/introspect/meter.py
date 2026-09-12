@@ -143,9 +143,40 @@ class DamageMeter:
 
     def curve(self, vector: torch.Tensor, layer: int, scales: list[float],
               prompts: list[int] | None = None) -> list[tuple[float, float]]:
-        """(scale, damage) at each scale. Cheaper than bisection and the shape is itself a result:
-        it is what distinguishes a sharp on-manifold transition from a smooth off-manifold one."""
-        return [(s, self.damage(vector, layer, s, prompts).damage) for s in scales]
+        """(scale, damage) at each scale, the whole sweep in ONE forward.
+
+        The per-row plan already carries a per-row scale, so every (scale, prompt) pair is just
+        another row. Nine scales over eight battery prompts is seventy-two rows and one pass; doing
+        it as nine passes measures the same thing and costs nine times the card time.
+
+        The shape of the curve is itself a result, not only a means to a scale: it is what
+        distinguishes a sharp on-manifold transition from a smooth off-manifold one.
+        """
+        clean = self.clean()
+        index = list(range(len(self.prompts))) if prompts is None else prompts
+        pairs = [(s, j) for s in scales for j in index]
+        with torch.no_grad():
+            ids, att, sites, lengths, width = self._batch([j for _s, j in pairs])
+            plan = PatchPlan(layer=[layer] * len(pairs), site=sites,
+                             scale=[s for s, _j in pairs], vector=[vector] * len(pairs))
+            masks = build_masks(plan, width=width, hidden=vector.shape[-1],
+                                device=self.device, dtype=self.dtype, lengths=lengths)
+            patches = [PlannedPatch(self.blocks[l], mask=m, delta=d, layer=l)
+                       for l, (m, d) in masks.items()]
+            for patch in patches:
+                patch.__enter__()
+            try:
+                lp = self._final_logprobs(ids, att, sites)
+            finally:
+                for patch in patches:
+                    patch.__exit__()
+        out = []
+        for k, s in enumerate(scales):
+            start = k * len(index)
+            per = [float(lp[start + i, clean[j][0]]) - clean[j][1]
+                   for i, j in enumerate(index)]
+            out.append((s, sum(per) / len(per)))
+        return out
 
     def scales_for_ladder(self, vector: torch.Tensor, layer: int, ladder: tuple[float, ...],
                           *, residual_norm: float, prompts: list[int] | None = None,
