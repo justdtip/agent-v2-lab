@@ -61,6 +61,63 @@ def wrapped(plain, tmp_path):
     return out, tensors
 
 
+@pytest.fixture
+def nested(plain, tmp_path):
+    """Gemma 4's shape: the tower under `model.language_model.`, BELOW the decoder's own `model.`.
+
+    The separating fixture for the prefix rule. Gemma 3's `language_model.` sits above the text
+    model's `model.`, so stripping the prefix outright leaves the right names; here the wrapper's
+    own `model.` sits above and the decoder's names sit below, so the same strip would leave
+    `embed_tokens.weight` where the text model wants `model.embed_tokens.weight`. A fixture that
+    could not tell the two rules apart would be no evidence for either.
+    """
+    root, _ = plain
+    tensors = safetensors_torch.load_file(root / "model.safetensors")
+    assert all(name.startswith("model.") for name in tensors), sorted(tensors)[:3]
+    rekeyed = {
+        "model.language_model." + name.removeprefix("model."): tensor
+        for name, tensor in tensors.items()
+    }
+    rekeyed["model.vision_tower.patch.weight"] = torch.zeros(3, 3)
+    rekeyed["model.embed_vision.projection.weight"] = torch.zeros(4, 4)
+    out = tmp_path / "nested"
+    out.mkdir()
+    safetensors_torch.save_file(rekeyed, out / "model.safetensors")
+    text_config = json.loads((root / "config.json").read_text())
+    (out / "config.json").write_text(
+        json.dumps({"model_type": "some-nested-wrapper", "text_config": text_config})
+    )
+    return out, tensors
+
+
+def test_a_nested_wrapper_keeps_the_level_above_the_tower_it_is_nested_under(nested):
+    root, tensors = nested
+    model, report = hf_text.load_text_causal_lm(root, dtype="float32")
+    assert report["wrapper"] is True
+    # The prefix is replaced by the level it was nested under, not deleted.
+    assert report["key_mapping"] == {r"^model\.language_model\.": "model."}
+    assert report["unexpected_keys"]["count"] == 2
+    assert sorted(report["loading_info"]["unexpected_keys"]) == [
+        "model.embed_vision.projection.weight",
+        "model.vision_tower.patch.weight",
+    ]
+    assert report["checkpoint_text_tensors"] == len(tensors)
+    state = model.state_dict()
+    for name, tensor in tensors.items():
+        assert torch.equal(state[name], tensor), name
+
+
+def test_the_two_wrapper_shapes_are_told_apart_by_the_tensors_not_the_config(wrapped, nested):
+    shallow = hf_text.checkpoint_metadata(wrapped[0])
+    deep = hf_text.checkpoint_metadata(nested[0])
+    assert shallow["text_prefix"] == "language_model."
+    assert deep["text_prefix"] == "model.language_model."
+    # Both configs say only `text_config`; the tensor names are what separate them, and both
+    # resolve to the one set of names the text model actually has.
+    assert set(shallow["text"]) == set(deep["text"])
+    assert "model.embed_tokens.weight" in deep["text"]
+
+
 def test_a_plain_checkpoint_loads_as_itself_with_nothing_unexpected(plain):
     root, saved = plain
     model, report = hf_text.load_text_causal_lm(root, dtype="float32")

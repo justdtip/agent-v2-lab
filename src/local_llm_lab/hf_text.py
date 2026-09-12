@@ -31,12 +31,15 @@ __all__ = ["TEXT_PREFIX", "TEXT_PREFIXES", "checkpoint_metadata", "load_text_cau
 
 #: Where HF's multimodal wrappers keep the text decoder's tensors.
 TEXT_PREFIX = "language_model."
-#: Wrappers nest the text tower at different depths: Gemma 3 puts it at ``language_model.`` and
-#: Gemma 4 one level further in, under ``model.language_model.``. The prefix is therefore detected
-#: from the checkpoint's own tensor names rather than assumed, longest first so that a checkpoint
-#: carrying both spellings resolves to the more specific one. Gemma 3 still matches first-listed
-#: behaviour exactly; this only adds a fallback for checkpoints the old constant cannot describe.
-TEXT_PREFIXES = ("model.language_model.", "language_model.")
+#: Wrappers nest the text tower at different depths, and the text-only model names that same place
+#: differently again, so each prefix is paired with what REPLACES it rather than simply stripped.
+#: Gemma 3 keeps the tower at ``language_model.``, above the decoder's own ``model.`` -- so
+#: ``language_model.model.norm.weight`` is the text model's ``model.norm.weight`` and the prefix
+#: goes away. Gemma 4 nests it one level further in, BELOW that ``model.`` -- so
+#: ``model.language_model.norm.weight`` is again ``model.norm.weight``, and stripping the whole
+#: prefix would leave a bare ``norm.weight`` that the text model does not have. Longest first, so a
+#: checkpoint carrying both spellings resolves to the more specific one.
+TEXT_PREFIXES = {"model.language_model.": "model.", "language_model.": ""}
 
 
 def _text_prefix(names) -> str | None:
@@ -118,8 +121,9 @@ def checkpoint_metadata(path: str | Path) -> dict[str, Any]:
                 f"config declares a text_config but no tensor is under any of "
                 f"{list(TEXT_PREFIXES)}: {root}"
             )
+        rewrite = TEXT_PREFIXES[prefix]
         text = {
-            name.removeprefix(prefix): entry
+            rewrite + name.removeprefix(prefix): entry
             for name, entry in tensors.items()
             if name.startswith(prefix)
         }
@@ -174,7 +178,7 @@ def load_text_causal_lm(
         config = AutoConfig.for_model(model_type, **text_config)
     else:
         config = AutoConfig.from_pretrained(meta["path"], local_files_only=True)
-    key_mapping = ({rf"^{re.escape(meta['text_prefix'])}": ""}
+    key_mapping = ({rf"^{re.escape(meta['text_prefix'])}": TEXT_PREFIXES[meta["text_prefix"]]}
                    if meta["wrapper"] and meta.get("text_prefix") else None)
     kwargs: dict[str, Any] = dict(
         config=config,
