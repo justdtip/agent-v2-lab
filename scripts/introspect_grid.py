@@ -440,19 +440,35 @@ def main() -> int:
             generator = torch.Generator().manual_seed(args.seed * 1000 + layer)
             noise = torch.randn(chat.view.hidden_size, generator=generator, dtype=torch.float32)
             noise = (noise / noise.norm() * mean_norm).to(chat.model.dtype).to(chat.device)
+            # In boundary mode `args.percents` holds ladder FRACTIONS, not percentages, so reusing
+            # it here injected noise at a quarter of one per cent and the control measured nothing.
+            # The noise gets its own edge, found the same way the concepts' edges are, and is then
+            # sampled on the same ladder -- which is the comparison that was wanted anyway: a
+            # concept and a random direction at equal damage, not at equal per cent.
+            if args.boundary:
+                noise_edge = find_edge(chat, DETECT, noise, layer, base["top_id"])
+                control_percents = [round(noise_edge * m, 1) for m in LADDER]
+                record(kind="edge", layer=layer, concept="RANDOM", edge=noise_edge,
+                       percents=control_percents)
+                print(f"  random direction: the pass keeps half its mass up to {noise_edge:.1f}%",
+                      flush=True)
+            else:
+                noise_edge, control_percents = None, args.percents
             shifts = []
-            for percent in args.percents:
+            for percent in control_percents:
                 rnd = measure(chat, DETECT, noise, layer, percent, args.concepts,
                               reference_top=base["top_id"])
                 shifts.append(rnd["yes_minus_no"] - base["yes_minus_no"])
                 control = {"kind": "random", "layer": layer, "percent": percent,
+                           "edge": noise_edge,
+                           "of_edge": (percent / noise_edge) if noise_edge else None,
                            "yes_minus_no": rnd["yes_minus_no"], "shift": shifts[-1],
                            "entropy": rnd["entropy"], "kept_clean_top": rnd["kept_clean_top"],
                            "winner": rnd["winner"], "scores": rnd["choice"]}
                 randoms.append(control)
                 record(**control)
-            print(f"  random direction |v|={mean_norm:,.1f}, yes-no shift by strength: "
-                  + "  ".join(f"{p:g}% {v:+.1f}" for p, v in zip(args.percents, shifts)),
+            print(f"  random direction |v|={mean_norm:,.1f}, yes-no shift: "
+                  + "  ".join(f"{p:g}% {v:+.1f}" for p, v in zip(control_percents, shifts)),
                   flush=True)
 
         for word in args.concepts:
@@ -706,6 +722,22 @@ def _summarise_boundary(rows: list[dict], args) -> None:
     print(f"\n  chance for both 'raised most' columns is {1 / len(args.concepts):.0%}.\n"
           "  'control' is the same test with the model not asked about itself; the difference is\n"
           "  the only part that needs introspection to explain.")
+
+    noise = [r for r in rows if r.get("kind") == "random" and r.get("of_edge")]
+    if noise:
+        print(f"\n{'=' * 78}\nA CONCEPT AND A RANDOM DIRECTION AT EQUAL DAMAGE.\n"
+              "Each is placed on its own edge, so a row compares two injections that have cost the\n"
+              "forward pass the same amount. If the concept moves the yes/no answer no further than\n"
+              "noise does at the same damage, the answer is about the damage.\n")
+        print("  of edge    concept yes-no    random yes-no    difference")
+        for m in LADDER:
+            a = [r for r in rows if r.get("of_edge") and abs(r["of_edge"] - m) < 0.01]
+            b = [r for r in noise if abs(r["of_edge"] - m) < 0.01]
+            if not a or not b:
+                continue
+            av = sum(r["shift"] for r in a) / len(a)
+            bv = sum(r["shift"] for r in b) / len(b)
+            print(f"  {m:>6.2f}   {av:>+14.2f}   {bv:>+14.2f}   {av - bv:>+11.2f}")
 
     print(f"\n{'=' * 78}\nWHERE EACH LAYER'S EDGE SITS, in per cent of the residual norm.\n")
     edges = {}
