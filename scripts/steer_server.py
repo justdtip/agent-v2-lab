@@ -484,7 +484,7 @@ function abCard(r){
   cap.textContent=`A/B — a probe on ${r.history} message(s) of history, nothing was added to the conversation`;
   w.appendChild(cap);
   const arms=document.createElement('div'); arms.className='arms';
-  const arm=(cls,title,thought,body,rows)=>{
+  const arm=(cls,title,thought,body,rows,cut)=>{
     const a=document.createElement('div'); a.className='arm '+cls;
     a.innerHTML=`<h3>${title}</h3>`;
     if(thought){ const t=document.createElement('div'); t.className='channel thought';
@@ -501,18 +501,26 @@ function abCard(r){
     const c=document.createElement('div'); c.className='channel answer';
     c.innerHTML='<div class=head><span>answer</span></div>';
     if(rows&&rows.length){ const b=split(rows); c.appendChild(painted(rows,b,rows.length)); }
-    else{ const p=document.createElement('div'); p.className='painted'; p.textContent=body||'(nothing)'; c.appendChild(p); }
+    else{ const p=document.createElement('div'); p.className='painted';
+          p.textContent=body||'(nothing)';
+          if(cut) p.style.color='var(--hot)';
+          c.appendChild(p); }
     a.appendChild(c); return a;
   };
-  arms.appendChild(arm('clean','A — clean',r.clean_thought,r.clean,null));
-  arms.appendChild(arm('steered','B — steered',r.steered_thought,r.steered,r.tokens));
+  const cut=`the ${r.cap||'token'}-token cap ran out inside the reasoning channel — `
+    +`restart the server with a larger --max-tokens, or turn reasoning off`;
+  arms.appendChild(arm('clean','A — clean',r.clean_thought,r.clean_cut?cut:r.clean,null,r.clean_cut));
+  arms.appendChild(arm('steered','B — steered',r.steered_thought,r.steered_cut?cut:r.steered,r.tokens,r.steered_cut));
   w.appendChild(arms);
   const foot=document.createElement('div'); foot.className='foot';
   const v=document.createElement('div'); v.className='verdict';
   const live=r.desk&&r.desk.live;
-  v.textContent = !r.same ? 'they differ — neither reply was added to the conversation'
+  v.textContent = (r.clean_cut&&r.steered_cut)
+      ? 'both arms spent the whole token budget reasoning and never reached an answer — there is nothing here to compare'
+    : !r.same ? 'they differ — neither reply was added to the conversation'
     : live ? 'identical output — neither reply was added to the conversation'
     : 'the desk was clean in both arms — raise the fader and run A/B again';
+  if(r.clean_cut&&r.steered_cut) v.style.color='var(--hot)';
   if(r.same&&!live) v.style.color='var(--hot)';
   foot.appendChild(v); foot.appendChild(meta(r));
   w.appendChild(foot);
@@ -1091,9 +1099,15 @@ class Service:
             rows = self._token_rows(prompt_ids, emitted, steered) if desk["live"] else []
             clean_thought, clean_answer = split_thought(clean)
             steered_thought, steered_answer = split_thought(steered)
+            # An arm whose thought the cap cut off has no answer, and "(nothing)" then reads as the
+            # model declining to speak rather than as the budget running out.
+            clean_cut = bool(clean_thought) and not clean_answer
+            steered_cut = bool(steered_thought) and not steered_answer
             result = {"clean": clean_answer.strip(), "steered": steered_answer.strip(),
                       "clean_thought": clean_thought.strip(),
                       "steered_thought": steered_thought.strip(), "note": note,
+                      "clean_cut": clean_cut, "steered_cut": steered_cut,
+                      "cap": self.max_tokens,
                       "history": len(base), "tokens": rows, "desk": desk,
                       "hook": hook.report() if hook else None, "seconds": seconds,
                       "emitted": len(emitted), "prompt_tokens": len(prompt_ids),
@@ -1314,9 +1328,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--device", default=None)
     parser.add_argument("--dtype", default="bfloat16")
     parser.add_argument("--port", type=int, default=8765)
-    # A reasoning model spends its budget on the thought before it writes a word of the answer, so
-    # the old 200 cut most replies off mid-thought and the desk showed an empty answer.
-    parser.add_argument("--max-tokens", type=int, default=512)
+    # A reasoning model spends its budget on the thought before it writes a word of the answer.
+    # 200 cut most replies off mid-thought; 512 still did on anything with history behind it, and
+    # the A/B card then showed two empty arms with no explanation.
+    parser.add_argument("--max-tokens", type=int, default=2048)
     parser.add_argument("--concept-baseline", type=int, default=24)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--log", type=Path, default=None,
