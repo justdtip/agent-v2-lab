@@ -128,8 +128,9 @@ def test_a_single_index_write_differs_from_a_write_to_the_end(model):
     assert abs(one - many) > 1e-4, (one, many)
 
 
-def test_a_bare_tensor_return_is_refused(model):
-    """Returning just the tensor collapses per_layer_input to None and mutilates the forward."""
+def test_a_bare_tensor_return_mutilates_the_forward_when_ple_is_on(model):
+    """Why the hook returns the whole tuple. With PLE on this raises; with PLE off it would pass
+    silently, which is the case the arity check below covers instead."""
     blocks = decoder_blocks(model)
     handle = blocks[2].register_forward_pre_hook(lambda _m, args: args[0] + 1.0)
     ids = torch.arange(2 * WIDTH).reshape(2, WIDTH) % 60
@@ -138,6 +139,39 @@ def test_a_bare_tensor_return_is_refused(model):
             model(input_ids=ids, labels=ids)
     finally:
         handle.remove()
+
+
+def test_a_none_second_argument_is_not_treated_as_a_fault():
+    """A checkpoint with the per-layer embedding disabled passes None there legitimately.
+
+    The first version of this hook asserted otherwise and stopped a working run on the real 31B,
+    whose hidden_size_per_layer_input is 0.
+    """
+    class Block(torch.nn.Module):
+        def forward(self, hidden, extra=None):
+            return hidden
+
+    block = Block()
+    mask = torch.zeros(1, WIDTH, 1)
+    mask[0, SITE, 0] = 1.0
+    with PlannedPatch(block, mask=mask, delta=torch.ones(1, 4), layer=0) as patch:
+        block(torch.zeros(1, WIDTH, 4), None)
+    assert patch.fires == 1
+
+
+def test_a_changing_argument_count_is_refused():
+    """The invariant that actually matters, and it holds whether or not PLE is on."""
+    class Block(torch.nn.Module):
+        def forward(self, hidden, *extra):
+            return hidden
+
+    block = Block()
+    mask = torch.zeros(1, WIDTH, 1)
+    mask[0, SITE, 0] = 1.0
+    with PlannedPatch(block, mask=mask, delta=torch.ones(1, 4), layer=0):
+        block(torch.zeros(1, WIDTH, 4), None)
+        with pytest.raises(AssertionError, match="positional arguments"):
+            block(torch.zeros(1, WIDTH, 4))
 
 
 def test_the_hook_reports_a_consistent_fingerprint(model):

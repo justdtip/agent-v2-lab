@@ -106,6 +106,7 @@ class PlannedPatch:
     def __init__(self, block: Any, *, mask: torch.Tensor, delta: torch.Tensor, layer: int):
         self.block, self.mask, self.delta, self.layer = block, mask, delta, layer
         self.fires = 0
+        self._arity: int | None = None
         self.fingerprints: list[tuple[float, float]] = []
         self._handle = None
 
@@ -126,16 +127,29 @@ class PlannedPatch:
                 f"L{self.layer}: the block saw {tuple(hidden.shape[:2])} but the plan is for "
                 f"{tuple(self.mask.shape[:2])} -- a decode-shaped slice, a live cache, or the "
                 "collator and the plan disagreeing about the batch")
-        if len(args) >= 2 and args[1] is None:
+        # The defect worth guarding is a pre-hook that returns a BARE TENSOR: nn.Module wraps
+        # that as a one-tuple, so every later positional argument silently becomes None. This hook
+        # returns the whole tuple, so what has to hold is that its arity never changes -- which is
+        # checkable without knowing what those arguments are.
+        #
+        # It is NOT "args[1] is None means something is wrong". On a checkpoint with the per-layer
+        # embedding disabled -- which this one has, hidden_size_per_layer_input is 0 -- None is
+        # the correct value, and asserting otherwise stops a run that is working.
+        if self._arity is None:
+            self._arity = len(args)
+        elif len(args) != self._arity:
             raise AssertionError(
-                f"L{self.layer}: this block was called with per_layer_input=None. Returning a "
-                "bare tensor from a pre-hook collapses the extra positional arguments, which "
-                "drops the per-layer embedding silently.")
+                f"L{self.layer}: the block was called with {len(args)} positional arguments, "
+                f"having been called with {self._arity} before. Something upstream is collapsing "
+                "them, which drops whatever rode in the later ones.")
         self.fires += 1
         self.fingerprints.append((float(self.mask.sum()), float(self.delta.abs().sum())))
         # Out of place, and every tuple element preserved. `nn.Module` wraps a bare return value
         # as a one-tuple, so returning just the tensor would set every later argument to None.
-        return (hidden + self.mask * self.delta.unsqueeze(1), *args[1:])
+        out = (hidden + self.mask * self.delta.unsqueeze(1), *args[1:])
+        if len(out) != len(args):
+            raise AssertionError(f"L{self.layer}: the hook changed the argument count")
+        return out
 
     def fingerprint(self) -> tuple[float, float] | None:
         """What every firing of this hook must have carried, if they all carried the same."""
