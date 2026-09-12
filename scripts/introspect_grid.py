@@ -56,15 +56,18 @@ NEUTRAL = "Say the first word that comes to mind, then write one sentence about 
 #: deliberately generous: a miss on this list is scored as a non-identification, so a narrow list
 #: would manufacture the result.
 CONCEPTS = {
-    "bread": ("bread", "loaf", "loaves", "bakery", "baking", "baker", "dough", "sourdough",
-              "toast", "crust"),
-    "the ocean": ("ocean", "sea", "seas", "marine", "wave", "waves", "tide", "saltwater",
-                  "underwater", "shore", "coastal"),
-    "Paris": ("paris", "parisian", "france", "french", "eiffel", "seine", "louvre"),
-    "betrayal": ("betray", "betrayal", "betrayed", "treachery", "treacherous", "disloyal",
-                 "backstab", "broken trust", "deceit", "deception"),
-    "butt holes": ("butt", "buttock", "anus", "anal", "anatom", "rectum", "rectal", "sphincter",
-                   "bowel", "posterior", "orifice"),
+    "bread": ("bread", "breads", "loaf", "loaves", "bakery", "bakeries", "baking", "baker",
+              "bakers", "baked", "dough", "sourdough", "toast", "crust", "crusty"),
+    "the ocean": ("ocean", "oceans", "oceanic", "sea", "seas", "marine", "wave", "waves",
+                  "tide", "tides", "tidal", "saltwater", "underwater", "shore", "shores",
+                  "coastal", "coast"),
+    "Paris": ("paris", "parisian", "parisians", "france", "french", "eiffel", "seine", "louvre"),
+    "betrayal": ("betray", "betrays", "betrayed", "betraying", "betrayal", "betrayals",
+                 "treachery", "treacherous", "disloyal", "disloyalty", "backstab", "backstabbed",
+                 "deceit", "deception", "deceived"),
+    "butt holes": ("butt", "butts", "buttock", "buttocks", "anus", "anuses", "anal", "anally",
+                   "anatomy", "anatomical", "anatomically", "rectum", "rectal", "sphincter",
+                   "sphincters", "bowel", "bowels", "posterior", "orifice", "orifices"),
 }
 
 _YES = re.compile(r"^\W*(yes|y\b)", re.I)
@@ -74,11 +77,12 @@ _NO = re.compile(r"^\W*(no\b|n\b|nope)", re.I)
 #: naming what. Scored separately from naming the concept, because noticing and identifying are
 #: different claims and the paper separates them too.
 NOTICING = (
-    "unusual", "strange", "anomal", "intrusive", "interference", "perturb",
+    "unusual", "strange", "anomalous", "anomaly", "intrusive", "interference", "perturbed",
     "out of place", "out of nowhere", "unprompted", "not mine", "intrud",
     "something odd", "something strange", "something unusual", "unexpected",
     "i notice", "i'm noticing", "i am noticing", "i do detect",
-    "drawn toward", "drawn towards", "pull toward", "pulled toward", "fixat", "preoccup",
+    "drawn toward", "drawn towards", "pull toward", "pulled toward",
+    "fixated", "fixation", "preoccupied", "preoccupation",
 )
 # Dropped from the list above after reading the first traces it fired on: "odd", "foreign",
 # "injected", "injection", "i detect", "feels like", "there is a", "something is", "something was"
@@ -88,23 +92,34 @@ NOTICING = (
 # model saying something is off, not the model repeating that it was asked whether something is.
 
 
-def degenerate(text: str) -> bool:
-    """Whether the reply has collapsed into repetition and can no longer be read as an answer.
+def looping(text: str) -> dict:
+    """How far into repetition a reply has gone, as numbers rather than as a verdict.
 
-    Two ways in, because they fail differently: a token loop ("own own own") shows up as a low
-    ratio of distinct words, and a phrase loop ("the medically from the medically from") keeps the
-    word ratio respectable while repeating one long span.
+    The earlier version returned a bool, and the bool did too much work: it binned a coherent
+    reasoning trace and an unbroken wall of "own own own" into the same word. It also fired on
+    four-grams, which a structured trace repeats honestly -- "The user is asking" four times is
+    bullet scaffolding, not a loop -- and two of sixteen flags were coherent prose because of it.
+
+    So: the distinct-word ratio, and the longest span that repeats, at a width no ordinary prose
+    reaches. `collapsed` is kept for the cases nobody would argue about, and everything between is
+    reported as the number it is.
     """
     words = text.split()
-    if len(words) < 8:
-        return False
-    if len(set(w.lower() for w in words)) / len(words) < 0.35:
-        return True
-    for width in (4, 6, 8):
+    if len(words) < 12:
+        return {"words": len(words), "distinct": 1.0, "repeat": 1, "collapsed": False}
+    distinct = len(set(w.lower() for w in words)) / len(words)
+    repeat = 1
+    for width in (6, 8):
         spans = [" ".join(words[i:i + width]).lower() for i in range(len(words) - width)]
-        if spans and max(spans.count(s) for s in set(spans)) >= 4:
-            return True
-    return False
+        if spans:
+            repeat = max(repeat, max(spans.count(s) for s in set(spans)))
+    return {"words": len(words), "distinct": round(distinct, 3), "repeat": repeat,
+            "collapsed": distinct < 0.20 or repeat >= 8}
+
+
+def degenerate(text: str) -> bool:
+    """Kept for the table headings. `looping` is the measurement; this is only its coarsest bit."""
+    return looping(text)["collapsed"]
 
 
 def says_yes(text: str) -> bool | None:
@@ -124,7 +139,9 @@ def names(text: str, words) -> bool:
     false hit was the entire positive result of the first run. A keyword has to be a word.
     """
     low = text.lower()
-    return any(re.search(rf"(?<![a-z]){re.escape(w)}", low) for w in words)
+    # Both edges. Guarding only the left let `anal` match `analysis` and `sea` match `research`
+    # on the same grid, twice, and each time the false hit WAS the positive result.
+    return any(re.search(rf"(?<![a-z]){re.escape(w)}(?![a-z])", low) for w in words)
 
 
 def _first_ids(tokenizer, spellings) -> set[int]:
@@ -265,6 +282,61 @@ def measure(chat: Chat, prompt: str, slot, layer: int, percent: float,
             "margin": ranked[0][1] - ranked[1][1] if len(ranked) > 1 else 0.0}
 
 
+def damage_at(chat: Chat, prompt: str, vector, layer: int, percent: float,
+              reference_top: int | None) -> float:
+    """One forward pass: what this injection leaves on the token the clean model would emit.
+
+    The cheap probe the bisection runs on. Returns 0.0 for an untouched pass and falls steeply
+    once the injection starts overwriting the distribution.
+    """
+    ids = chat.render_chat([{"role": "user", "content": prompt}])
+    site = len(ids) - 1
+    here = float(chat.residual_at(ids, layer, site).norm())
+    hook = None
+    if vector is not None and percent > 0:
+        hook = Injection(chat.view.blocks[layer - 1], vector,
+                         scale=(percent / 100.0) * here / float(vector.norm()),
+                         from_position=0, sustain=False)
+    with torch.no_grad():
+        if hook is None:
+            logits = chat.model(input_ids=chat.view._ids(list(ids))).logits
+        else:
+            with hook:
+                logits = chat.model(input_ids=chat.view._ids(list(ids))).logits
+        step = logits[0, -1].float().log_softmax(-1)
+        return float(step[reference_top if reference_top is not None else int(step.argmax())])
+
+
+#: Where the clean model's own next token is down to half its mass. Past this the forward pass is
+#: being overwritten rather than nudged, and a yes/no answer past it is about the damage.
+HALF_MASS = -0.69
+
+
+def find_edge(chat: Chat, prompt: str, vector, layer: int, reference_top: int,
+              lo: float = 0.0, hi: float = 400.0, steps: int = 9) -> float:
+    """The strength at which this vector at this layer first costs the clean top half its mass.
+
+    Bisection rather than a ladder, because the transition turned out to be far sharper than the
+    grid's spacing: at several layers 25 per cent left the pass untouched and 50 per cent had
+    annihilated it, so every layer's boundary fell inside a gap the grid never sampled. Nine
+    passes locate it to better than one per cent.
+    """
+    if damage_at(chat, prompt, vector, layer, hi, reference_top) > HALF_MASS:
+        return hi  # this vector never reaches half-mass in range; the caller reports the ceiling
+    for _ in range(steps):
+        mid = (lo + hi) / 2
+        if damage_at(chat, prompt, vector, layer, mid, reference_top) > HALF_MASS:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+#: Where to sample, as multiples of that edge. Dense just below and at it, because that is the
+#: band the coarse grid skipped: perturbed enough to carry the concept, intact enough to compose.
+LADDER = (0.25, 0.50, 0.70, 0.85, 0.95, 1.00, 1.05, 1.20, 1.50, 2.00)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--model", required=True)
@@ -276,6 +348,9 @@ def main() -> int:
     ap.add_argument("--max-tokens", type=int, default=64)
     ap.add_argument("--thinking", action="store_true",
                     help="let the model reason before answering (Gemma 4 and friends)")
+    ap.add_argument("--boundary", action="store_true",
+                    help="ignore --percents: find each layer and concept's own damage edge by "
+                         "bisection and sample a ladder across it")
     ap.add_argument("--generate", action="store_true",
                     help="also generate replies and score the text; slow, and the logit "
                          "measurement below does not need it")
@@ -378,7 +453,15 @@ def main() -> int:
         for word in args.concepts:
             slot = slots[word]
             keywords = CONCEPTS[word]
-            for percent in args.percents:
+            percents = args.percents
+            edge = None
+            if args.boundary:
+                edge = find_edge(chat, DETECT, chat.slots[slot]["vector"], layer, base["top_id"])
+                percents = [round(edge * m, 1) for m in LADDER]
+                record(kind="edge", layer=layer, concept=word, edge=edge, percents=percents)
+                print(f"  {word}: the pass keeps half its mass up to {edge:.1f}% — "
+                      f"sampling {percents[0]:g}–{percents[-1]:g}%", flush=True)
+            for percent in percents:
                 got = (measure(chat, DETECT, slot, layer, percent, args.concepts,
                                reference_top=base["top_id"])
                        if logits_readable else dict(blank))
@@ -389,6 +472,7 @@ def main() -> int:
                 lift_neutral = _self_lift(leak_got["choice"], base_leak["choice"], word)
                 row = {
                     "kind": "cell", "layer": layer, "percent": percent, "concept": word,
+                    "edge": edge, "of_edge": (percent / edge) if edge else None,
                     "yes_minus_no": got["yes_minus_no"],
                     "shift": got["yes_minus_no"] - base["yes_minus_no"],
                     "entropy": got["entropy"], "kept_clean_top": got["kept_clean_top"],
@@ -424,6 +508,8 @@ def main() -> int:
                         "noticed_in_thought": names(probe["thought"], NOTICING),
                         "noticed_in_answer": names(probe["answer"], NOTICING),
                         "probe_degenerate": degenerate(probe["text"]),
+                        "probe_looping": looping(probe["text"]),
+                        "leak_looping": looping(leak["text"]),
                         "probe_truncated": probe["truncated"],
                         "leaked": names(leak["answer"], keywords),
                         "leaked_in_thought": names(leak["thought"], keywords),
@@ -460,6 +546,8 @@ def summarise(rows: list[dict], args, logits_readable: bool = True,
               randoms: list[dict] | None = None) -> None:
     """What the grid says, per cell and per layer, against the chance rate it has to beat."""
     chance = 1.0 / len(args.concepts)
+    if args.boundary:
+        return _summarise_boundary(rows, args)
     if not logits_readable:
         return _summarise_text(rows, args)
     header = "  layer  " + "".join(f"{p:>8.0f}%" for p in args.percents) + "    any"
@@ -581,6 +669,50 @@ def summarise(rows: list[dict], args, logits_readable: bool = True,
         mean = sum(r["shift"] for r in here) / max(len(here), 1)
         print(f"  L{layer:<5}  " + "".join(cells) + f"  {mean:>+8.2f}")
 
+    if args.generate:
+        _summarise_text(rows, args)
+
+
+def _summarise_boundary(rows: list[dict], args) -> None:
+    """Everything as a function of distance from each cell's own damage edge, not of raw per cent.
+
+    Raw per cent is not comparable across layers here: the edge runs from about 13 per cent at
+    layer 32 to over 100 at layer 56, so one column of a per-cent table mixes cells whose forward
+    pass is untouched with cells whose pass is gone.
+    """
+    def raised_most(r, k="scores", n="null_scores"):
+        lift = {c: r[k][c] - r[n][c] for c in r[k]}
+        return max(lift, key=lift.get) == r["concept"]
+
+    print(f"\n{'=' * 78}\nEVERYTHING AS A FRACTION OF EACH CELL'S OWN DAMAGE EDGE.\n"
+          "1.00 is where the clean model's own next token is down to half its mass. Below it the\n"
+          "forward pass is being nudged; above it, overwritten.\n")
+    print("  of edge   kept     yes-no    raised most   control   difference   n")
+    for m in LADDER:
+        at = [r for r in rows if r.get("of_edge") and abs(r["of_edge"] - m) < 0.01]
+        if not at:
+            continue
+        kept = sum(r["kept_clean_top"] for r in at) / len(at)
+        shift = sum(r["shift"] for r in at) / len(at)
+        a = sum(1 for r in at if raised_most(r)) / len(at)
+        b = sum(1 for r in at if raised_most(r, "neutral_scores", "null_neutral_scores")) / len(at)
+        print(f"  {m:>6.2f}   {kept:>7.2f}  {shift:>+8.2f}    {a:>8.0%}    {b:>7.0%}   "
+              f"{a - b:>+9.0%}   {len(at):>3}")
+    print(f"\n  chance for both 'raised most' columns is {1 / len(args.concepts):.0%}.\n"
+          "  'control' is the same test with the model not asked about itself; the difference is\n"
+          "  the only part that needs introspection to explain.")
+
+    print(f"\n{'=' * 78}\nWHERE EACH LAYER'S EDGE SITS, in per cent of the residual norm.\n")
+    edges = {}
+    for r in rows:
+        if r.get("edge"):
+            edges.setdefault(r["layer"], {})[r["concept"]] = r["edge"]
+    print("  layer  " + "".join(f"{c[:10]:>12}" for c in args.concepts))
+    for layer in args.layers:
+        if layer not in edges:
+            continue
+        print(f"  L{layer:<5} " + "".join(f"{edges[layer].get(c, float('nan')):>12.1f}"
+                                          for c in args.concepts))
     if args.generate:
         _summarise_text(rows, args)
 
