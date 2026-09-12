@@ -176,6 +176,44 @@ def main() -> int:
               f"median {float(share.median()):.3f}, max {float(share.max()):.3f}", flush=True)
 
     print(f"bank written in {time.time()-started:.0f}s", flush=True)
+
+    # ---- scales: what strength costs each ladder damage, per concept and layer ---------------
+    meter = DamageMeter(model, tok, device=device, dtype=dtype, battery=BATTERY[:args.battery])
+    meter.clean()
+    index = {w: i for i, w in enumerate(words)}
+    # one representative residual norm per layer, read at a detect prompt's final token, so the
+    # swept percentages bracket the same range the measurement harness used
+    probe_ids = render_prompt(tok, DETECT_PROMPTS_TRAIN[0])
+    norms = {}
+    for layer in args.layers:
+        norms[layer] = float(batched_residuals(model, blocks, device, [probe_ids], layer,
+                                               pad)[0].norm())
+    print("residual norm at the detect prompt's last token:",
+          {l: round(n, 1) for l, n in norms.items()}, flush=True)
+
+    scales: dict[str, dict] = {}
+    t0 = time.time()
+    for n, word in enumerate(sorted(train_concepts) + sorted(held_concepts)):
+        for layer in args.layers:
+            v = bank[layer][index[word]]
+            got = {}
+            for wanted in LADDER + HELD_OUT_DAMAGE:
+                s_, achieved = meter.scale_for_damage(v, layer, wanted,
+                                                      residual_norm=norms[layer])
+                got[str(wanted)] = {"scale": s_, "measured": achieved}
+            scales.setdefault(word, {})[str(layer)] = got
+        if n % 40 == 0:
+            print(f"  scales {n}/{len(words)} ({time.time()-t0:.0f}s)", flush=True)
+    torch.save(scales, args.out / "scales.pt")
+    print(f"scales written in {time.time()-t0:.0f}s", flush=True)
+
+    # how well the ladder was actually hit, which every downstream slice by damage depends on
+    for wanted in LADDER:
+        got = [scales[w][str(l)][str(wanted)]["measured"]
+               for w in scales for l in args.layers]
+        got.sort()
+        print(f"  wanted {wanted:>7.3f}: median achieved {got[len(got)//2]:+.4f}, "
+              f"10th {got[len(got)//10]:+.4f}, 90th {got[9*len(got)//10]:+.4f}", flush=True)
     json.dump({"facts": facts, "layers": args.layers, "train": sorted(train_concepts),
                "held_out": sorted(held_concepts), "legacy": list(LEGACY),
                "ladder": LADDER, "held_out_damage": HELD_OUT_DAMAGE,
