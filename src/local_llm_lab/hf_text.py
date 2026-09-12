@@ -27,10 +27,24 @@ import re
 from pathlib import Path
 from typing import Any
 
-__all__ = ["TEXT_PREFIX", "checkpoint_metadata", "load_text_causal_lm"]
+__all__ = ["TEXT_PREFIX", "TEXT_PREFIXES", "checkpoint_metadata", "load_text_causal_lm"]
 
 #: Where HF's multimodal wrappers keep the text decoder's tensors.
 TEXT_PREFIX = "language_model."
+#: Wrappers nest the text tower at different depths: Gemma 3 puts it at ``language_model.`` and
+#: Gemma 4 one level further in, under ``model.language_model.``. The prefix is therefore detected
+#: from the checkpoint's own tensor names rather than assumed, longest first so that a checkpoint
+#: carrying both spellings resolves to the more specific one. Gemma 3 still matches first-listed
+#: behaviour exactly; this only adds a fallback for checkpoints the old constant cannot describe.
+TEXT_PREFIXES = ("model.language_model.", "language_model.")
+
+
+def _text_prefix(names) -> str | None:
+    """The prefix this checkpoint actually uses for its text tower, or None if it uses none."""
+    for candidate in TEXT_PREFIXES:
+        if any(name.startswith(candidate) for name in names):
+            return candidate
+    return None
 
 _BYTES = {
     "BF16": 2, "F16": 2, "F32": 4, "F64": 8,
@@ -96,17 +110,20 @@ def checkpoint_metadata(path: str | Path) -> dict[str, Any]:
             f"made for another runtime: {root}"
         )
     wrapper = "text_config" in config
+    prefix = None
     if wrapper:
-        text = {
-            name.removeprefix(TEXT_PREFIX): entry
-            for name, entry in tensors.items()
-            if name.startswith(TEXT_PREFIX)
-        }
-        other = {name for name in tensors if not name.startswith(TEXT_PREFIX)}
-        if not text:
+        prefix = _text_prefix(tensors)
+        if prefix is None:
             raise ValueError(
-                f"config declares a text_config but no tensor is under {TEXT_PREFIX!r}: {root}"
+                f"config declares a text_config but no tensor is under any of "
+                f"{list(TEXT_PREFIXES)}: {root}"
             )
+        text = {
+            name.removeprefix(prefix): entry
+            for name, entry in tensors.items()
+            if name.startswith(prefix)
+        }
+        other = {name for name in tensors if not name.startswith(prefix)}
     else:
         text, other = dict(tensors), set()
     dtypes = sorted({entry["dtype"] for entry in text.values()})
@@ -118,6 +135,7 @@ def checkpoint_metadata(path: str | Path) -> dict[str, Any]:
         "config": config,
         "text_config": config["text_config"] if wrapper else config,
         "wrapper": wrapper,
+        "text_prefix": prefix,
         "tensors": tensors,
         "text": text,
         "other": other,
@@ -156,7 +174,8 @@ def load_text_causal_lm(
         config = AutoConfig.for_model(model_type, **text_config)
     else:
         config = AutoConfig.from_pretrained(meta["path"], local_files_only=True)
-    key_mapping = {rf"^{re.escape(TEXT_PREFIX)}": ""} if meta["wrapper"] else None
+    key_mapping = ({rf"^{re.escape(meta['text_prefix'])}": ""}
+                   if meta["wrapper"] and meta.get("text_prefix") else None)
     kwargs: dict[str, Any] = dict(
         config=config,
         dtype=torch_dtype,
