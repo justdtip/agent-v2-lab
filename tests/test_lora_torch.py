@@ -115,3 +115,15 @@ def test_a_target_that_is_not_a_linear_is_refused_rather_than_skipped():
     model.model.layers[0].self_attn.q_proj = torch.nn.Identity()
     with pytest.raises(TypeError):
         apply_lora(model, r=4, alpha=8)
+
+
+def test_the_adapter_lands_on_the_base_layer_device():
+    """nn.Parameter defaults to the CPU, and the model is already on the card when adapters are
+    applied -- which failed on the first matmul of the first real run."""
+    model = _model()
+    where = model.model.layers[0].self_attn.q_proj.weight.device
+    apply_lora(model, r=4, alpha=8)
+    for _name, module in model.named_modules():
+        if isinstance(module, LoRALinear):
+            assert module.lora_A.device == where, (module.lora_A.device, where)
+            assert module.lora_B.device == module.base.weight.device

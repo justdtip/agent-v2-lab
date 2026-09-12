@@ -42,8 +42,13 @@ class LoRALinear(nn.Module):
             p.requires_grad_(False)
         self.r, self.alpha = r, alpha
         self.scaling = alpha / r
-        self.lora_A = nn.Parameter(torch.empty(r, base.in_features))
-        self.lora_B = nn.Parameter(torch.zeros(base.out_features, r))
+        # On the base layer's own device. `nn.Parameter(torch.empty(...))` lands on the CPU, and
+        # the model is already resident on the card by the time adapters are applied -- the loader
+        # moves it before returning. A CPU adapter fails on the first matmul, which is the good
+        # case; a silently-migrated one would be worse.
+        where = base.weight.device
+        self.lora_A = nn.Parameter(torch.empty(r, base.in_features, device=where))
+        self.lora_B = nn.Parameter(torch.zeros(base.out_features, r, device=where))
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         self.dropout = nn.Dropout(dropout) if dropout else nn.Identity()
 
