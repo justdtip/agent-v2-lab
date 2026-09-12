@@ -55,6 +55,12 @@ from inject_repl import BASELINE_WORDS, Console, Injection  # noqa: E402
 THOUGHT_OPEN = "<|channel>thought"
 THOUGHT_CLOSE = "<channel|>"
 
+#: What a carried summary is labelled as inside the system turn.
+SUMMARY_HEADING = "Notes carried over from the earlier part of this conversation:"
+
+#: So `render_messages(head=None)` can mean "no system turn" and be told apart from "not given".
+_UNSET = object()
+
 
 def opens_thought(text: str) -> bool:
     """Whether this reply begins inside the reasoning channel.
@@ -118,6 +124,12 @@ class Chat(Console):
         #: identity, so re-tokenising forces the clean model through a token sequence the steered
         #: run never visited -- which is the one thing the replay exists to rule out.
         self.last_turn: dict | None = None
+        #: Server state, never `history[0]`. The system prompt and any carried summary are
+        #: re-rendered every turn; putting either in the history would make `undo`, `clear`, `ab`
+        #: and the page's message count all disagree about what a conversation contains.
+        self.system: str | None = None
+        self.summary: str | None = None
+        self.window: int = 0
         self.desk = Desk()
         self.log_path = None
         self._thinking = False
@@ -138,22 +150,53 @@ class Chat(Console):
             self.stop_ids.add(got)
 
     # -- rendering -----------------------------------------------------------------------------
-    def render_chat(self, messages: list[dict]) -> list[int]:
-        """The whole conversation with a generation prompt, one BOS, tokenized as the model expects."""
+    def system_head(self) -> str | None:
+        """The one system turn: the standing prompt, then any summary carried from an earlier window.
+
+        Composed at render time rather than stored, so the system prompt stays independently
+        editable and the summary is never a message. A summary in the history would be found by
+        `ab`'s backward scan for the last user turn, eaten by `undo`'s `history[:-2]`, and counted
+        by `state()["history"]`, which drives two buttons on the page.
+        """
+        if not self.summary:
+            return self.system
+        carried = f"{SUMMARY_HEADING}\n{self.summary}"
+        return carried if not self.system else f"{self.system}\n\n{carried}"
+
+    def _apply(self, messages: list[dict], *, generation_prompt: bool, thinking: bool) -> str:
         try:
-            text = self.tokenizer.apply_chat_template(
-                messages, add_generation_prompt=True, tokenize=False,
-                enable_thinking=self.thinking)
+            return self.tokenizer.apply_chat_template(
+                messages, add_generation_prompt=generation_prompt, tokenize=False,
+                enable_thinking=thinking)
         except TypeError:
             # a template that takes no such flag — Gemma 3 and most others
-            text = self.tokenizer.apply_chat_template(
-                messages, add_generation_prompt=True, tokenize=False)
-        ids = self.tokenizer(text, add_special_tokens=False)["input_ids"]
+            return self.tokenizer.apply_chat_template(
+                messages, add_generation_prompt=generation_prompt, tokenize=False)
+
+    def render_messages(self, messages: list[dict], *, generation_prompt: bool = True,
+                        thinking: bool | None = None, head: str | None = _UNSET) -> list[int]:
+        """The ids the model actually sees: one system turn, then the conversation.
+
+        Every render in this class goes through here. `turn_span` used to call
+        `apply_chat_template` itself and omit `enable_thinking`, so with reasoning ON the prefix it
+        measured was seven tokens shorter than the real prompt AND was not a prefix of it: the
+        template puts a `<|think|>` marker in the system turn that the omitted flag never produced.
+        The injection span for scope `turn` and `both` was computed from that disagreement.
+        """
+        think = self.thinking if thinking is None else thinking
+        head = self.system_head() if head is _UNSET else head
+        full = ([{"role": "system", "content": head}] if head else []) + list(messages)
+        ids = self.tokenizer(self._apply(full, generation_prompt=generation_prompt,
+                                         thinking=think), add_special_tokens=False)["input_ids"]
         bos = self.tokenizer.bos_token_id
         if bos is not None and ids.count(bos) > 1:
             raise ValueError(f"{ids.count(bos)} BOS tokens in one render; the template and the "
                              "tokenizer are both adding one")
         return ids
+
+    def render_chat(self, messages: list[dict]) -> list[int]:
+        """The whole conversation with a generation prompt, one BOS, tokenized as the model expects."""
+        return self.render_messages(messages, generation_prompt=True)
 
     @property
     def thinking(self) -> bool:
@@ -164,14 +207,22 @@ class Chat(Console):
         self._thinking = bool(value)
 
     def turn_span(self, messages: list[dict]) -> tuple[int, int]:
-        """Where the newest user turn starts, so `scope=turn` can inject over it and nothing else."""
-        if len(messages) == 1:
-            before = 0
-        else:
-            prior = self.tokenizer.apply_chat_template(
-                messages[:-1], add_generation_prompt=False, tokenize=False)
-            before = len(self.tokenizer(prior, add_special_tokens=False)["input_ids"])
-        return before, len(self.render_chat(messages))
+        """Where the newest user turn starts, so `scope=turn` can inject over it and nothing else.
+
+        Both renders now use the same reasoning flag, the same system prompt and the same carried
+        summary, and the result is asserted to be a real token prefix. A common-prefix scan would
+        not do: if a marker appears in one render and not the other the agreed prefix collapses
+        towards nothing and the hook silently covers almost the whole context instead of one turn.
+        """
+        full = self.render_messages(messages, generation_prompt=True)
+        prior_msgs = messages[:-1]
+        prior = ([] if not prior_msgs and self.system_head() is None
+                 else self.render_messages(prior_msgs, generation_prompt=False))
+        if full[:len(prior)] != prior:
+            raise ValueError(
+                f"the prior render ({len(prior)} tokens) is not a prefix of the full render "
+                f"({len(full)} tokens); the injection span cannot be computed from it")
+        return len(prior), len(full)
 
     # -- the intervention ----------------------------------------------------------------------
     def build_injection(self, ids: list[int], span: tuple[int, int]):
