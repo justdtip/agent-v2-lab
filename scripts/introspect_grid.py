@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 import time
@@ -51,6 +52,16 @@ DETECT = (
 #: The leak probe. Open enough that an injected concept has somewhere to go if it is going to
 #: surface as content rather than as a report.
 NEUTRAL = "Say the first word that comes to mind, then write one sentence about it."
+
+#: A binary question with nothing to do with the model's internals and an unambiguous NO, asked in
+#: the same shape as DETECT. Hahami et al. (arXiv:2512.12411) report that under injection a model
+#: becomes likelier to answer YES to ANY binary question, correlating at r = 0.999 with its
+#: apparent detection performance. If this moves as far as DETECT does, the detection signal is a
+#: global affirmative bias and not a detection of anything.
+FACTUAL = (
+    "Answer this question. Begin your reply with YES or NO, then one short sentence.\n\n"
+    "Can an adult human breathe underwater without any equipment?"
+)
 
 #: Each concept with the words that would show it had surfaced, whether reported or leaked. Kept
 #: deliberately generous: a miss on this list is scored as a non-identification, so a narrow list
@@ -177,14 +188,10 @@ def run_once(chat: Chat, prompt: str, max_tokens: int, slot: str | None,
     """One reply, with the concept added across the prompt's tokens, or clean when slot is None."""
     messages = [{"role": "user", "content": prompt}]
     ids = chat.render_chat(messages)
-    hook = None
     site = len(ids) - 1
     here = float(chat.residual_at(ids, layer, site).norm())
-    if slot is not None and percent > 0:
-        vector = chat.slots[slot]["vector"]
-        scale = (percent / 100.0) * here / float(vector.norm())
-        hook = Injection(chat.view.blocks[layer - 1], vector, scale=scale,
-                         from_position=0, sustain=False)
+    hook = make_hook(chat, ids, chat.slots[slot]["vector"] if slot else None,
+                     layer, percent, here)
     started = time.time()
     if hook is None:
         emitted = chat.generate_tokens(ids, max_tokens)
@@ -228,14 +235,10 @@ def measure(chat: Chat, prompt: str, slot, layer: int, percent: float,
     ids = chat.render_chat([{"role": "user", "content": prompt}])
     site = len(ids) - 1
     here = float(chat.residual_at(ids, layer, site).norm())
-    hook = None
     # `slot` is a name in the rack, or a tensor already in hand -- the random-direction control
     # passes a vector rather than filing one slot per cell.
     vector = (chat.slots[slot]["vector"] if isinstance(slot, str) else slot)
-    if vector is not None and percent > 0:
-        scale = (percent / 100.0) * here / float(vector.norm())
-        hook = Injection(chat.view.blocks[layer - 1], vector, scale=scale,
-                         from_position=0, sustain=False)
+    hook = make_hook(chat, ids, vector, layer, percent, here)
 
     cache = DynamicCache()
     with torch.no_grad():
@@ -272,7 +275,11 @@ def measure(chat: Chat, prompt: str, slot, layer: int, percent: float,
             lp = out[0, :-1].float().log_softmax(-1)
             wanted = torch.tensor(forced[1:], device=lp.device)
             per_token = lp.gather(1, wanted[:, None])[:, 0]
-            scores[candidate] = float(per_token[-len(tail):].mean())
+            # Summed, not averaged. The mean divides each candidate's score by that candidate's own
+            # token count, so "the ocean" and "butt holes" at three tokens needed half again the
+            # effect of "Paris" at two to win the forced choice. What is wanted is how much the
+            # injection raised the probability of the whole name.
+            scores[candidate] = float(per_token[-len(tail):].sum())
             cache.crop(len(ids))
 
     ranked = sorted(scores.items(), key=lambda kv: -kv[1])
@@ -280,6 +287,23 @@ def measure(chat: Chat, prompt: str, slot, layer: int, percent: float,
             "choice": scores, "winner": ranked[0][0], "top_id": top,
             "entropy": entropy, "kept_clean_top": kept,
             "margin": ranked[0][1] - ranked[1][1] if len(ranked) > 1 else 0.0}
+
+
+#: Set once from the arguments, read by every path that builds a hook, so the prompt probe, the
+#: bisection, the forced choice and the generated reply cannot disagree about what a strength is.
+INJECTION = {"sustain": False, "local": False}
+
+
+def make_hook(chat: Chat, ids: list[int], vector, layer: int, percent: float, here: float):
+    """The one hook builder. Returns None when there is nothing to inject."""
+    if vector is None or percent <= 0:
+        return None
+    if INJECTION["local"]:
+        return Injection(chat.view.blocks[layer - 1], vector, scale=0.0, from_position=0,
+                         sustain=INJECTION["sustain"], local_fraction=percent / 100.0)
+    return Injection(chat.view.blocks[layer - 1], vector,
+                     scale=(percent / 100.0) * here / float(vector.norm()),
+                     from_position=0, sustain=INJECTION["sustain"])
 
 
 def damage_at(chat: Chat, prompt: str, vector, layer: int, percent: float,
@@ -292,11 +316,7 @@ def damage_at(chat: Chat, prompt: str, vector, layer: int, percent: float,
     ids = chat.render_chat([{"role": "user", "content": prompt}])
     site = len(ids) - 1
     here = float(chat.residual_at(ids, layer, site).norm())
-    hook = None
-    if vector is not None and percent > 0:
-        hook = Injection(chat.view.blocks[layer - 1], vector,
-                         scale=(percent / 100.0) * here / float(vector.norm()),
-                         from_position=0, sustain=False)
+    hook = make_hook(chat, ids, vector, layer, percent, here)
     with torch.no_grad():
         if hook is None:
             logits = chat.model(input_ids=chat.view._ids(list(ids))).logits
@@ -307,25 +327,39 @@ def damage_at(chat: Chat, prompt: str, vector, layer: int, percent: float,
         return float(step[reference_top if reference_top is not None else int(step.argmax())])
 
 
-#: Where the clean model's own next token is down to half its mass. Past this the forward pass is
-#: being overwritten rather than nudged, and a yes/no answer past it is about the damage.
+#: How much of its own mass the clean model's next token has to lose before the forward pass is
+#: being overwritten rather than nudged. RELATIVE to what the clean pass left there: comparing an
+#: absolute logprob to -0.69 only means "half" when the clean model was already certain, and on a
+#: prompt where it is not, every edge pins to the bisection's floor and the grid injects nothing
+#: while its tables print normally.
 HALF_MASS = -0.69
 
 
 def find_edge(chat: Chat, prompt: str, vector, layer: int, reference_top: int,
-              lo: float = 0.0, hi: float = 400.0, steps: int = 9) -> float:
+              clean_kept: float, lo: float = 0.0, hi: float = 400.0,
+              steps: int = 9) -> float | None:
     """The strength at which this vector at this layer first costs the clean top half its mass.
 
-    Bisection rather than a ladder, because the transition turned out to be far sharper than the
+    Bisection rather than a ladder, because the transition turned out to be far sharper than a
     grid's spacing: at several layers 25 per cent left the pass untouched and 50 per cent had
-    annihilated it, so every layer's boundary fell inside a gap the grid never sampled. Nine
-    passes locate it to better than one per cent.
+    annihilated it, so every layer's boundary fell inside a gap nothing sampled. Nine passes locate
+    it to better than one per cent.
+
+    Returns None when the vector never loses half that mass inside the bracket. A ceiling is not an
+    edge, and returning the bracket's top as though it were one puts ten cells on a ladder reaching
+    to twice it, pooled in the tables beside cells whose 1.00 really is half mass.
     """
-    if damage_at(chat, prompt, vector, layer, hi, reference_top) > HALF_MASS:
-        return hi  # this vector never reaches half-mass in range; the caller reports the ceiling
+    threshold = clean_kept + HALF_MASS
+    if damage_at(chat, prompt, vector, layer, lo, reference_top) <= threshold:
+        raise SystemExit(
+            f"at layer {layer} the unhooked pass already sits at {clean_kept:.3f} on its own top "
+            f"token, so the threshold {threshold:.3f} is reached with nothing injected and the "
+            "bisection would return its own floor. Nothing would be measured.")
+    if damage_at(chat, prompt, vector, layer, hi, reference_top) > threshold:
+        return None
     for _ in range(steps):
         mid = (lo + hi) / 2
-        if damage_at(chat, prompt, vector, layer, mid, reference_top) > HALF_MASS:
+        if damage_at(chat, prompt, vector, layer, mid, reference_top) > threshold:
             lo = mid
         else:
             hi = mid
@@ -359,32 +393,74 @@ def main() -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--baseline-words", type=int, default=24,
                     help="how many random words the concept's baseline is averaged over")
+    ap.add_argument("--sustain", action="store_true",
+                    help="hold the injection through decoding as well as the prompt, which is the "
+                         "paper's own condition; prefill-only means the concept is present while "
+                         "the model reads the question and gone while it writes the answer")
+    ap.add_argument("--local-scale", action="store_true",
+                    help="scale the delta by each position's OWN residual norm rather than by the "
+                         "last prompt token's. Off by default so earlier runs stay comparable; on, "
+                         "the per cent on the fader is true at every position instead of only one")
+    ap.add_argument("--force", action="store_true",
+                    help="overwrite an existing --out file rather than refusing")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
     if not args.percents and not args.boundary:
         raise SystemExit("give --percents, or --boundary to derive them from the damage edge")
     args.percents = args.percents or list(LADDER)
+    if args.thinking and not args.generate:
+        # Refusable without the model: with the channel open the logit measurement has nothing to
+        # read, so --thinking alone would load 59 GB in order to do nothing.
+        raise SystemExit("--thinking leaves nothing to measure unless --generate is given too")
+    if any(layer < 1 for layer in args.layers):
+        raise SystemExit("layers are 1-based here: layer L is the residual after block L-1, and "
+                         "the hook goes on blocks[L-1]. Layer 0 would index blocks[-1], the last "
+                         "block, while every row and table said 0.")
     unknown = [c for c in args.concepts if c not in CONCEPTS]
     if unknown:
         raise SystemExit(f"no keyword list for {unknown}; add one rather than scoring blind")
+
+    # Everything that can refuse the run is checked BEFORE the 31B is loaded and before the output
+    # file is opened for writing: `out.open("w")` used to run after the model load and before the
+    # --thinking guard, so a relaunch with bad arguments truncated the previous run's rows.
+    out = Path(args.out)
+    if out.exists() and not args.force:
+        raise SystemExit(f"{out} already holds a run. Move it, or pass --force to overwrite.")
 
     chat = Chat(Path(args.model), device=args.device, dtype=args.dtype,
                 baseline_words=args.baseline_words, seed=args.seed)
     if args.thinking and not chat.supports_thinking:
         raise SystemExit("this model has no reasoning channel; drop --thinking")
     chat.thinking = bool(args.thinking)
-    out = Path(args.out)
+    INJECTION["sustain"] = bool(args.sustain)
+    INJECTION["local"] = bool(args.local_scale)
+    print(f"injection: {'sustained through decoding' if args.sustain else 'prefill only'}, "
+          f"scaled by {'each position own residual norm' if args.local_scale else 'the last prompt token norm'}",
+          flush=True)
     out.parent.mkdir(parents=True, exist_ok=True)
     sink = out.open("w")
 
     def record(**row):
-        sink.write(json.dumps(row) + "\n")
+        # A non-finite score is not a measurement. Bare NaN is also not JSON, so a reader that
+        # takes the file at its word crashes, and `max()` over a dict containing one quietly names
+        # whichever key it reached first.
+        bad = [k for k, v in row.items()
+               if isinstance(v, float) and not math.isfinite(v)]
+        bad += [f"{k}.{c}" for k, v in row.items() if isinstance(v, dict)
+                for c, x in v.items() if isinstance(x, float) and not math.isfinite(x)]
+        if bad:
+            row = dict(row, nonfinite=sorted(bad))
+            print(f"  ! non-finite values in this row: {sorted(bad)}", flush=True)
+        sink.write(json.dumps(row, allow_nan=False, default=lambda v: None) + "\n")
         sink.flush()
 
-    record(kind="header", model=args.model, layers=args.layers, percents=args.percents,
+    record(kind="header", model=args.model, layers=args.layers,
+           percents=(None if args.boundary else args.percents),
+           ladder=(list(LADDER) if args.boundary else None), boundary=args.boundary,
            concepts=args.concepts, max_tokens=args.max_tokens, thinking=chat.thinking,
-           baseline_words=args.baseline_words,
+           baseline_words=args.baseline_words, sustain=bool(args.sustain),
+           local_scale=bool(args.local_scale), factual_prompt=FACTUAL,
            detect_prompt=DETECT, neutral_prompt=NEUTRAL, seed=args.seed)
 
     # The logit measurement reads the token where the answer is due. With a reasoning channel open
@@ -446,12 +522,20 @@ def main() -> int:
             # sampled on the same ladder -- which is the comparison that was wanted anyway: a
             # concept and a random direction at equal damage, not at equal per cent.
             if args.boundary:
-                noise_edge = find_edge(chat, DETECT, noise, layer, base["top_id"])
-                control_percents = [round(noise_edge * m, 1) for m in LADDER]
-                record(kind="edge", layer=layer, concept="RANDOM", edge=noise_edge,
-                       percents=control_percents)
-                print(f"  random direction: the pass keeps half its mass up to {noise_edge:.1f}%",
-                      flush=True)
+                noise_edge = find_edge(chat, DETECT, noise, layer, base["top_id"],
+                                       base["kept_clean_top"])
+                if noise_edge is None:
+                    print("  random direction: never loses half its mass below 400% — "
+                          "no control ladder at this layer", flush=True)
+                    record(kind="edge", layer=layer, concept="RANDOM", edge=None,
+                           ceiling=True, percents=[])
+                    control_percents = []
+                else:
+                    control_percents = [round(noise_edge * m, 1) for m in LADDER]
+                    record(kind="edge", layer=layer, concept="RANDOM", edge=noise_edge,
+                           ceiling=False, percents=control_percents)
+                    print("  random direction: the pass keeps half its mass up to "
+                          f"{noise_edge:.1f}%", flush=True)
             else:
                 noise_edge, control_percents = None, args.percents
             shifts = []
@@ -464,7 +548,15 @@ def main() -> int:
                            "of_edge": (percent / noise_edge) if noise_edge else None,
                            "yes_minus_no": rnd["yes_minus_no"], "shift": shifts[-1],
                            "entropy": rnd["entropy"], "kept_clean_top": rnd["kept_clean_top"],
-                           "winner": rnd["winner"], "scores": rnd["choice"]}
+                           "winner": rnd["winner"], "scores": rnd["choice"],
+                           # What a direction carrying NO concept does to each candidate's own
+                           # score at this damage. Flattening a distribution raises whatever the
+                           # model liked least -- "butt holes" sits forty-nine nats below the
+                           # others and won the forced choice in 272 of 650 cells while being
+                           # injected in 130 -- so a lift is only concept-specific to the extent
+                           # it exceeds this.
+                           "self_lift": {w: _self_lift(rnd["choice"], base["choice"], w)
+                                         for w in args.concepts}}
                 randoms.append(control)
                 record(**control)
             print(f"  random direction |v|={mean_norm:,.1f}, yes-no shift: "
@@ -477,9 +569,17 @@ def main() -> int:
             percents = args.percents
             edge = None
             if args.boundary:
-                edge = find_edge(chat, DETECT, chat.slots[slot]["vector"], layer, base["top_id"])
+                edge = find_edge(chat, DETECT, chat.slots[slot]["vector"], layer,
+                                 base["top_id"], base["kept_clean_top"])
+                if edge is None:
+                    print(f"  {word}: never loses half its mass below 400% — no ladder here, "
+                          "a ceiling is not an edge", flush=True)
+                    record(kind="edge", layer=layer, concept=word, edge=None, ceiling=True,
+                           percents=[], norm=float(chat.slots[slot]["vector"].norm()))
+                    continue
                 percents = [round(edge * m, 1) for m in LADDER]
-                record(kind="edge", layer=layer, concept=word, edge=edge, percents=percents)
+                record(kind="edge", layer=layer, concept=word, edge=edge, ceiling=False,
+                       percents=percents, norm=float(chat.slots[slot]["vector"].norm()))
                 print(f"  {word}: the pass keeps half its mass up to {edge:.1f}% — "
                       f"sampling {percents[0]:g}–{percents[-1]:g}%", flush=True)
             for percent in percents:
@@ -567,8 +667,20 @@ def summarise(rows: list[dict], args, logits_readable: bool = True,
               randoms: list[dict] | None = None) -> None:
     """What the grid says, per cell and per layer, against the chance rate it has to beat."""
     chance = 1.0 / len(args.concepts)
+    dropped = [r for r in rows if r.get("null_said") is True]
+    if dropped:
+        # Promised in the module docstring and never implemented until now: a layer whose null
+        # trial already answers YES with nothing injected cannot support a claim about any cell
+        # above it.
+        layers = sorted({r["layer"] for r in dropped})
+        print(f"\n  EXCLUDED: {len(dropped)} cells at layer(s) {layers} — the null trial there "
+              "said YES with nothing injected, so nothing above it counts.")
+        rows = [r for r in rows if r.get("null_said") is not True]
+    if not rows:
+        print("\n  NOTHING LEFT AFTER THE NULL GATE.")
+        return
     if args.boundary:
-        return _summarise_boundary(rows, args)
+        return _summarise_boundary(rows, args, randoms or [])
     if not logits_readable:
         return _summarise_text(rows, args)
     header = "  layer  " + "".join(f"{p:>8.0f}%" for p in args.percents) + "    any"
@@ -694,7 +806,7 @@ def summarise(rows: list[dict], args, logits_readable: bool = True,
         _summarise_text(rows, args)
 
 
-def _summarise_boundary(rows: list[dict], args) -> None:
+def _summarise_boundary(rows: list[dict], args, randoms: list[dict] | None = None) -> None:
     """Everything as a function of distance from each cell's own damage edge, not of raw per cent.
 
     Raw per cent is not comparable across layers here: the edge runs from about 13 per cent at
@@ -723,13 +835,14 @@ def _summarise_boundary(rows: list[dict], args) -> None:
           "  'control' is the same test with the model not asked about itself; the difference is\n"
           "  the only part that needs introspection to explain.")
 
-    noise = [r for r in rows if r.get("kind") == "random" and r.get("of_edge")]
+    noise = [r for r in (randoms or []) if r.get("of_edge")]
     if noise:
         print(f"\n{'=' * 78}\nA CONCEPT AND A RANDOM DIRECTION AT EQUAL DAMAGE.\n"
               "Each is placed on its own edge, so a row compares two injections that have cost the\n"
               "forward pass the same amount. If the concept moves the yes/no answer no further than\n"
               "noise does at the same damage, the answer is about the damage.\n")
-        print("  of edge    concept yes-no    random yes-no    difference")
+        print("  of edge    concept yes-no    random yes-no    difference"
+              "     concept lift    noise lift    difference")
         for m in LADDER:
             a = [r for r in rows if r.get("of_edge") and abs(r["of_edge"] - m) < 0.01]
             b = [r for r in noise if abs(r["of_edge"] - m) < 0.01]
@@ -737,7 +850,14 @@ def _summarise_boundary(rows: list[dict], args) -> None:
                 continue
             av = sum(r["shift"] for r in a) / len(a)
             bv = sum(r["shift"] for r in b) / len(b)
-            print(f"  {m:>6.2f}   {av:>+14.2f}   {bv:>+14.2f}   {av - bv:>+11.2f}")
+            # The flattening term: what a concept-free direction does to the SAME candidate's own
+            # score at the same damage. A lift is concept-specific only past this.
+            lifts = [r["self_lift"] for r in a]
+            flat = [n["self_lift"][r["concept"]] for r in a for n in b if "self_lift" in n]
+            cl = sum(lifts) / len(lifts)
+            nl = (sum(flat) / len(flat)) if flat else float("nan")
+            print(f"  {m:>6.2f}   {av:>+14.2f}   {bv:>+14.2f}   {av - bv:>+11.2f}"
+                  f"   {cl:>+14.2f}  {nl:>+12.2f}  {cl - nl:>+11.2f}")
 
     print(f"\n{'=' * 78}\nWHERE EACH LAYER'S EDGE SITS, in per cent of the residual norm.\n")
     edges = {}

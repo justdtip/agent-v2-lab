@@ -83,8 +83,19 @@ class Injection:
     trusting the slice it is handed, since a decode step's slice is one token wide.
     """
 
-    def __init__(self, block, vector, *, scale: float, from_position: int, sustain: bool = True):
+    def __init__(self, block, vector, *, scale: float, from_position: int, sustain: bool = True,
+                 local_fraction: float | None = None):
+        """`scale` is a fixed multiplier. `local_fraction`, if given, overrides it.
+
+        A fixed multiplier is a delta of one size added everywhere, sized from the residual norm at
+        ONE position. Residual norms vary a great deal across positions -- at the BOS token the
+        same delta is several times larger relative to the local residual than it is mid-sentence
+        -- so "forty per cent of the residual norm" is then true at exactly one place and false
+        everywhere else it lands. `local_fraction` scales the delta by each position's own norm, so
+        the number means what it says at every position it touches.
+        """
         self.block, self.vector, self.scale = block, vector, scale
+        self.local_fraction = local_fraction
         self.from_position, self.sustain = from_position, sustain
         self.applications, self.positions_touched = 0, 0
         self._seen = 0  # absolute position of the first row in the current slice
@@ -109,15 +120,22 @@ class Injection:
         first = max(self.from_position - start, 0)
         if first >= width:
             return output
-        delta = (self.vector * self.scale).to(hidden.dtype).to(hidden.device)
-        hidden[:, first:, :] = hidden[:, first:, :] + delta
+        if self.local_fraction is None:
+            delta = (self.vector * self.scale).to(hidden.dtype).to(hidden.device)
+            hidden[:, first:, :] = hidden[:, first:, :] + delta
+        else:
+            unit = (self.vector / self.vector.norm()).to(hidden.dtype).to(hidden.device)
+            here = hidden[:, first:, :].float().norm(dim=-1, keepdim=True)
+            step = (here * self.local_fraction).to(hidden.dtype)
+            hidden[:, first:, :] = hidden[:, first:, :] + unit * step
         self.applications += 1
         self.positions_touched += width - first
         return (hidden, *output[1:]) if isinstance(output, tuple) else hidden
 
     def report(self) -> dict:
         return {"applications": self.applications, "positions_touched": self.positions_touched,
-                "from_position": self.from_position, "sustain": self.sustain, "scale": self.scale}
+                "from_position": self.from_position, "sustain": self.sustain,
+                "scale": self.scale, "local_fraction": self.local_fraction}
 
 
 class Console:
