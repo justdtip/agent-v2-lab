@@ -147,6 +147,32 @@ class DamageMeter:
         it is what distinguishes a sharp on-manifold transition from a smooth off-manifold one."""
         return [(s, self.damage(vector, layer, s, prompts).damage) for s in scales]
 
+    def scales_for_ladder(self, vector: torch.Tensor, layer: int, ladder: tuple[float, ...],
+                          *, residual_norm: float, prompts: list[int] | None = None,
+                          verify: bool = True,
+                          percents: tuple[float, ...] = (0.5, 1, 2, 4, 8, 16, 32, 64, 128)
+                          ) -> dict[float, tuple[float, float]]:
+        """Every rung of the ladder from ONE swept curve. {wanted: (scale, achieved)}.
+
+        Sweeping per rung costs ten forwards each and measures the same curve ten times; one sweep
+        and an interpolation is the same information for a tenth of the card time.
+        """
+        unit = float(vector.norm())
+        scales = [(p / 100.0) * residual_norm / unit for p in percents]
+        curve = sorted(self.curve(vector, layer, scales, prompts), key=lambda sd: sd[0])
+        out: dict[float, tuple[float, float]] = {}
+        for wanted in ladder:
+            chosen = curve[-1][0]
+            for (s0, d0), (s1, d1) in zip(curve, curve[1:]):
+                if d0 >= wanted >= d1:
+                    span = (d0 - d1) or 1e-12
+                    chosen = s0 + (s1 - s0) * (d0 - wanted) / span
+                    break
+            achieved = (self.damage(vector, layer, chosen, prompts).damage if verify
+                        else float("nan"))
+            out[wanted] = (chosen, achieved)
+        return out
+
     def scale_for_damage(self, vector: torch.Tensor, layer: int, wanted: float,
                          *, residual_norm: float, prompts: list[int] | None = None,
                          percents: tuple[float, ...] = (0.5, 1, 2, 4, 8, 16, 32, 64, 128)

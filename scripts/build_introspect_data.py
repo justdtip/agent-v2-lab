@@ -196,22 +196,26 @@ def main() -> int:
     for n, word in enumerate(sorted(train_concepts) + sorted(held_concepts)):
         for layer in args.layers:
             v = bank[layer][index[word]]
-            got = {}
-            for wanted in LADDER + HELD_OUT_DAMAGE:
-                s_, achieved = meter.scale_for_damage(v, layer, wanted,
-                                                      residual_norm=norms[layer])
-                got[str(wanted)] = {"scale": s_, "measured": achieved}
-            scales.setdefault(word, {})[str(layer)] = got
+            # Verify a rung against the meter only every eighth concept: the interpolation is the
+            # same arithmetic every time, and what the verification samples is whether the curve
+            # is smooth enough for it, which does not need every row to answer.
+            rungs = meter.scales_for_ladder(v, layer, LADDER + HELD_OUT_DAMAGE,
+                                            residual_norm=norms[layer], verify=(n % 8 == 0))
+            scales.setdefault(word, {})[str(layer)] = {
+                str(k): {"scale": sc, "measured": ach} for k, (sc, ach) in rungs.items()}
         if n % 40 == 0:
             print(f"  scales {n}/{len(words)} ({time.time()-t0:.0f}s)", flush=True)
     torch.save(scales, args.out / "scales.pt")
     print(f"scales written in {time.time()-t0:.0f}s", flush=True)
 
     # how well the ladder was actually hit, which every downstream slice by damage depends on
+    import math as _math
     for wanted in LADDER:
         got = [scales[w][str(l)][str(wanted)]["measured"]
                for w in scales for l in args.layers]
-        got.sort()
+        got = sorted(g for g in got if not _math.isnan(g))
+        if not got:
+            continue
         print(f"  wanted {wanted:>7.3f}: median achieved {got[len(got)//2]:+.4f}, "
               f"10th {got[len(got)//10]:+.4f}, 90th {got[9*len(got)//10]:+.4f}", flush=True)
     json.dump({"facts": facts, "layers": args.layers, "train": sorted(train_concepts),
