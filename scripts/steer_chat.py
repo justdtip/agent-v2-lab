@@ -49,6 +49,22 @@ sys.path.insert(0, str(HERE))
 
 from inject_repl import BASELINE_WORDS, Console, Injection  # noqa: E402
 
+#: Gemma 4 puts its reasoning in a channel and its answer after it. The markers are literals in the
+#: chat template rather than a documented API, so they are named here and detected at runtime: a
+#: model without them simply has no thought to split off.
+THOUGHT_OPEN = "<|channel>thought"
+THOUGHT_CLOSE = "<channel|>"
+
+
+def split_thought(text: str) -> tuple[str, str]:
+    """Separate reasoning from answer. Returns (thought, answer); thought is '' when there is none."""
+    if THOUGHT_CLOSE not in text:
+        return "", text
+    head, _, tail = text.partition(THOUGHT_CLOSE)
+    if THOUGHT_OPEN in head:
+        head = head.partition(THOUGHT_OPEN)[2]
+    return head.strip("\n"), tail.lstrip("\n")
+
 
 class Desk:
     """One steering channel: a slot, a layer, a fader in per cent of residual norm, and a scope."""
@@ -77,18 +93,40 @@ class Chat(Console):
         self.history: list[dict] = []
         self.desk = Desk()
         self.log_path = None
+        self._thinking = False
+        self.supports_thinking = THOUGHT_OPEN in (self.tokenizer.chat_template or "")
+        # Stop ids come from the tokenizer's own specials, never from another model's names: Gemma 4
+        # closes a turn with <turn|> where Gemma 3 used <end_of_turn>.
+        for name in ("<turn|>", "<|turn|>"):
+            got = self.tokenizer.convert_tokens_to_ids(name)
+            if isinstance(got, int) and got >= 0:
+                self.stop_ids.add(got)
 
     # -- rendering -----------------------------------------------------------------------------
     def render_chat(self, messages: list[dict]) -> list[int]:
         """The whole conversation with a generation prompt, one BOS, tokenized as the model expects."""
-        text = self.tokenizer.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=False)
+        try:
+            text = self.tokenizer.apply_chat_template(
+                messages, add_generation_prompt=True, tokenize=False,
+                enable_thinking=self.thinking)
+        except TypeError:
+            # a template that takes no such flag — Gemma 3 and most others
+            text = self.tokenizer.apply_chat_template(
+                messages, add_generation_prompt=True, tokenize=False)
         ids = self.tokenizer(text, add_special_tokens=False)["input_ids"]
         bos = self.tokenizer.bos_token_id
         if bos is not None and ids.count(bos) > 1:
             raise ValueError(f"{ids.count(bos)} BOS tokens in one render; the template and the "
                              "tokenizer are both adding one")
         return ids
+
+    @property
+    def thinking(self) -> bool:
+        return self._thinking
+
+    @thinking.setter
+    def thinking(self, value: bool) -> None:
+        self._thinking = bool(value)
 
     def turn_span(self, messages: list[dict]) -> tuple[int, int]:
         """Where the newest user turn starts, so `scope=turn` can inject over it and nothing else."""

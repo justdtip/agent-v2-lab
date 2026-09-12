@@ -38,7 +38,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[0] / "src"))
 sys.path.insert(0, str(HERE))
 
-from steer_chat import Chat  # noqa: E402
+from steer_chat import THOUGHT_CLOSE, Chat, split_thought  # noqa: E402
 
 PAGE = """<!doctype html><meta charset=utf-8><title>steering desk</title>
 <style>
@@ -52,6 +52,9 @@ main{display:flex;flex-direction:column;min-width:0}
 .you .who{color:var(--cool)}
 .body{white-space:pre-wrap;word-wrap:break-word}
 .meta{margin-top:7px;font-size:12px;color:var(--dim);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.thought{margin:8px 0 10px;padding:10px 12px;border-left:2px solid var(--line);background:rgba(255,255,255,.02);border-radius:0 8px 8px 0;color:var(--dim);white-space:pre-wrap;font-size:13px}
+.thought .cap{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin-bottom:5px;cursor:pointer}
+.thought.folded .txt{display:none}
 .tokens{margin-top:10px;padding:10px;background:var(--panel);border:1px solid var(--line);border-radius:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:2;overflow-x:auto}
 .tok{padding:2px 1px;border-radius:3px;cursor:default;white-space:pre}
 .tok:hover{outline:1px solid var(--dim)}
@@ -91,6 +94,8 @@ button.x{padding:1px 7px;font-size:14px;line-height:1;color:var(--dim)}
   <div class=reading><span id=pct>0</span>%</div>
   <input type=range id=fader min=0 max=250 step=5 value=0>
   <div class=hint>0 is clean. On the 12B at L32 a concept flips the reply into another language near 120%; a sustained injection collapses it near 30%.</div>
+  <label><input type=checkbox id=think style="width:auto;vertical-align:middle"> reasoning (chain of thought)</label>
+  <div class=hint id=thinthint>Gemma 4 puts reasoning in its own channel. Painted blue; answer tokens red.</div>
   <label>scope</label><select id=scope>
     <option value=turn>turn &mdash; over your message only</option>
     <option value=reply>reply &mdash; while generating</option>
@@ -126,16 +131,26 @@ function paint(rows){
     const s=document.createElement('span'); s.className='tok'; s.textContent=r.tok;
     // saturation tracks how far the clean model was from choosing this token
     const heat=Math.min(1,Math.log10(1+r.rank)/4.2);
-    if(r.rank>0){ s.style.background=`rgba(255,107,90,${0.10+0.62*heat})`; }
+    // reasoning tokens are tinted blue, answer tokens red, so the two channels stay distinguishable
+    const rgb = r.phase==='thought' ? '90,200,250' : '255,107,90';
+    if(r.rank>0){ s.style.background=`rgba(${rgb},${0.10+0.62*heat})`; }
+    if(r.phase==='thought') s.style.opacity='.85';
     s.title = r.rank===0 ? 'the clean model wanted this too'
       : `clean model wanted ${JSON.stringify(r.top)} — this token ranked ${r.rank.toLocaleString()}, Δlogprob ${r.d.toFixed(2)}`;
     d.appendChild(s);
   }
   return d;
 }
-function turn(who,text,meta,rows){
+function turn(who,text,meta,rows,thought){
   const w=document.createElement('div'); w.className='turn '+(who==='you'?'you':'');
   w.innerHTML=`<div class=who>${who}</div><div class=body></div>`;
+  if(thought){
+    const t=document.createElement('div'); t.className='thought';
+    t.innerHTML='<div class=cap>reasoning &mdash; click to fold</div><div class=txt></div>';
+    t.querySelector('.txt').textContent=thought;
+    t.querySelector('.cap').onclick=()=>t.classList.toggle('folded');
+    w.insertBefore(t,w.querySelector('.body'));
+  }
   w.querySelector('.body').textContent=text;
   if(meta){const m=document.createElement('div');m.className='meta';m.textContent=meta;w.appendChild(m);}
   if(rows&&rows.length){const p=paint(rows); if(p) w.appendChild(p);}
@@ -154,6 +169,8 @@ async function refresh(){
      : '<div class=sdim>none yet — build a concept or extract one</div>';
   for(const b of document.querySelectorAll('.x')) b.onclick=async e=>{
      await post('/drop',{slot:e.target.dataset.slot}); refresh();};
+  $('think').checked=!!s.thinking; $('think').disabled=!s.supports_thinking;
+  if(!s.supports_thinking) $('thinthint').textContent='this model has no reasoning channel';
   $('state').textContent=`${s.model}\\n${s.layers} layers · hidden ${s.hidden}\\ntwo-thirds depth ≈ L${Math.round(s.layers*2/3)}\\n${s.history} message(s)`;
 }
 async function sync(){
@@ -161,6 +178,8 @@ async function sync(){
 }
 $('fader').oninput=()=>{$('pct').textContent=$('fader').value; sync();};
 for(const id of ['slot','layer','scope']) $(id).onchange=sync;
+$('think').onchange=async()=>{const r=await post('/thinking',{on:$('think').checked});
+  turn('desk','reasoning '+($('think').checked?'on':'off')); refresh();};
 $('f').onsubmit=async e=>{
   e.preventDefault(); if(busy) return;
   const text=$('msg').value.trim(); if(!text) return;
@@ -238,6 +257,7 @@ class Service:
         return {"model": c.model.config._name_or_path.split("/")[-1] if hasattr(c.model.config, "_name_or_path") else "model",
                 "layers": c.view.num_layers, "hidden": c.view.hidden_size,
                 "history": len(c.history), "slots": sorted(c.slots),
+                "thinking": c.thinking, "supports_thinking": c.supports_thinking,
                 "detail": [{"name": n, "kind": e["kind"], "layer": e["layer"],
                             "norm": e["norm"]} for n, e in sorted(c.slots.items())],
                 "desk": {"slot": c.desk.slot, "layer": c.desk.layer,
@@ -256,15 +276,25 @@ class Service:
         return self.state()
 
     def _token_rows(self, messages: list[dict], reply: str) -> list[dict]:
-        """Per-token evidence: where the clean model ranked each token the steered run emitted."""
+        """Per-token evidence, each row tagged with the channel it fell in.
+
+        The channel tag is what makes this interesting on a reasoning model: the steering may bite
+        hard in the thought and wash out by the answer, or the reverse, and a single painted strip
+        over the whole reply would hide that.
+        """
         ids = self.chat.render_chat(messages)
         emitted = self.chat.tokenizer(reply, add_special_tokens=False)["input_ids"]
         if not emitted:
             return []
         rows = self.chat.clean_replay(ids, emitted)
-        return [{"tok": r["steered_token"], "top": r["clean_top"],
-                 "rank": r["clean_rank_of_steered"],
-                 "d": r["logprob_steered_token"] - r["logprob_clean_top"]} for r in rows]
+        out, phase = [], ("thought" if THOUGHT_CLOSE in reply else "answer")
+        for r in rows:
+            token = r["steered_token"]
+            out.append({"tok": token, "top": r["clean_top"], "rank": r["clean_rank_of_steered"],
+                        "d": r["logprob_steered_token"] - r["logprob_clean_top"], "phase": phase})
+            if THOUGHT_CLOSE in token:
+                phase = "answer"
+        return out
 
     def say(self, text: str) -> dict:
         with self.lock:
@@ -277,9 +307,16 @@ class Service:
             summary = f"{note} · {len(emitted)} tok · {seconds:.1f}s"
             if rows:
                 summary += f" · {changed} of {len(rows)} tokens were not the clean model's first choice"
-            self.record("turn", user=text, reply=reply, note=summary,
+            thought, answer = split_thought(reply)
+            if thought:
+                thought_rows = [r for r in rows if r["phase"] == "thought"]
+                bit = sum(1 for r in thought_rows if r["rank"])
+                summary += (f" · thought {bit}/{len(thought_rows)} changed, "
+                            f"answer {changed - bit}/{len(rows) - len(thought_rows)}")
+            self.record("turn", user=text, thought=thought, reply=answer, note=summary,
                         changed=changed, total=len(rows), seconds=seconds, tokens=rows)
-            return {"reply": reply.strip(), "note": summary, "tokens": rows}
+            return {"reply": answer.strip(), "thought": thought.strip(),
+                    "note": summary, "tokens": rows}
 
     def ab(self) -> dict:
         with self.lock:
@@ -431,6 +468,9 @@ def handler_for(service: Service):
                     self._send(service.state())
                 elif self.path == "/concept":
                     self._send(service.concept(body.get("word", ""), int(body.get("layer", 1))))
+                elif self.path == "/thinking":
+                    service.chat.thinking = bool(body.get("on"))
+                    self._send(service.state())
                 elif self.path == "/undo":
                     service.chat.history = service.chat.history[:-2]
                     self._send(service.state())
