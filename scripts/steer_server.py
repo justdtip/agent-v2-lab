@@ -96,14 +96,18 @@ body[data-busy] #activity .dot{background:var(--steer);animation:pulse 1s ease-i
   grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"chip chip chip" "text send ab"}
 #chip{grid-area:chip}#msg{grid-area:text}#send{grid-area:send}#ab{grid-area:ab;margin-left:6px}
 
-#bench{grid-area:bench;min-height:0;overflow:hidden;background:var(--panel);
-  border-left:1px solid var(--line);display:grid;grid-template-rows:auto minmax(0,1fr) auto auto}
+/* The bench scrolls as one column and the session row sticks to the bottom. Pinning the desk and
+   the session as fixed grid tracks only works while their combined height fits: at a short window
+   the flexible track between them collapsed to nothing and the panels drew over each other. */
+#bench{grid-area:bench;min-height:0;overflow-y:auto;background:var(--panel);
+  border-left:1px solid var(--line);display:flex;flex-direction:column}
 body[data-bench=hidden] #bench{display:none}
-#desk{padding:14px;border-bottom:1px solid var(--line)}
-#rack{overflow-y:auto;min-height:0;padding:10px 14px}
-#make{border-top:1px solid var(--line);padding:12px 14px}
-#session{border-top:1px solid var(--line);padding:10px 14px;display:flex;gap:8px;
-  align-items:center;font-size:11px;color:var(--dim)}
+#desk{padding:14px;border-bottom:1px solid var(--line);flex:0 0 auto}
+#rack{padding:10px 14px;flex:1 0 auto}
+#make{border-top:1px solid var(--line);padding:12px 14px;margin:14px -14px 0}
+#session{border-top:1px solid var(--line);padding:10px 14px;display:flex;gap:8px;flex:0 0 auto;
+  align-items:center;font-size:11px;color:var(--dim);position:sticky;bottom:0;
+  background:var(--panel);z-index:1}
 #session .grow{flex:1}
 
 h2{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);
@@ -207,6 +211,8 @@ body[data-only-changed] .tok[data-rank="0"]{opacity:.3}
 .ab .arm h3{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);
   margin:0 0 8px;font-weight:600}
 .ab .foot{padding:10px 12px;border-top:1px solid var(--line)}
+.turn.compaction{max-width:78ch;border:1px dashed var(--line);border-radius:10px;padding:12px}
+.turn.compaction .who{color:var(--steer)}
 .ab .verdict{font-size:13px;margin-bottom:6px}
 @media (max-width:900px){.ab .arms{grid-template-columns:1fr}.ab .arm+.arm{border-left:0;border-top:1px solid var(--line)}}
 
@@ -295,9 +301,15 @@ body[data-only-changed] .tok[data-rank="0"]{opacity:.3}
     <div class=row style="margin-top:6px"><select id=cr></select>
       <input type=number id=cfactor value=2 step=0.5 hidden></div>
     <div class=row style="margin-top:6px"><input type=text id=cinto placeholder="name for the result (required)"><button id=cgo type=button disabled>make</button></div>
-    <div class=hint id=chint>A difference of two states the model produced is a direction in the model's own units &mdash; no contrastive frame, no magnitude convention. Try &ldquo;I am cheerful&rdquo; minus &ldquo;I am despairing&rdquo;.</div>
-  </div>
-
+    <h2 style="margin-top:18px">system prompt</h2>
+    <textarea id=sysbox rows=3 placeholder="(no system turn)"></textarea>
+    <div class=row style="margin-top:6px"><button id=sysapply type=button>apply</button>
+      <button id=sysclearchat type=button title="apply and start a fresh conversation">apply + clear</button></div>
+    <div class=hint id=syshint></div>
+    <h2 style="margin-top:18px">rack file</h2>
+    <div class=row><input type=text id=rackpath placeholder="rack.json">
+      <button id=racksave type=button>save</button><button id=rackload type=button>load</button></div>
+    <div class=hint>A restart loses every vector in the rack; a concept costs 25 forward passes to rebuild.</div>
   <div id=make>
     <h2>put a vector in the rack</h2>
     <span class=seg role=group aria-label="where the vector comes from">
@@ -325,13 +337,17 @@ body[data-only-changed] .tok[data-rank="0"]{opacity:.3}
     <div class=row><input type=text id=slotname placeholder="required"><button id=mk type=button disabled>make</button></div>
     <div class=hint id=squeezed></div>
   </div>
+    <div class=hint id=chint>A difference of two states the model produced is a direction in the model's own units &mdash; no contrastive frame, no magnitude convention. Try &ldquo;I am cheerful&rdquo; minus &ldquo;I am despairing&rdquo;.</div>
+  </div>
+
+  </div>
 
   <div id=session>
     <span class=grow id=sessionfacts>0 messages</span>
+    <button id=compact type=button title="summarise the conversation now">compact</button>
     <button id=undo type=button disabled>undo</button>
     <button id=clear type=button>clear</button>
   </div>
-</div>
 <script>
 const $=id=>document.getElementById(id), log=$('log');
 let busy=false, S=null, lastSent='', src='word', pinned=null, spanFrom=null, allRows=[];
@@ -564,7 +580,8 @@ function closeInspector(){ $('inspector').removeAttribute('data-open'); pinned=n
   $('msg').focus(); }
 
 /* ---- busy ------------------------------------------------------------------------------------ */
-const LOCKED=['send','ab','mk','cgo','undo','clear','layerdefault'];
+const LOCKED=['send','ab','mk','cgo','undo','clear','layerdefault','compact','sysapply',
+              'sysclearchat','racksave','rackload'];
 function lock(on,what){
   busy=on;
   for(const b of LOCKED){ const e=$(b); if(e) e.disabled=on; }
@@ -655,7 +672,17 @@ async function refresh(){
   keep($('cr'), $('cr').value===$('cl').value?null:$('cr').value, true);
   $('herehint').textContent=`Reads the live conversation's own last position (${s.history} message(s)) — the move a single-shot console cannot make.`;
   const onscreen=log.querySelectorAll('.turn:not(.receipt):not(.ab)').length;
-  $('sessionfacts').textContent=`${s.history} message(s) · ${onscreen} on screen`;
+  const pct = s.context_window ? Math.min(100, Math.round(100*s.context_tokens/s.context_window)) : 0;
+  $('sessionfacts').innerHTML = `${s.history} message(s) · ${onscreen} on screen`
+    + (s.context_window
+        ? ` · <span title="compaction runs past ${s.context_window.toLocaleString()}">context `
+          + `${s.context_tokens.toLocaleString()}/${s.context_window.toLocaleString()} (${pct}%)</span>`
+          + (s.window ? ` · window ${s.window}` : '')
+        : ` · context ${s.context_tokens.toLocaleString()} tokens, no window`);
+  if(document.activeElement!==$('sysbox')) $('sysbox').value = s.system || '';
+  $('syshint').textContent = s.system
+    ? `${s.system_tokens} tokens · sha ${s.system_sha8} · editing it re-renders every past turn under the new header`
+    : 'no system turn';
   $('chiptag').className='tag'+(s.desk.live?' live':'');
   $('chiptag').textContent = s.desk.live
     ? `${s.desk.slot} ${s.desk.percent}% L${s.desk.layer} ${s.desk.scope}`
@@ -748,13 +775,78 @@ $('composer').onsubmit=async e=>{
         else if(ev.t==='replaying'){ $('activitytext').textContent='replaying through the clean model…';
           live.note.innerHTML=`<dt>run</dt><dd>${ev.tokens} tokens · replaying through the clean model…</dd>`; }
         else if(ev.t==='error'){ failed=ev.error; }
-        else if(ev.t==='done'){ done=ev; }
+        else if(ev.t==='done'){
+          // Rendered HERE, not after the stream closes: compaction runs after this event, and a
+          // user who has just waited thirty seconds should not wait out a summary as well before
+          // their own reply appears.
+          done=ev; live.w.remove(); live.w=null; modelTurn(ev);
+        }
+        else if(ev.t==='compacting'){ compacting(ev); }
+        else if(ev.t==='compacted'){ compacted(ev); }
+        else if(ev.t==='compact_failed'){ compactFailed(ev); }
       }
     }
   }catch(err){ failed=String(err); }
-  live.w.remove();
-  if(failed) turn('','error: '+failed,'receipt bad'); else if(done) modelTurn(done);
+  if(live.w) live.w.remove();
+  if(failed) turn('','error: '+failed,'receipt bad');
   lock(false); refresh();
+};
+
+/* ---- compaction ------------------------------------------------------------------------------ */
+let compactCard=null;
+function compacting(ev){
+  $('activitytext').textContent='compacting…';
+  compactCard=turn('', `context reached ${ev.context_tokens.toLocaleString()} tokens against a `
+    + `threshold of ${ev.threshold.toLocaleString()} — summarising ${ev.messages} message(s) so the `
+    + `conversation can continue in a fresh window…`, 'receipt');
+}
+function compacted(ev){
+  if(compactCard) compactCard.remove();
+  compactCard=null;
+  const w=document.createElement('div'); w.className='turn compaction';
+  w.innerHTML=`<div class=who>window ${ev.window} — the conversation was compacted</div>`;
+  const box=document.createElement('div'); box.className='channel thought';
+  box.innerHTML='<div class=head><span>notes carried forward</span>'
+    + '<button type=button>fold</button><span class=count></span></div>';
+  const b=box.querySelector('button');
+  b.onclick=()=>{const f=box.hasAttribute('data-folded');
+    if(f) box.removeAttribute('data-folded'); else box.setAttribute('data-folded','');
+    b.textContent=f?'fold':'unfold';};
+  const txt=document.createElement('div'); txt.className='painted'; txt.textContent=ev.summary;
+  box.appendChild(txt); w.appendChild(box);
+  const dl=document.createElement('dl'); dl.className='meta';
+  dl.innerHTML=`<dt>before</dt><dd>${ev.before.toLocaleString()} tokens</dd>`
+    + `<dt>after</dt><dd>${ev.after.toLocaleString()} tokens · summary ${ev.summary_tokens} · `
+    + `${ev.kept_turns} exchange(s) kept verbatim</dd>`;
+  w.appendChild(dl);
+  log.appendChild(w); toBottom();
+}
+function compactFailed(ev){
+  if(compactCard) compactCard.remove();
+  compactCard=null;
+  const why={summary_empty:'the model returned nothing',
+             summary_capped:'the summary hit its token cap and was cut mid-sentence',
+             summary_too_short:'the summary was too short to be a summary',
+             not_smaller:'the summary was no shorter than the history it would replace',
+             too_little_to_fold:'there is not enough history to fold yet'}[ev.reason] || ev.reason;
+  turn('', `compaction declined: ${why}. The conversation is unchanged and still long.`,
+       'receipt bad');
+}
+$('compact').onclick=async()=>{
+  if(busy) return; lock(true,'compacting…');
+  try{
+    const res=await fetch('/compact',{method:'POST',headers:{'content-type':'application/json'},
+      body:'{}'});
+    const reader=res.body.getReader(), dec=new TextDecoder(); let buf='';
+    for(;;){ const {value,done:end}=await reader.read(); if(end) break;
+      buf+=dec.decode(value,{stream:true}); let nl;
+      while((nl=buf.indexOf('\n'))>=0){ const line=buf.slice(0,nl); buf=buf.slice(nl+1);
+        if(!line.trim()) continue; const ev=JSON.parse(line);
+        if(ev.t==='compacting') compacting(ev);
+        else if(ev.t==='compacted') compacted(ev);
+        else if(ev.t==='compact_failed') compactFailed(ev); } }
+  }catch(err){ turn('','error: '+String(err),'receipt bad'); }
+  finally{ lock(false); refresh(); }
 };
 $('ab').onclick=async()=>{
   if(busy) return; lock(true,'running both arms…');
@@ -827,6 +919,27 @@ $('undo').onclick=async()=>{
 };
 $('clear').onclick=async()=>{ await post('/clear',{}); log.innerHTML=''; allRows=[];
   closeInspector(); refresh(); };
+async function applySystem(alsoClear){
+  if(busy) return; lock(true,'applying…');
+  try{
+    const r=await post('/system',{text:$('sysbox').value});
+    if(r.error){ turn('','error: '+r.error,'receipt bad'); }
+    else{ turn('', alsoClear ? 'system prompt applied, conversation cleared'
+      : 'system prompt applied — every past turn now renders under the new header', 'receipt'); }
+    if(alsoClear){ await post('/clear',{}); log.innerHTML=''; allRows=[]; closeInspector(); }
+  }catch(err){ turn('','error: '+String(err),'receipt bad'); }
+  finally{ lock(false); refresh(); }
+}
+$('sysapply').onclick=()=>applySystem(false);
+$('sysclearchat').onclick=()=>applySystem(true);
+for(const [id,path] of [['racksave','/save'],['rackload','/load']])
+  $(id).onclick=async()=>{
+    const p=$('rackpath').value.trim()||'rack.json'; if(busy) return; lock(true,'…');
+    try{ const r=await post(path,{path:p}); turn('', r.note||('error: '+r.error),
+      r.error?'receipt bad':'receipt'); }
+    catch(err){ turn('','error: '+String(err),'receipt bad'); }
+    finally{ lock(false); refresh(); }
+  };
 
 /* ---- stage head ------------------------------------------------------------------------------ */
 function setPaint(mode){
