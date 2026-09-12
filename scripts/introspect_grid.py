@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import torch  # noqa: E402
 
-from inject_repl import Injection  # noqa: E402
+from inject_repl import Injection, Magnitude  # noqa: E402
 from steer_chat import Chat, split_thought  # noqa: E402
 
 #: The question, phrased so that "no" is as easy to say as "yes": a prompt that only offers the
@@ -293,11 +293,22 @@ def measure(chat: Chat, prompt: str, slot, layer: int, percent: float,
 #: bisection, the forced choice and the generated reply cannot disagree about what a strength is.
 INJECTION = {"sustain": False, "local": False}
 
+#: Passed where a vector would go, to mean "disturb the pass without adding a direction".
+MAGNITUDE = object()
+
 
 def make_hook(chat: Chat, ids: list[int], vector, layer: int, percent: float, here: float):
-    """The one hook builder. Returns None when there is nothing to inject."""
+    """The one hook builder. Returns None when there is nothing to inject.
+
+    `vector` may be the sentinel MAGNITUDE, in which case nothing is added at all and the residual
+    is scaled instead -- the control that separates "a concept is present" from "the pass was
+    disturbed", which no published control does, because they all vary which vector is added.
+    """
     if vector is None or percent <= 0:
         return None
+    if vector is MAGNITUDE:
+        return Magnitude(chat.view.blocks[layer - 1], percent / 100.0,
+                         from_position=0, sustain=INJECTION["sustain"])
     if INJECTION["local"]:
         return Injection(chat.view.blocks[layer - 1], vector, scale=0.0, from_position=0,
                          sustain=INJECTION["sustain"], local_fraction=percent / 100.0)
@@ -350,7 +361,7 @@ HALF_MASS = -0.69
 
 def find_edge(chat: Chat, prompt: str, vector, layer: int, reference_top: int,
               clean_kept: float, lo: float = 0.0, hi: float = 400.0,
-              steps: int = 9) -> float | None:
+              steps: int = 12) -> float | None:
     """The strength at which this vector at this layer first costs the clean top half its mass.
 
     Bisection rather than a ladder, because the transition turned out to be far sharper than a
@@ -363,6 +374,8 @@ def find_edge(chat: Chat, prompt: str, vector, layer: int, reference_top: int,
     to twice it, pooled in the tables beside cells whose 1.00 really is half mass.
     """
     threshold = clean_kept + HALF_MASS
+    if vector is MAGNITUDE:
+        lo, hi = 0.0, min(hi, 200.0)  # epsilon is a fraction here, not a percentage of a norm
     if damage_at(chat, prompt, vector, layer, lo, reference_top) <= threshold:
         raise SystemExit(
             f"at layer {layer} the unhooked pass already sits at {clean_kept:.3f} on its own top "
@@ -557,6 +570,28 @@ def main() -> int:
                           f"{noise_edge:.1f}%", flush=True)
             else:
                 noise_edge, control_percents = None, args.percents
+            if args.boundary:
+                mag_edge = find_edge(chat, DETECT, MAGNITUDE, layer, base["top_id"],
+                                     base["kept_clean_top"], hi=200.0)
+                if mag_edge is None:
+                    print("  magnitude: never loses half its mass below 200%", flush=True)
+                else:
+                    print(f"  magnitude (no direction added): half its mass at "
+                          f"{mag_edge:.2f}% scaling", flush=True)
+                    for m in LADDER:
+                        pct = round(mag_edge * m, 3)
+                        got = measure(chat, DETECT, MAGNITUDE, layer, pct, args.concepts,
+                                      reference_top=base["top_id"])
+                        fact = probe_at(chat, FACTUAL, MAGNITUDE, layer, pct,
+                                        base_fact["top_id"])
+                        record(kind="magnitude", layer=layer, percent=pct, of_edge=m,
+                               edge=mag_edge,
+                               yes_minus_no=got["yes_minus_no"],
+                               shift=got["yes_minus_no"] - base["yes_minus_no"],
+                               factual_shift=fact["yes_minus_no"] - base_fact["yes_minus_no"],
+                               kept_clean_top=got["kept_clean_top"], entropy=got["entropy"],
+                               winner=got["winner"], scores=got["choice"])
+
             shifts = []
             for percent in control_percents:
                 rnd = measure(chat, DETECT, noise, layer, percent, args.concepts,

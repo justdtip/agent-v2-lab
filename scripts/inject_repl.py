@@ -74,6 +74,55 @@ BASELINE_WORDS = (
 )
 
 
+class Magnitude:
+    """Scale the residual instead of adding to it: damage with no direction whatsoever.
+
+    Every control anyone has run -- ours, and Rivera and Africa's -- varies WHICH vector is added.
+    A model that has learned only "a vector of the kind this protocol adds is present, and roughly
+    how big" passes all of them. This adds nothing: it multiplies the residual by 1+epsilon, which
+    reaches the same damage by the purest disturbance stimulus there is. If a concept moves the
+    yes/no answer no further than this does at matched damage, the answer is about the damage.
+
+    Deliberately the same shape as `Injection` so the grid can drive either through one code path.
+    """
+
+    def __init__(self, block, epsilon: float, *, from_position: int, sustain: bool = True):
+        self.block, self.epsilon = block, epsilon
+        self.from_position, self.sustain = from_position, sustain
+        self.applications, self.positions_touched = 0, 0
+        self._seen = 0
+        self._handle = None
+
+    def __enter__(self):
+        self._handle = self.block.register_forward_hook(self._hook)
+        return self
+
+    def __exit__(self, *_):
+        if self._handle is not None:
+            self._handle.remove()
+            self._handle = None
+        return False
+
+    def _hook(self, _module, _args, output):
+        hidden = output[0] if isinstance(output, tuple) else output
+        width = hidden.shape[1]
+        start, self._seen = self._seen, self._seen + width
+        if not self.sustain and start > 0:
+            return output
+        first = max(self.from_position - start, 0)
+        if first >= width:
+            return output
+        hidden[:, first:, :].mul_(1.0 + self.epsilon)
+        self.applications += 1
+        self.positions_touched += width - first
+        return (hidden, *output[1:]) if isinstance(output, tuple) else hidden
+
+    def report(self) -> dict:
+        return {"applications": self.applications, "positions_touched": self.positions_touched,
+                "from_position": self.from_position, "sustain": self.sustain,
+                "epsilon": self.epsilon, "kind": "magnitude"}
+
+
 class Injection:
     """Adds a fixed direction to a block's output residual, on every forward it sees.
 
