@@ -40,196 +40,780 @@ sys.path.insert(0, str(HERE))
 
 from steer_chat import THOUGHT_CLOSE, Chat, opens_thought, split_thought  # noqa: E402
 
-PAGE = """<!doctype html><meta charset=utf-8><title>steering desk</title>
+PAGE = r"""<!doctype html><meta charset=utf-8><title>steering bench</title>
+<meta name=viewport content="width=device-width,initial-scale=1">
 <style>
-:root{--bg:#14161a;--panel:#1c1f26;--line:#2b2f3a;--ink:#e6e8ee;--dim:#8b93a7;--hot:#ff6b5a;--cool:#5ac8fa}
+/* One token set, defined light on :root and redefined dark, so no rule below carries a literal
+   colour. `color-scheme` makes the native range thumb, select popup and scrollbars follow the page
+   instead of rendering light chrome on a dark ground.
+   One meaning per hue, reserved globally: --hot is failure and nothing else, --cool is the
+   reasoning channel, --warm the answer channel, --steer the intervention. Intensity always means
+   magnitude of effect. */
+:root{
+  color-scheme:light dark;
+  --bg:#f5f6f8; --panel:#ffffff; --line:#d7dbe3;
+  --ink:#14161a; --dim:#5a6374;
+  --hot:#c0392b; --cool:#0b6ea8; --warm:#9a5b00; --good:#1b7f43; --steer:#7c3aed;
+  --heat-rgb:124,58,237; --heat-ink:#ffffff; --focus:#0b6ea8;
+  --bench:340px;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#14161a; --panel:#1c1f26; --line:#2b2f3a;
+    --ink:#e6e8ee; --dim:#8b93a7;
+    --hot:#ff6b5a; --cool:#5ac8fa; --warm:#ffab5c; --good:#4ade80; --steer:#c084fc;
+    --heat-rgb:192,132,252; --heat-ink:#14161a; --focus:#5ac8fa;
+  }
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;display:grid;grid-template-columns:1fr 300px;height:100vh}
-main{display:flex;flex-direction:column;min-width:0}
-#log{flex:1;overflow-y:auto;padding:20px 24px}
-.turn{margin-bottom:22px;max-width:70ch}
-.who{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:5px}
-.you .who{color:var(--cool)}
-.body{white-space:pre-wrap;word-wrap:break-word}
-.meta{margin-top:7px;font-size:12px;color:var(--dim);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-.thought{margin:8px 0 10px;padding:10px 12px;border-left:2px solid var(--line);background:rgba(255,255,255,.02);border-radius:0 8px 8px 0;color:var(--dim);white-space:pre-wrap;font-size:13px}
-.thought .cap{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin-bottom:5px;cursor:pointer}
-.thought.folded .txt{display:none}
-.tokens{margin-top:10px;padding:10px;background:var(--panel);border:1px solid var(--line);border-radius:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:2;overflow-x:auto}
-.tok{padding:2px 1px;border-radius:3px;cursor:default;white-space:pre}
-.tok:hover{outline:1px solid var(--dim)}
-form{display:flex;gap:10px;padding:16px 24px;border-top:1px solid var(--line)}
-input[type=text]{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:11px 14px;font:inherit}
-button{background:var(--panel);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:11px 16px;font:inherit;cursor:pointer}
+body{margin:0;height:100dvh;overflow:hidden;background:var(--bg);color:var(--ink);
+  font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  display:grid;grid-template-columns:minmax(0,1fr) var(--bench);
+  grid-template-rows:34px minmax(0,1fr);grid-template-areas:"bar bar" "stage bench"}
+body[data-bench=hidden]{--bench:0px}
+:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+#bar{grid-area:bar;display:flex;align-items:center;gap:14px;padding:0 14px;
+  border-bottom:1px solid var(--line);font:12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  color:var(--dim);overflow:hidden;white-space:nowrap}
+#bar label{margin:0;display:flex;align-items:center;gap:5px;font-size:12px}
+#bar .bad{color:var(--hot)}
+#activity{margin-left:auto;display:flex;align-items:center;gap:7px}
+#activity .dot{width:7px;height:7px;border-radius:50%;background:var(--dim)}
+body[data-busy] #activity .dot{background:var(--steer);animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.25}50%{opacity:1}}
+
+/* Only #log and #rack scroll. The desk, the maker and the session row stay on screen however many
+   vectors are in the rack -- they used to be pushed off by a scrolling right column. */
+#stage{grid-area:stage;min-width:0;min-height:0;display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto auto}
+#stagehead{display:flex;align-items:center;gap:14px;padding:6px 24px;flex-wrap:wrap;
+  border-bottom:1px solid var(--line);font-size:11px;color:var(--dim)}
+#log{overflow-y:auto;padding:20px 24px;scrollbar-gutter:stable}
+#composer{display:grid;gap:8px 10px;padding:12px 24px;border-top:1px solid var(--line);
+  grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"chip chip chip" "text send ab"}
+#chip{grid-area:chip}#msg{grid-area:text}#send{grid-area:send}#ab{grid-area:ab;margin-left:6px}
+
+#bench{grid-area:bench;min-height:0;overflow:hidden;background:var(--panel);
+  border-left:1px solid var(--line);display:grid;grid-template-rows:auto minmax(0,1fr) auto auto}
+body[data-bench=hidden] #bench{display:none}
+#desk{padding:14px;border-bottom:1px solid var(--line)}
+#rack{overflow-y:auto;min-height:0;padding:10px 14px}
+#make{border-top:1px solid var(--line);padding:12px 14px}
+#session{border-top:1px solid var(--line);padding:10px 14px;display:flex;gap:8px;
+  align-items:center;font-size:11px;color:var(--dim)}
+#session .grow{flex:1}
+
+h2{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);
+  margin:0 0 9px;font-weight:600}
+label{display:block;font-size:12px;color:var(--dim);margin:10px 0 3px}
+label:first-of-type{margin-top:0}
+select,input[type=number],input[type=text],textarea{width:100%;background:var(--bg);
+  border:1px solid var(--line);border-radius:6px;color:var(--ink);padding:7px;font:inherit}
+textarea{resize:none;max-height:30vh;line-height:1.5}
+input[type=range]{width:100%;padding:0}
+button{background:var(--bg);border:1px solid var(--line);border-radius:7px;color:var(--ink);
+  padding:8px 13px;font:inherit;cursor:pointer}
+#composer button{padding:11px 18px}
 button:hover:not(:disabled){border-color:var(--dim)}
-button:disabled{opacity:.45;cursor:default}
-aside{background:var(--panel);border-left:1px solid var(--line);padding:20px;overflow-y:auto}
-aside h2{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin:22px 0 9px;font-weight:600}
-aside h2:first-child{margin-top:0}
-label{display:block;font-size:12px;color:var(--dim);margin:9px 0 3px}
-select,input[type=number],input[type=range]{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--ink);padding:7px;font:inherit}
-input[type=range]{padding:0}
-.reading{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:22px;text-align:center;margin:6px 0}
-.hint{font-size:11px;color:var(--dim);margin-top:5px}
+button:disabled{opacity:.4;cursor:default}
+button[aria-pressed=true]{background:var(--panel);border-color:var(--focus);color:var(--ink)}
+.hint{font-size:11px;color:var(--dim);margin-top:5px;line-height:1.45}
 .row{display:flex;gap:8px}.row>*{flex:1}
-#state{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--dim);white-space:pre-wrap}
-.pill{display:inline-block;padding:2px 8px;border-radius:99px;border:1px solid var(--line);font-size:11px;font-family:ui-monospace,monospace}
-.slotrow{display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--line)}
-.sdim{flex:1;font-size:11px;color:var(--dim);font-family:ui-monospace,monospace}
-button.x{padding:1px 7px;font-size:14px;line-height:1;color:var(--dim)}
+.seg{display:flex;gap:0}
+.seg button{border-radius:0;flex:1;padding:6px 8px;font-size:12px;border-left-width:0}
+.seg button:first-child{border-radius:6px 0 0 6px;border-left-width:1px}
+.seg button:last-child{border-radius:0 6px 6px 0}
+
+/* the desk */
+#armed{font-size:12px;line-height:1.5;padding:8px 10px;border-radius:7px;border:1px solid var(--line);
+  background:var(--bg);margin-bottom:11px}
+#armed.clean{color:var(--dim)}
+#armed.live{border-color:var(--steer)}
+#armed b{font-family:ui-monospace,Menlo,monospace;font-weight:600}
+.reading{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:24px;text-align:center;
+  margin:4px 0 2px}
+.reading.hotband{color:var(--hot)}
+#fader{background:linear-gradient(to right,
+  transparent 0 10%, rgba(27,127,67,.10) 10% 30%, transparent 30% 60%, rgba(192,57,43,.12) 60% 100%)}
+#faderband{text-align:center}
+
+/* the rack */
+.slotrow{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:start;
+  padding:7px 0;border-bottom:1px solid var(--line)}
+.slotrow.armed{background:rgba(124,58,237,.07);border-radius:6px;padding:7px 6px;
+  box-shadow:inset 2px 0 0 var(--steer)}
+@media (prefers-color-scheme:dark){.slotrow.armed{background:rgba(192,132,252,.10)}}
+.slotrow .name{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.slotrow .prov{font-size:11px;color:var(--dim);line-height:1.4;word-break:break-word}
+button.arm{padding:3px 9px;font-size:11px}
+button.x{padding:2px 8px;font-size:14px;line-height:1;color:var(--dim);border-color:transparent}
+
+/* the transcript */
+.turn{margin-bottom:20px;max-width:78ch}
+.who{font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;color:var(--dim)}
+.you .who{color:var(--ink);opacity:.7}
+.you .body{max-width:74ch;white-space:pre-wrap;word-wrap:break-word}
+.turn.receipt{max-width:none;font:11px/1.6 ui-monospace,Menlo,monospace;color:var(--dim);
+  border-left:2px solid var(--line);padding-left:10px;margin:10px 0}
+.turn.receipt.bad{color:var(--hot);border-left-color:var(--hot)}
+.orient{color:var(--dim);font-size:12px;line-height:1.7;max-width:72ch}
+.orient div{margin-bottom:6px}
+
+/* channel blocks: the reply IS the painted text, printed once */
+.channel{max-width:76ch;margin:8px 0;padding:9px 12px;border-left:2px solid var(--line);
+  border-radius:0 8px 8px 0;background:rgba(127,127,127,.04)}
+.channel.thought{border-left-color:var(--cool)}
+.channel.answer{border-left-color:var(--warm)}
+.channel .head{display:flex;gap:10px;align-items:center;font-size:10px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+.channel .head button{padding:1px 7px;font-size:10px;letter-spacing:.06em}
+.channel .count{margin-left:auto;text-transform:none;letter-spacing:0;font-family:ui-monospace,Menlo,monospace}
+.channel[data-folded] .painted{display:none}
+.painted{white-space:pre-wrap;word-break:break-word;
+  font:13px/1.95 ui-monospace,SFMono-Regular,Menlo,monospace}
+body[data-paint=prose] .painted{font:14px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif}
+body[data-paint=prose] .tok{background:none!important;border-bottom:0!important;color:inherit!important;
+  box-shadow:none!important}
+body[data-paint=prose] .tok::before{content:none!important}
+.tok{white-space:pre-wrap;border-radius:3px;border-bottom:0 solid var(--dim);cursor:pointer}
+.tok:hover{outline:1px solid var(--dim)}
+.tok.pinned{outline:1px solid var(--focus);outline-offset:1px}
+.tok[data-ws=nl]::before{content:'\21b5';color:var(--dim);opacity:.55}
+.tok[data-ws=sp]{box-shadow:inset 0 0 0 1px rgba(var(--heat-rgb),.45)}
+body[data-only-changed] .tok[data-rank="0"]{opacity:.3}
+.swatch{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-3px;
+  border:1px solid var(--line)}
+.legend{display:flex;align-items:center;gap:5px}
+
+/* the three meta lines */
+.meta{margin-top:9px;display:grid;grid-template-columns:auto 1fr;gap:2px 10px;
+  font:11px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim)}
+.meta dt{opacity:.8}
+.meta dd{margin:0;word-break:break-word}
+.meta .bad{color:var(--hot)}
+
+/* A/B as one card */
+.ab{max-width:none;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:20px}
+.ab .cap{padding:7px 12px;background:rgba(127,127,127,.06);border-bottom:1px solid var(--line);
+  font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.ab .arms{display:grid;grid-template-columns:1fr 1fr}
+.ab .arm{padding:12px;min-width:0}
+.ab .arm+.arm{border-left:1px solid var(--line)}
+.ab .arm.clean{box-shadow:inset 3px 0 0 var(--good)}
+.ab .arm.steered{box-shadow:inset 3px 0 0 var(--steer)}
+.ab .arm h3{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);
+  margin:0 0 8px;font-weight:600}
+.ab .foot{padding:10px 12px;border-top:1px solid var(--line)}
+.ab .verdict{font-size:13px;margin-bottom:6px}
+@media (max-width:900px){.ab .arms{grid-template-columns:1fr}.ab .arm+.arm{border-left:0;border-top:1px solid var(--line)}}
+
+/* the inspector */
+#inspector{max-height:0;overflow:hidden;padding:0 24px;background:var(--panel);
+  border-top:1px solid var(--line);
+  font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;
+  transition:max-height .12s ease,padding .12s ease}
+#inspector[data-open]{max-height:104px;padding:10px 24px}
+#inspector .nav{float:right;display:flex;gap:6px}
+#inspector button{padding:2px 9px;font-size:11px}
+#chip{display:flex;align-items:center;gap:9px;font:11px/1 ui-monospace,Menlo,monospace;
+  color:var(--dim)}
+#chip .tag{padding:3px 9px;border-radius:99px;border:1px solid var(--line)}
+#chip .tag.live{border-color:var(--steer);color:var(--ink)}
 </style>
-<main>
-  <div id=log></div>
-  <form id=f>
-    <input type=text id=msg placeholder="say something to the model" autocomplete=off autofocus>
+<div id=bar>
+  <span id=runfacts>loading…</span>
+  <label><input type=checkbox id=think style="width:auto"> reasoning</label>
+  <span id=thinwhy></span>
+  <span id=logfacts></span>
+  <span id=activity><span class=dot></span><span id=activitytext>idle</span></span>
+</div>
+
+<div id=stage>
+  <div id=stagehead>
+    <span class=seg role=group aria-label="how tokens are painted">
+      <button id=paintprose type=button aria-pressed=false>prose</button>
+      <button id=paintrank type=button aria-pressed=true>rank</button>
+    </span>
+    <span class=legend id=legend></span>
+    <label style="margin:0;display:flex;gap:5px;align-items:center">
+      <input type=checkbox id=onlychanged style="width:auto"> only changed</label>
+    <button id=benchtoggle type=button style="margin-left:auto;padding:3px 9px;font-size:11px"
+      title="collapse the bench (Ctrl+\)">hide bench</button>
+  </div>
+
+  <div id=log>
+    <div class=orient id=orient>
+      <div>The fader is <b>per cent of the residual norm measured at the injection site</b>, not alpha.</div>
+      <div>Every steered reply is replayed through the clean model with its own tokens forced, so the colour is the intervention and nothing else.</div>
+      <div><b>turn</b> = over your message &middot; <b>reply</b> = while generating &middot; <b>both</b> = the paper's protocol.</div>
+      <div>Measured on this model: 25&ndash;75% is the working band; above ~150% it stops producing steered text and produces repetition loops.</div>
+    </div>
+  </div>
+
+  <div id=inspector class=mono></div>
+
+  <form id=composer autocomplete=off>
+    <div id=chip><span class=tag id=chiptag>running clean</span><span id=chipwhy></span></div>
+    <textarea id=msg rows=1 placeholder="say something to the model — Enter sends, Shift+Enter for a new line" autofocus></textarea>
     <button id=send>send</button>
-    <button id=ab type=button title="run the last message clean and steered on identical history">A/B</button>
+    <button id=ab type=button title="re-run the last message clean and steered on identical history">A/B last</button>
   </form>
-</main>
-<aside>
-  <h2>desk</h2>
-  <label>vector</label><select id=slot></select>
-  <label>layer</label><input type=number id=layer min=1 value=32>
-  <label>fader &mdash; per cent of the residual norm at the site</label>
-  <div class=reading><span id=pct>0</span>%</div>
-  <input type=range id=fader min=0 max=250 step=5 value=0>
-  <div class=hint>0 is clean. On the 12B at L32 a concept flips the reply into another language near 120%; a sustained injection collapses it near 30%.</div>
-  <label><input type=checkbox id=think style="width:auto;vertical-align:middle"> reasoning (chain of thought)</label>
-  <div class=hint id=thinthint>Gemma 4 puts reasoning in its own channel. Painted blue; answer tokens red.</div>
-  <label>scope</label><select id=scope>
-    <option value=turn>turn &mdash; over your message only</option>
-    <option value=reply>reply &mdash; while generating</option>
-    <option value=both>both &mdash; the paper's protocol</option>
-    <option value=all>all &mdash; the whole context</option>
-  </select>
-  <h2>build a vector</h2>
-  <label>concept &mdash; the paper's recipe</label>
-  <div class=row><input type=text id=word placeholder="a word or phrase"><button id=mk type=button>build</button></div>
-  <div class=hint>&ldquo;Tell me about {word}.&rdquo; minus the mean over 24 random words, at the layer above.</div>
-  <label>extract &mdash; a residual from any prompt</label>
-  <input type=text id=xprompt placeholder="a prompt to read the residual from">
-  <div class=row><input type=text id=xslot placeholder="slot name"><input type=number id=xpos placeholder="pos (blank = last)"></div>
-  <div class=row><button id=xgo type=button>extract</button><button id=xhere type=button title="read the residual at the end of the conversation as it stands">from chat</button></div>
-  <div class=hint>&ldquo;from chat&rdquo; reads the live conversation's own last position, which is the move a single-shot console cannot make.</div>
-  <label>combine &mdash; build one vector from others</label>
-  <div class=row><select id=cl></select><select id=cop><option>-</option><option>+</option><option>&times;</option></select><select id=cr></select></div>
-  <div class=row><input type=text id=cinto placeholder="new slot name"><button id=cgo type=button>make</button></div>
-  <div class=hint>A difference of two states the model produced is a direction in the model's own units &mdash; no contrastive frame, no magnitude convention. Try &ldquo;I am cheerful&rdquo; minus &ldquo;I am despairing&rdquo;.</div>
-  <h2>vectors</h2><div id=rack></div>
-  <h2>state</h2><div id=state></div>
-  <h2></h2><div class=row><button id=undo type=button>undo</button><button id=clear type=button>clear</button></div>
-</aside>
+</div>
+
+<div id=bench>
+  <div id=desk>
+    <h2>desk</h2>
+    <div id=armed class=clean>running clean &mdash; arm a vector in the rack</div>
+    <label for=layer>inject at layer <span id=layerof class=mono></span></label>
+    <div class=row><input type=number id=layer min=1 value=1><button id=layerdefault type=button
+      title="two-thirds of depth">&frac23;</button></div>
+    <label for=fader>fader &mdash; per cent of the residual norm at the site</label>
+    <div class=reading id=readingwrap><span id=pct>0</span>%</div>
+    <input type=range id=fader min=0 max=250 step=1 value=0>
+    <div class="hint" id=faderband>0 is clean &mdash; the vector stays in the rack</div>
+    <label for=scope>what the injection covers</label>
+    <select id=scope>
+      <option value=turn>your message, before the model starts writing</option>
+      <option value=reply>the reply, while it is being written</option>
+      <option value=both>both &mdash; the paper's protocol</option>
+      <option value=all>the whole context, every token</option>
+    </select>
+  </div>
+
+  <div id=rack>
+    <h2>vectors</h2>
+    <div id=racklist></div>
+    <h2 style="margin-top:18px">combine</h2>
+    <div class=row><select id=cl></select><select id=cop>
+      <option value="-">&minus; difference</option>
+      <option value="+">+ sum</option>
+      <option value="x">&times; scale</option>
+    </select></div>
+    <div class=row style="margin-top:6px"><select id=cr></select>
+      <input type=number id=cfactor value=2 step=0.5 hidden></div>
+    <div class=row style="margin-top:6px"><input type=text id=cinto placeholder="name for the result (required)"><button id=cgo type=button disabled>make</button></div>
+    <div class=hint id=chint>A difference of two states the model produced is a direction in the model's own units &mdash; no contrastive frame, no magnitude convention. Try &ldquo;I am cheerful&rdquo; minus &ldquo;I am despairing&rdquo;.</div>
+  </div>
+
+  <div id=make>
+    <h2>put a vector in the rack</h2>
+    <span class=seg role=group aria-label="where the vector comes from">
+      <button id=srcword type=button aria-pressed=true>word</button>
+      <button id=srcprompt type=button aria-pressed=false>prompt</button>
+      <button id=srchere type=button aria-pressed=false>this chat</button>
+    </span>
+    <div id=srcfields>
+      <div data-src=word>
+        <label for=word>concept</label>
+        <input type=text id=word placeholder="a word or phrase">
+        <div class=hint>&ldquo;Tell me about {word}.&rdquo; minus the mean over 24 random words.</div>
+      </div>
+      <div data-src=prompt hidden>
+        <label for=xprompt>prompt to read the residual from</label>
+        <input type=text id=xprompt placeholder="any prompt">
+        <label for=xpos>position</label>
+        <input type=number id=xpos placeholder="blank = the last token">
+      </div>
+      <div data-src=here hidden>
+        <div class=hint id=herehint>Reads the live conversation's own last position &mdash; the move a single-shot console cannot make.</div>
+      </div>
+    </div>
+    <label for=slotname>slot name</label>
+    <div class=row><input type=text id=slotname placeholder="required"><button id=mk type=button disabled>make</button></div>
+    <div class=hint id=squeezed></div>
+  </div>
+
+  <div id=session>
+    <span class=grow id=sessionfacts>0 messages</span>
+    <button id=undo type=button disabled>undo</button>
+    <button id=clear type=button>clear</button>
+  </div>
+</div>
 <script>
 const $=id=>document.getElementById(id), log=$('log');
-let busy=false;
-const post=(path,body)=>fetch(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body||{})}).then(r=>r.json());
+let busy=false, S=null, lastSent='', src='word', pinned=null, spanFrom=null, allRows=[];
+const post=(path,body)=>fetch(path,{method:'POST',headers:{'content-type':'application/json'},
+  body:JSON.stringify(body||{})}).then(r=>r.json());
+const squeeze=s=>[...String(s).toLowerCase()].filter(c=>/[a-z0-9]/.test(c)).join('').slice(0,12);
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
-function paint(rows){
-  if(!rows||!rows.length) return '';
-  const d=document.createElement('div'); d.className='tokens';
-  for(const r of rows){
-    const s=document.createElement('span'); s.className='tok'; s.textContent=r.tok;
-    // saturation tracks how far the clean model was from choosing this token
-    const heat=Math.min(1,Math.log10(1+r.rank)/4.2);
-    // reasoning tokens are tinted blue, answer tokens red, so the two channels stay distinguishable
-    const rgb = r.phase==='thought' ? '90,200,250' : '255,107,90';
-    if(r.rank>0){ s.style.background=`rgba(${rgb},${0.10+0.62*heat})`; }
-    if(r.phase==='thought') s.style.opacity='.85';
+/* ---- painting -------------------------------------------------------------------------------
+   One ramp, one hue. Alpha is |delta logprob|, which is how much the intervention cost in nats;
+   the bottom border is the rank band, which is a different phenomenon (a coin flip the injection
+   won versus a confident model overruled) and worth seeing at the same time. The channel is the
+   block the tokens sit in, not the colour, so one legend describes the whole reply and heat is
+   comparable across the boundary -- which is the comparison the channel split exists to make. */
+function heat(d){ return Math.min(0.78, Math.abs(d||0)/6); }
+function bandpx(rank){ return rank===0?0 : rank<=10?1 : rank<=1000?2 : 3; }
+
+function painted(rows, from, to){
+  const wrap=document.createElement('div'); wrap.className='painted'; wrap.tabIndex=0;
+  for(let i=from;i<to;i++){
+    const r=rows[i], s=document.createElement('span');
+    s.className='tok'; s.textContent=r.tok; s.dataset.rank=r.rank; s.dataset.i=i;
+    if(/^\n+$/.test(r.tok)) s.dataset.ws='nl'; else if(/^ +$/.test(r.tok)) s.dataset.ws='sp';
+    if(r.rank>0){
+      const a=heat(r.d);
+      s.style.background=`rgba(var(--heat-rgb),${a})`;
+      if(a>=0.5) s.style.color='var(--heat-ink)';
+      s.style.borderBottomWidth=bandpx(r.rank)+'px';
+    }
     s.title = r.rank===0 ? 'the clean model wanted this too'
-      : `clean model wanted ${JSON.stringify(r.top)} — this token ranked ${r.rank.toLocaleString()}, Δlogprob ${r.d.toFixed(2)}`;
-    d.appendChild(s);
+      : `pos ${i} · ${JSON.stringify(r.tok)} · rank ${r.rank.toLocaleString()} · Δ ${r.d.toFixed(2)} · clean wanted ${JSON.stringify(r.top)}`;
+    s.onclick=e=>{ if(e.shiftKey&&pinned!==null) showSpan(rows,Math.min(pinned,i),Math.max(pinned,i));
+                   else pin(rows,i); };
+    wrap.appendChild(s);
   }
-  return d;
+  return wrap;
 }
-function turn(who,text,meta,rows,thought){
-  const w=document.createElement('div'); w.className='turn '+(who==='you'?'you':'');
-  w.innerHTML=`<div class=who>${who}</div><div class=body></div>`;
-  if(thought){
-    const t=document.createElement('div'); t.className='thought';
-    t.innerHTML='<div class=cap>reasoning &mdash; click to fold</div><div class=txt></div>';
-    t.querySelector('.txt').textContent=thought;
-    t.querySelector('.cap').onclick=()=>t.classList.toggle('folded');
-    w.insertBefore(t,w.querySelector('.body'));
+
+function channel(kind, rows, from, to, folded){
+  const box=document.createElement('div'); box.className='channel '+kind;
+  const changed=rows.slice(from,to).filter(r=>r.rank>0).length;
+  const head=document.createElement('div'); head.className='head';
+  head.innerHTML=`<span>${kind==='thought'?'reasoning':'answer'}</span>`;
+  if(kind==='thought'){
+    const b=document.createElement('button'); b.type='button';
+    b.setAttribute('aria-expanded', folded?'false':'true');
+    b.textContent=folded?'unfold':'fold';
+    b.onclick=()=>{const f=box.hasAttribute('data-folded');
+      if(f) box.removeAttribute('data-folded'); else box.setAttribute('data-folded','');
+      b.textContent=f?'fold':'unfold'; b.setAttribute('aria-expanded',String(f));};
+    head.appendChild(b);
   }
-  w.querySelector('.body').textContent=text;
-  if(meta){const m=document.createElement('div');m.className='meta';m.textContent=meta;w.appendChild(m);}
-  if(rows&&rows.length){const p=paint(rows); if(p) w.appendChild(p);}
-  log.appendChild(w); log.scrollTop=log.scrollHeight; return w;
+  const c=document.createElement('span'); c.className='count';
+  c.textContent = to>from ? `${changed}/${to-from} changed` : 'nothing generated';
+  head.appendChild(c);
+  box.appendChild(head);
+  box.appendChild(painted(rows,from,to));
+  if(folded) box.setAttribute('data-folded','');
+  return box;
 }
-function lock(on){busy=on;for(const b of ['send','ab','mk','undo','clear'])$(b).disabled=on;}
+
+/* Rows carry a channel tag; find the boundary so the two blocks split at the right token. */
+function split(rows){
+  let b=rows.length;
+  for(let i=0;i<rows.length;i++) if(rows[i].phase!=='thought'){ b=i; break; }
+  return b;
+}
+
+/* ---- the three meta lines -------------------------------------------------------------------- */
+function meta(r){
+  const d=r.desk||{}, h=r.hook||null, dl=document.createElement('dl'); dl.className='meta';
+  const add=(k,v,bad)=>{const dt=document.createElement('dt');dt.textContent=k;
+    const dd=document.createElement('dd'); dd.innerHTML=v; if(bad) dd.className='bad';
+    dl.appendChild(dt); dl.appendChild(dd);};
+  if(!d.live){
+    add('desk','clean — no vector armed');
+  }else{
+    let line=`<b>${esc(d.slot)}</b> ${d.percent}% at L${d.layer} · scope ${esc(d.scope)}`;
+    if(d.scope==='all') line+=' — the fader was calibrated at the last prompt token and applied at every position';
+    add('desk', line);
+    if(h) add('hook', h.applications===0
+      ? 'hook never fired — the intervention did not reach the model'
+      : `fired ${h.applications}× over ${h.positions_touched} position(s), from token ${h.from_position}, ${h.sustain?'sustained through decoding':'prefill only'}`,
+      h.applications===0);
+  }
+  const cap=S&&S.max_tokens?` · cap ${S.max_tokens}`:'';
+  add('run', `${r.emitted??'?'} tokens${cap} · ${(r.seconds??0).toFixed(1)} s · prompt ${r.prompt_tokens??'?'} tokens`);
+  const rows=r.tokens||[];
+  if(!rows.length){ add('divergence', d.live?'no replay — the reply was empty':'nothing to compare — the desk was clean'); }
+  else{
+    const b=split(rows), ch=rows.filter(x=>x.rank>0).length;
+    const worst=rows.reduce((a,x,i)=>Math.abs(x.d)>Math.abs(rows[a].d)?i:a,0);
+    const th=rows.slice(0,b).filter(x=>x.rank>0).length;
+    let line=`${ch} of ${rows.length} tokens changed (${Math.round(100*ch/rows.length)}%)`;
+    if(b>0&&b<rows.length) line+=` · reasoning ${th}/${b} · answer ${ch-th}/${rows.length-b}`;
+    line+=` · max |Δ| ${Math.abs(rows[worst].d).toFixed(2)} at pos ${worst}`;
+    add('divergence', line);
+  }
+  return dl;
+}
+
+/* ---- transcript ------------------------------------------------------------------------------ */
+function clearOrient(){ const o=$('orient'); if(o) o.remove(); }
+/* The browser has not laid the new turn out yet when it is appended, so setting scrollTop in the
+   same frame scrolls to the old height and the reply appears above the fold. */
+function toBottom(){ requestAnimationFrame(()=>{ log.scrollTop=log.scrollHeight; }); }
+
+function turn(who, text, cls){
+  clearOrient();
+  const w=document.createElement('div'); w.className='turn '+(cls||'');
+  if(cls&&cls.indexOf('receipt')>=0){ w.textContent=text; }
+  else{
+    w.innerHTML=`<div class=who>${esc(who)}</div><div class=body></div>`;
+    w.querySelector('.body').textContent=text;
+  }
+  log.appendChild(w); toBottom(); return w;
+}
+
+function modelTurn(r){
+  clearOrient();
+  const w=document.createElement('div'); w.className='turn';
+  w.innerHTML='<div class=who>model</div>';
+  const rows=r.tokens||[];
+  if(rows.length){
+    const b=split(rows);
+    if(b>0) w.appendChild(channel('thought',rows,0,b,false));
+    if(b<rows.length) w.appendChild(channel('answer',rows,b,rows.length,false));
+  }else{
+    if(r.thought){ const t=document.createElement('div'); t.className='channel thought';
+      t.innerHTML='<div class=head><span>reasoning</span></div>';
+      const p=document.createElement('div'); p.className='painted'; p.textContent=r.thought;
+      t.appendChild(p); w.appendChild(t); }
+    const a=document.createElement('div'); a.className='channel answer';
+    a.innerHTML='<div class=head><span>answer</span></div>';
+    const p=document.createElement('div'); p.className='painted';
+    p.textContent = r.reply || (r.truncated
+      ? `the ${S&&S.max_tokens?S.max_tokens:'token'}-token cap ran out inside the reasoning channel — turn reasoning off, or restart the server with --max-tokens ${S&&S.max_tokens?S.max_tokens*2:1024}`
+      : '(nothing)');
+    if(!r.reply) p.style.color='var(--hot)';
+    a.appendChild(p); w.appendChild(a);
+  }
+  w.appendChild(meta(r));
+  allRows=rows;
+  log.appendChild(w); toBottom();
+}
+
+function abCard(r){
+  clearOrient();
+  const w=document.createElement('div'); w.className='turn ab';
+  const cap=document.createElement('div'); cap.className='cap';
+  cap.textContent=`A/B — a probe on ${r.history} message(s) of history, nothing was added to the conversation`;
+  w.appendChild(cap);
+  const arms=document.createElement('div'); arms.className='arms';
+  const arm=(cls,title,thought,body,rows)=>{
+    const a=document.createElement('div'); a.className='arm '+cls;
+    a.innerHTML=`<h3>${title}</h3>`;
+    if(thought){ const t=document.createElement('div'); t.className='channel thought';
+      t.setAttribute('data-folded','');
+      t.innerHTML='<div class=head><span>reasoning</span></div>';
+      const b=document.createElement('button'); b.type='button'; b.textContent='unfold';
+      b.setAttribute('aria-expanded','false');
+      b.onclick=()=>{const f=t.hasAttribute('data-folded');
+        if(f)t.removeAttribute('data-folded'); else t.setAttribute('data-folded','');
+        b.textContent=f?'fold':'unfold'; b.setAttribute('aria-expanded',String(f));};
+      t.querySelector('.head').appendChild(b);
+      const p=document.createElement('div'); p.className='painted'; p.textContent=thought;
+      t.appendChild(p); a.appendChild(t); }
+    const c=document.createElement('div'); c.className='channel answer';
+    c.innerHTML='<div class=head><span>answer</span></div>';
+    if(rows&&rows.length){ const b=split(rows); c.appendChild(painted(rows,b,rows.length)); }
+    else{ const p=document.createElement('div'); p.className='painted'; p.textContent=body||'(nothing)'; c.appendChild(p); }
+    a.appendChild(c); return a;
+  };
+  arms.appendChild(arm('clean','A — clean',r.clean_thought,r.clean,null));
+  arms.appendChild(arm('steered','B — steered',r.steered_thought,r.steered,r.tokens));
+  w.appendChild(arms);
+  const foot=document.createElement('div'); foot.className='foot';
+  const v=document.createElement('div'); v.className='verdict';
+  const live=r.desk&&r.desk.live;
+  v.textContent = !r.same ? 'they differ — neither reply was added to the conversation'
+    : live ? 'identical output — neither reply was added to the conversation'
+    : 'the desk was clean in both arms — raise the fader and run A/B again';
+  if(r.same&&!live) v.style.color='var(--hot)';
+  foot.appendChild(v); foot.appendChild(meta(r));
+  w.appendChild(foot);
+  allRows=r.tokens||[];
+  log.appendChild(w); toBottom();
+}
+
+/* ---- inspector ------------------------------------------------------------------------------- */
+function pin(rows,i){
+  pinned=i; spanFrom=null;
+  for(const el of document.querySelectorAll('.tok.pinned')) el.classList.remove('pinned');
+  const el=[...document.querySelectorAll('.tok')].find(t=>+t.dataset.i===i&&t.closest('.turn')===log.lastElementChild);
+  if(el){ el.classList.add('pinned'); el.scrollIntoView({block:'nearest'}); }
+  const r=rows[i], b=split(rows);
+  const line = r.rank===0
+    ? `pos ${i} · ${JSON.stringify(r.tok)} · the clean model wanted this too · channel ${i<b?'reasoning':'answer'}`
+    : `pos ${i} · steered ${JSON.stringify(r.tok)} · clean wanted ${JSON.stringify(r.top)} · rank ${r.rank.toLocaleString()} · Δ ${r.d.toFixed(2)} nats · channel ${i<b?'reasoning':'answer'}`;
+  $('inspector').innerHTML=
+    `<span class=nav><button type=button id=iprev>‹ prev</button><button type=button id=inext>next ›</button></span>`
+    + esc(line) + `<br><span style="color:var(--dim)">← / → step to the next token the clean model did not want · Esc closes</span>`;
+  $('inspector').setAttribute('data-open','');
+  $('iprev').onclick=()=>step(rows,-1); $('inext').onclick=()=>step(rows,1);
+}
+function step(rows,dir){
+  let i=(pinned===null?(dir>0?-1:rows.length):pinned)+dir;
+  while(i>=0&&i<rows.length&&rows[i].rank===0) i+=dir;
+  if(i>=0&&i<rows.length) pin(rows,i);
+}
+function showSpan(rows,a,b){
+  const seg=rows.slice(a,b+1), ch=seg.filter(x=>x.rank>0);
+  const mean=ch.length?ch.reduce((s,x)=>s+Math.abs(x.d),0)/ch.length:0;
+  const worst=seg.reduce((m,x,i)=>Math.abs(x.d)>Math.abs(seg[m].d)?i:m,0);
+  $('inspector').innerHTML=esc(
+    `span ${a}–${b} · ${ch.length} of ${seg.length} changed (${Math.round(100*ch.length/seg.length)}%)`
+    + ` · mean |Δ| ${mean.toFixed(2)} · max ${Math.abs(seg[worst].d).toFixed(2)} at pos ${a+worst}`);
+  $('inspector').setAttribute('data-open','');
+}
+function closeInspector(){ $('inspector').removeAttribute('data-open'); pinned=null;
+  for(const el of document.querySelectorAll('.tok.pinned')) el.classList.remove('pinned');
+  $('msg').focus(); }
+
+/* ---- busy ------------------------------------------------------------------------------------ */
+const LOCKED=['send','ab','mk','cgo','undo','clear','layerdefault'];
+function lock(on,what){
+  busy=on;
+  for(const b of LOCKED){ const e=$(b); if(e) e.disabled=on; }
+  if(on) document.body.setAttribute('data-busy',''); else document.body.removeAttribute('data-busy');
+  $('activitytext').textContent = on ? (what||'working…') : 'idle';
+  if(!on) refreshButtons();
+}
+
+/* ---- state ----------------------------------------------------------------------------------- */
+function armedText(){
+  const d=S.desk, box=$('armed');
+  if(!d.slot){ box.className='clean'; box.textContent='running clean — arm a vector in the rack'; return; }
+  if(!d.live){
+    box.className='clean';
+    box.innerHTML=`<b>${esc(d.slot)}</b> is armed but the fader is at 0 — <b>muted</b>, the next reply will be clean`;
+    return;
+  }
+  box.className='live';
+  box.innerHTML=`steering with <b>${esc(d.slot)}</b> at <b>${d.percent}%</b> of the residual at <b>L${d.layer}</b>, over ${esc(scopeWords(d.scope))}`;
+}
+function scopeWords(s){ return {turn:'your message',reply:'the reply as it is written',
+  both:'your message and the reply',all:'the whole context'}[s]||s; }
+
+function faderLook(){
+  const v=+$('fader').value;
+  $('pct').textContent=v;
+  $('readingwrap').className='reading'+(v>150?' hotband':'');
+  $('faderband').textContent = v===0 ? '0 is clean — the vector stays in the rack'
+    : v>150 ? 'repetition-loop territory — above ~150% this model stops producing steered text'
+    : (v>=25&&v<=75) ? '25–75% is the usual working band'
+    : v<25 ? 'below 25% the forward pass is untouched and the reply is usually unchanged'
+    : 'between 75% and 150% the reply degrades before it steers';
+}
+
+function refreshButtons(){
+  if(busy) return;
+  const named=$('slotname').value.trim().length>0;
+  const has = src==='word' ? $('word').value.trim() : src==='prompt' ? $('xprompt').value.trim() : (S&&S.history>0);
+  $('mk').disabled=!(named&&has);
+  const op=$('cop').value, same=$('cl').value===$('cr').value&&op!=='x';
+  $('cgo').disabled=!$('cinto').value.trim()||same||!$('cl').value;
+  $('chint').dataset.warn = same?'1':'';
+  $('send').disabled=!$('msg').value.trim();
+  $('ab').disabled=!S||S.history<1;
+  $('undo').disabled=!S||S.history<2;
+}
+
 async function refresh(){
-  const s=await fetch('/state').then(r=>r.json());
-  const names=s.detail.map(d=>d.name);
-  $('slot').innerHTML='<option value="">(none)</option>'+names.map(x=>`<option${x===s.desk.slot?' selected':''}>${x}</option>`).join('');
-  const keep=(el,v)=>{el.innerHTML=names.map(x=>`<option>${x}</option>`).join(''); if(names.includes(v)) el.value=v;};
-  keep($('cl'),$('cl').value); keep($('cr'),$('cr').value);
-  $('rack').innerHTML = s.detail.length ? s.detail.map(d=>
-     `<div class=slotrow><span class=pill>${d.name}</span> <span class=sdim>${d.kind} L${d.layer} · |v| ${Math.round(d.norm).toLocaleString()}</span>`
-     + `<button class=x data-slot="${d.name}" title="drop">&times;</button></div>`).join('')
-     : '<div class=sdim>none yet — build a concept or extract one</div>';
-  for(const b of document.querySelectorAll('.x')) b.onclick=async e=>{
-     await post('/drop',{slot:e.target.dataset.slot}); refresh();};
+  S=await fetch('/state').then(r=>r.json());
+  const s=S;
+  $('runfacts').textContent=`${s.model} · ${s.layers} layers · hidden ${s.hidden} · ${s.device} ${String(s.dtype).replace('torch.','')} · cap ${s.max_tokens??'?'} tok`;
+  const lg=s.log||{};
+  $('logfacts').innerHTML = lg.enabled
+    ? `<span title="${esc(lg.path||'')}">recording ${esc((lg.path||'').split('/').slice(-2).join('/'))}</span>`
+    : '<span class=bad>NOT RECORDING</span>';
   $('think').checked=!!s.thinking; $('think').disabled=!s.supports_thinking;
-  if(!s.supports_thinking) $('thinthint').textContent='this model has no reasoning channel';
-  $('state').textContent=`${s.model}\\n${s.layers} layers · hidden ${s.hidden}\\ntwo-thirds depth ≈ L${Math.round(s.layers*2/3)}\\n${s.history} message(s)`;
+  $('thinwhy').textContent = s.supports_thinking?'':'(this model has no reasoning channel)';
+
+  $('layer').max=s.layers;
+  if(!$('layer').dataset.touched) $('layer').value = s.desk.layer || Math.round(s.layers*2/3);
+  $('layerof').textContent=`of ${s.layers} · two-thirds is L${Math.round(s.layers*2/3)}`;
+  if(document.activeElement!==$('fader')) $('fader').value=s.desk.percent??0;
+  $('scope').value=s.desk.scope||'turn';
+  faderLook(); armedText();
+
+  const names=s.detail.map(d=>d.name);
+  $('racklist').innerHTML = s.detail.length ? s.detail.map(d=>{
+    const prov = d.kind==='concept' ? `concept &ldquo;${esc(d.word||d.name)}&rdquo;`
+      : d.kind==='from chat' ? `residual from the live chat, position ${d.position}`
+      : d.prompt ? `residual at position ${d.position} of &ldquo;${esc(String(d.prompt).slice(0,60))}&rdquo;`
+      : esc(d.kind);
+    return `<div class="slotrow${d.name===s.desk.slot?' armed':''}">`
+      + `<button class=arm type=button data-arm="${esc(d.name)}">${d.name===s.desk.slot?'armed':'arm'}</button>`
+      + `<span><span class=name>${esc(d.name)}</span><div class=prov>${prov} &middot; read at L${d.layer} &middot; |v| ${Math.round(d.norm).toLocaleString()}</div></span>`
+      + `<button class=x type=button data-drop="${esc(d.name)}" title="drop">&times;</button></div>`;
+  }).join('') : '<div class=hint>no vectors yet — build a concept or extract one below</div>';
+  for(const b of document.querySelectorAll('[data-arm]'))
+    b.onclick=async e=>{ const n=e.target.dataset.arm;
+      await post('/desk',{slot:n===s.desk.slot?null:n,layer:+$('layer').value,
+        percent:+$('fader').value,scope:$('scope').value}); refresh(); };
+  for(const b of document.querySelectorAll('[data-drop]'))
+    b.onclick=async e=>{ await post('/drop',{slot:e.target.dataset.drop}); refresh(); };
+
+  const keep=(el,v,fallback)=>{ el.innerHTML=names.map(x=>`<option>${esc(x)}</option>`).join('');
+    if(names.includes(v)) el.value=v; else if(fallback&&names.length>1) el.value=names[1];
+    else if(names.length) el.value=names[0]; };
+  keep($('cl'), s.desk.slot||$('cl').value);
+  keep($('cr'), $('cr').value===$('cl').value?null:$('cr').value, true);
+  $('herehint').textContent=`Reads the live conversation's own last position (${s.history} message(s)) — the move a single-shot console cannot make.`;
+  const onscreen=log.querySelectorAll('.turn:not(.receipt):not(.ab)').length;
+  $('sessionfacts').textContent=`${s.history} message(s) · ${onscreen} on screen`;
+  $('chiptag').className='tag'+(s.desk.live?' live':'');
+  $('chiptag').textContent = s.desk.live
+    ? `${s.desk.slot} ${s.desk.percent}% L${s.desk.layer} ${s.desk.scope}`
+    : s.desk.slot ? `${s.desk.slot} muted` : 'running clean';
+  refreshButtons();
 }
-async function sync(){
-  await post('/desk',{slot:$('slot').value||null,layer:+$('layer').value,percent:+$('fader').value,scope:$('scope').value});
+
+/* ---- the desk, debounced so a drag is not thirty POSTs at the generation's lock --------------- */
+let deskTimer=null;
+function syncDesk(now){
+  clearTimeout(deskTimer);
+  const fire=async()=>{ await post('/desk',{layer:+$('layer').value,percent:+$('fader').value,
+    scope:$('scope').value}); refresh(); };
+  if(now) fire(); else deskTimer=setTimeout(fire,140);
 }
-$('fader').oninput=()=>{$('pct').textContent=$('fader').value; sync();};
-for(const id of ['slot','layer','scope']) $(id).onchange=sync;
-$('think').onchange=async()=>{const r=await post('/thinking',{on:$('think').checked});
-  turn('desk','reasoning '+($('think').checked?'on':'off')); refresh();};
-$('f').onsubmit=async e=>{
+$('fader').oninput=()=>{faderLook(); syncDesk(false);};
+$('fader').onchange=()=>syncDesk(true);
+$('layer').oninput=()=>{$('layer').dataset.touched='1'; syncDesk(false);};
+$('scope').onchange=()=>syncDesk(true);
+$('layerdefault').onclick=()=>{ $('layer').value=Math.round(S.layers*2/3);
+  $('layer').dataset.touched='1'; syncDesk(true); };
+$('think').onchange=async()=>{ await post('/thinking',{on:$('think').checked});
+  turn('','reasoning channel '+($('think').checked?'on':'off'),'receipt'); refresh(); };
+
+/* ---- sending --------------------------------------------------------------------------------- */
+$('composer').onsubmit=async e=>{
   e.preventDefault(); if(busy) return;
   const text=$('msg').value.trim(); if(!text) return;
-  $('msg').value=''; turn('you',text); lock(true);
-  try{const r=await post('/say',{text});
-       turn('model',r.reply||(r.thought?'(the token cap cut the thought off before the answer)':''),
-            r.note,r.tokens,r.thought);}
-  catch(err){turn('error',String(err));} finally{lock(false); refresh();}
+  lastSent=text; $('msg').value=''; grow(); turn('you',text,'you'); lock(true,'generating…');
+  try{ const r=await post('/say',{text});
+       if(r.error) turn('','error: '+r.error,'receipt bad'); else modelTurn(r); }
+  catch(err){ turn('','error: '+String(err),'receipt bad'); }
+  finally{ lock(false); refresh(); }
 };
 $('ab').onclick=async()=>{
-  if(busy) return; lock(true);
-  try{
-    const r=await post('/ab',{});
-    if(r.error){turn('error',r.error);}
-    else{ turn('A — clean',r.clean,`on ${r.history} message(s) of history`,null,r.clean_thought);
-          turn('B — steered',r.steered,r.note,r.tokens,r.steered_thought);
-          turn('','',r.same?'identical — the desk changed nothing':'they differ'); }
-  }catch(err){turn('error',String(err));} finally{lock(false);}
+  if(busy) return; lock(true,'running both arms…');
+  try{ const r=await post('/ab',{});
+       if(r.error) turn('','error: '+r.error,'receipt bad'); else abCard(r); }
+  catch(err){ turn('','error: '+String(err),'receipt bad'); }
+  finally{ lock(false); refresh(); }
 };
+
+/* ---- the maker ------------------------------------------------------------------------------- */
+function setSrc(which){
+  src=which;
+  for(const [id,k] of [['srcword','word'],['srcprompt','prompt'],['srchere','here']])
+    $(id).setAttribute('aria-pressed', String(k===which));
+  for(const d of document.querySelectorAll('#srcfields [data-src]')) d.hidden = d.dataset.src!==which;
+  refreshButtons();
+}
+$('srcword').onclick=()=>setSrc('word');
+$('srcprompt').onclick=()=>setSrc('prompt');
+$('srchere').onclick=()=>setSrc('here');
+$('word').oninput=()=>{ if(!$('slotname').dataset.touched) $('slotname').value=squeeze($('word').value);
+  showSqueeze(); refreshButtons(); };
+$('xprompt').oninput=refreshButtons;
+$('slotname').oninput=()=>{ $('slotname').dataset.touched='1'; showSqueeze(); refreshButtons(); };
+function showSqueeze(){
+  const raw=$('slotname').value.trim(), sq=squeeze(raw);
+  $('squeezed').textContent = raw&&sq!==raw ? `will be filed as: ${sq}` : '';
+}
 $('mk').onclick=async()=>{
-  const w=$('word').value.trim(); if(!w||busy) return; lock(true);
-  try{const r=await post('/concept',{word:w,layer:+$('layer').value}); turn('desk',r.note);}
-  catch(err){turn('error',String(err));} finally{lock(false); refresh();}
+  if(busy) return;
+  const slot=squeeze($('slotname').value); if(!slot) return;
+  lock(true,'building the vector…');
+  try{
+    let r;
+    if(src==='word') r=await post('/concept',{word:$('word').value.trim(),layer:+$('layer').value});
+    else if(src==='prompt') r=await post('/extract',{slot,prompt:$('xprompt').value.trim(),
+      layer:+$('layer').value, pos:$('xpos').value===''?null:+$('xpos').value});
+    else r=await post('/extract_here',{slot,layer:+$('layer').value});
+    turn('', r.note||('error: '+r.error), r.error?'receipt bad':'receipt');
+    if(!r.error){ $('word').value=''; $('xprompt').value=''; $('slotname').value='';
+      delete $('slotname').dataset.touched; showSqueeze(); }
+  }catch(err){ turn('','error: '+String(err),'receipt bad'); }
+  finally{ lock(false); refresh(); }
 };
-$('xgo').onclick=async()=>{
-  const prompt=$('xprompt').value.trim(), slot=$('xslot').value.trim();
-  if(!prompt||!slot||busy) return; lock(true);
-  try{const r=await post('/extract',{slot,prompt,layer:+$('layer').value,
-       pos:$('xpos').value===''?null:+$('xpos').value});
-      turn('desk',r.note||r.error);}
-  catch(err){turn('error',String(err));} finally{lock(false); refresh();}
-};
-$('xhere').onclick=async()=>{
-  const slot=$('xslot').value.trim(); if(!slot||busy) return; lock(true);
-  try{const r=await post('/extract_here',{slot,layer:+$('layer').value});
-      turn('desk',r.note||r.error);}
-  catch(err){turn('error',String(err));} finally{lock(false); refresh();}
-};
+
+$('cop').onchange=()=>{ const scale=$('cop').value==='x';
+  $('cr').hidden=scale; $('cfactor').hidden=!scale;
+  $('chint').textContent = scale
+    ? 'Scaling does not change a steered run — the fader rescales to per cent of the residual either way. × only changes the number in the rack.'
+    : 'A difference of two states the model produced is a direction in the model’s own units — no contrastive frame, no magnitude convention. Try “I am cheerful” minus “I am despairing”.';
+  refreshButtons(); };
+for(const id of ['cl','cr','cinto']) $(id).oninput=$(id).onchange=refreshButtons;
 $('cgo').onclick=async()=>{
-  const into=$('cinto').value.trim(); if(!into||busy) return; lock(true);
-  const op=$('cop').value==='\u00d7'?'x':$('cop').value;
-  try{const r=await post('/combine',{into,left:$('cl').value,right:$('cr').value,op,weight:2});
-      turn('desk',r.note||r.error);}
-  catch(err){turn('error',String(err));} finally{lock(false); refresh();}
+  if(busy) return; lock(true,'combining…');
+  try{ const r=await post('/combine',{into:squeeze($('cinto').value),left:$('cl').value,
+        right:$('cr').value,op:$('cop').value,weight:+$('cfactor').value||2});
+       turn('', r.note||('error: '+r.error), r.error?'receipt bad':'receipt');
+       if(!r.error) $('cinto').value=''; }
+  catch(err){ turn('','error: '+String(err),'receipt bad'); }
+  finally{ lock(false); refresh(); }
 };
-$('undo').onclick=async()=>{await post('/undo',{}); turn('desk','rolled back one exchange'); refresh();};
-$('clear').onclick=async()=>{await post('/clear',{}); log.innerHTML=''; refresh();};
-refresh();
+
+/* ---- session --------------------------------------------------------------------------------- */
+$('undo').onclick=async()=>{
+  const r=await post('/undo',{});
+  if(r.error){ turn('','error: '+r.error,'receipt bad'); return; }
+  const turns=[...log.querySelectorAll('.turn:not(.receipt)')];
+  for(const t of turns.slice(-2)) t.remove();
+  turn('',`rolled back — ${r.history} message(s) left`,'receipt'); refresh();
+};
+$('clear').onclick=async()=>{ await post('/clear',{}); log.innerHTML=''; allRows=[];
+  closeInspector(); refresh(); };
+
+/* ---- stage head ------------------------------------------------------------------------------ */
+function setPaint(mode){
+  document.body.dataset.paint=mode;
+  $('paintprose').setAttribute('aria-pressed',String(mode==='prose'));
+  $('paintrank').setAttribute('aria-pressed',String(mode==='rank'));
+}
+$('paintprose').onclick=()=>setPaint('prose');
+$('paintrank').onclick=()=>setPaint('rank');
+$('onlychanged').onchange=()=>{ if($('onlychanged').checked) document.body.setAttribute('data-only-changed','');
+  else document.body.removeAttribute('data-only-changed'); };
+$('benchtoggle').onclick=()=>{ const hid=document.body.dataset.bench==='hidden';
+  document.body.dataset.bench=hid?'':'hidden'; $('benchtoggle').textContent=hid?'hide bench':'show bench'; };
+$('legend').innerHTML =
+  '<span>Δ</span>' + [0,0.17,0.33,0.67,0.78].map((a,i)=>
+    `<span class=swatch style="background:rgba(var(--heat-rgb),${a})"></span>`).join('')
+  + '<span>0 · 1 · 2 · 4 · 8 nats</span>'
+  + '<span style="margin-left:10px">rank</span>'
+  + [1,2,3].map(px=>`<span class=swatch style="background:none;border-bottom:${px}px solid var(--dim)"></span>`).join('')
+  + '<span>1–10 · 11–1k · &gt;1k</span>';
+
+/* ---- keyboard -------------------------------------------------------------------------------- */
+function grow(){ const t=$('msg'); t.style.height='auto'; t.style.height=Math.min(t.scrollHeight,window.innerHeight*0.3)+'px'; }
+$('msg').oninput=()=>{grow(); refreshButtons();};
+$('msg').onkeydown=e=>{
+  if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); $('composer').requestSubmit(); }
+  else if(e.key==='ArrowUp'&&!$('msg').value&&lastSent){ e.preventDefault(); $('msg').value=lastSent; grow(); refreshButtons(); }
+};
+for(const id of ['word','xprompt','slotname']) $(id).onkeydown=e=>{ if(e.key==='Enter'){e.preventDefault(); if(!$('mk').disabled) $('mk').click();} };
+$('cinto').onkeydown=e=>{ if(e.key==='Enter'){e.preventDefault(); if(!$('cgo').disabled) $('cgo').click();} };
+document.addEventListener('keydown',e=>{
+  const typing=/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+  if(e.key==='Escape'){ closeInspector(); return; }
+  if((e.metaKey||e.ctrlKey)&&e.key==='\\'){ e.preventDefault(); $('benchtoggle').click(); return; }
+  if(typing) return;
+  if(e.key==='/'){ e.preventDefault(); $('msg').focus(); }
+  else if(e.key==='\\'){ e.preventDefault();
+    const v=+$('fader').value; $('fader').dataset.was = v>0?v:($('fader').dataset.was||40);
+    $('fader').value = v>0 ? 0 : +$('fader').dataset.was; faderLook(); syncDesk(true); }
+  else if(e.key==='['||e.key===']'){ e.preventDefault();
+    const d=(e.key===']'?1:-1)*(e.shiftKey?25:5);
+    $('fader').value=Math.max(0,Math.min(250,+$('fader').value+d)); faderLook(); syncDesk(true); }
+  else if((e.key==='ArrowLeft'||e.key==='ArrowRight')&&$('inspector').hasAttribute('data-open')){
+    e.preventDefault(); step(allRows, e.key==='ArrowRight'?1:-1); }
+  else if((e.metaKey||e.ctrlKey)&&e.key==='z'){ e.preventDefault(); if(!$('undo').disabled) $('undo').click(); }
+});
+
+setPaint('rank'); setSrc('word'); grow(); refresh();
 </script>
 """
+
+
+def _model_name(path: str) -> str:
+    """The model's name out of a hub path, rather than the snapshot hash the path ends with.
+
+    A hub snapshot lives at ``models--google--gemma-4-31b-it/snapshots/<40 hex>``, so the last path
+    component is a hash. The name is in the ``models--`` directory.
+    """
+    for part in reversed(str(path).split("/")):
+        if part.startswith("models--"):
+            return part.split("--")[-1]
+    return str(path).split("/")[-1] or "model"
 
 
 class Service:
@@ -256,14 +840,23 @@ class Service:
 
     def state(self) -> dict:
         c = self.chat
-        return {"model": c.model.config._name_or_path.split("/")[-1] if hasattr(c.model.config, "_name_or_path") else "model",
+        return {"model": _model_name(getattr(c.model.config, "_name_or_path", "")),
                 "layers": c.view.num_layers, "hidden": c.view.hidden_size,
+                "device": str(c.device), "dtype": str(next(c.model.parameters()).dtype),
+                "max_tokens": self.max_tokens,
+                "log": {"path": str(self.log_path) if self.log_path else None,
+                        "enabled": self.log_path is not None},
                 "history": len(c.history), "slots": sorted(c.slots),
                 "thinking": c.thinking, "supports_thinking": c.supports_thinking,
-                "detail": [{"name": n, "kind": e["kind"], "layer": e["layer"],
-                            "norm": e["norm"]} for n, e in sorted(c.slots.items())],
+                # The rack shows where a vector came from, not only how long it is: a residual and
+                # a concept of the same norm steer differently and a slot name does not say which.
+                "detail": [{"name": n, "kind": e["kind"], "layer": e["layer"], "norm": e["norm"],
+                            "word": e.get("word"), "prompt": e.get("prompt"),
+                            "position": e.get("position")}
+                           for n, e in sorted(c.slots.items())],
                 "desk": {"slot": c.desk.slot, "layer": c.desk.layer,
-                         "percent": c.desk.percent, "scope": c.desk.scope}}
+                         "percent": c.desk.percent, "scope": c.desk.scope,
+                         "live": c.desk.live}}
 
     def set_desk(self, body: dict) -> dict:
         desk = self.chat.desk
@@ -317,13 +910,26 @@ class Service:
                 phase = "answer"
         return out
 
+    def desk_snapshot(self) -> dict:
+        """What the desk was when a run STARTED.
+
+        `set_desk` does not take the lock, so the fader can move while a reply is generating. Read
+        after the fact, a reply that was steered comes back described as clean and loses its token
+        strip, and the transcript records the percentage the user happened to land on rather than
+        the one that ran.
+        """
+        d = self.chat.desk
+        return {"slot": d.slot, "layer": d.layer, "percent": d.percent,
+                "scope": d.scope, "live": d.live, "label": d.label()}
+
     def say(self, text: str) -> dict:
         with self.lock:
             chat = self.chat
+            desk = self.desk_snapshot()
             messages = chat.history + [{"role": "user", "content": text}]
-            reply, emitted, prompt_ids, note, seconds = chat.speak(messages, self.max_tokens)
+            reply, emitted, prompt_ids, note, seconds, hook = chat.speak(messages, self.max_tokens)
             chat.last_turn = {"prompt_ids": prompt_ids, "emitted": emitted}
-            rows = self._token_rows(prompt_ids, emitted, reply) if chat.desk.live else []
+            rows = self._token_rows(prompt_ids, emitted, reply) if desk["live"] else []
             chat.history = messages + [{"role": "assistant", "content": reply}]
             changed = sum(1 for r in rows if r["rank"])
             summary = f"{note} · {len(emitted)} tok · {seconds:.1f}s"
@@ -340,13 +946,18 @@ class Service:
                 else:
                     summary += ", answer not reached (the token cap cut the thought off)"
             self.record("turn", user=text, thought=thought, reply=answer, note=summary,
+                        desk=desk, hook=hook.report() if hook else None,
                         changed=changed, total=len(rows), seconds=seconds, tokens=rows)
             return {"reply": answer.strip(), "thought": thought.strip(),
-                    "note": summary, "tokens": rows}
+                    "note": summary, "tokens": rows, "desk": desk,
+                    "hook": hook.report() if hook else None,
+                    "seconds": seconds, "emitted": len(emitted),
+                    "prompt_tokens": len(prompt_ids), "truncated": bool(thought) and not answer}
 
     def ab(self) -> dict:
         with self.lock:
             chat = self.chat
+            desk = self.desk_snapshot()
             base, text = list(chat.history), None
             for index in range(len(base) - 1, -1, -1):
                 if base[index]["role"] == "user":
@@ -355,20 +966,56 @@ class Service:
             if text is None:
                 return {"error": "nothing to re-run — say something first"}
             messages = base + [{"role": "user", "content": text}]
-            clean, _a, _b, _c, _d = chat.speak(messages, self.max_tokens, steered=False)
-            steered, emitted, prompt_ids, note, _g = chat.speak(messages, self.max_tokens,
-                                                                steered=True)
-            rows = self._token_rows(prompt_ids, emitted, steered) if chat.desk.live else []
+            clean, *_a = chat.speak(messages, self.max_tokens, steered=False)
+            steered, emitted, prompt_ids, note, seconds, hook = chat.speak(
+                messages, self.max_tokens, steered=True)
+            rows = self._token_rows(prompt_ids, emitted, steered) if desk["live"] else []
             clean_thought, clean_answer = split_thought(clean)
             steered_thought, steered_answer = split_thought(steered)
             result = {"clean": clean_answer.strip(), "steered": steered_answer.strip(),
                       "clean_thought": clean_thought.strip(),
                       "steered_thought": steered_thought.strip(), "note": note,
-                      "history": len(base), "tokens": rows,
+                      "history": len(base), "tokens": rows, "desk": desk,
+                      "hook": hook.report() if hook else None, "seconds": seconds,
+                      "emitted": len(emitted), "prompt_tokens": len(prompt_ids),
+                      # Neither arm is committed. A/B is a probe, and the page has to say so.
+                      "committed": False,
                       "same": clean.strip() == steered.strip()}
             self.record("ab", user=text, **{k: v for k, v in result.items() if k != "tokens"},
                         tokens=rows)
             return result
+
+    def drop(self, slot: str) -> dict:
+        """Forget a vector, and disarm the desk if that is the vector it was pointing at.
+
+        Dropping the armed slot used to leave `desk.slot` naming a key that no longer exists, and
+        the next message died in `build_injection` on the lookup.
+        """
+        with self.lock:
+            self.chat.slots.pop(slot, None)
+            if self.chat.desk.slot == slot:
+                self.chat.desk.slot = None
+            return self.state()
+
+    def set_thinking(self, on: bool) -> dict:
+        with self.lock:
+            self.chat.thinking = on
+            return self.state()
+
+    def undo(self) -> dict:
+        with self.lock:
+            # history[:-2] on a one-message history empties it; say so rather than doing it.
+            if len(self.chat.history) < 2:
+                return dict(self.state(), error="nothing to roll back yet")
+            self.chat.history = self.chat.history[:-2]
+            self.chat.last_turn = None
+            return self.state()
+
+    def clear(self) -> dict:
+        with self.lock:
+            self.chat.history = []
+            self.chat.last_turn = None
+            return self.state()
 
     def _captured(self, call) -> str:
         import contextlib
@@ -402,9 +1049,11 @@ class Service:
                                 "norm": float(vector.norm()),
                                 "position": len(ids) - 1,
                                 "prompt": f"<live conversation, {len(chat.history)} message(s)>"}
-            return {"slot": slot,
-                    "note": f"{slot}: residual at L{layer} from the live conversation "
-                            f"(position {len(ids) - 1}), norm {float(vector.norm()):,.0f}"}
+            note = (f"{slot}: residual at L{layer} from the live conversation "
+                    f"(position {len(ids) - 1}), norm {float(vector.norm()):,.0f}")
+            self.record("extract_here", slot=slot, layer=layer, position=len(ids) - 1,
+                        history=len(chat.history), norm=float(vector.norm()), note=note)
+            return {"slot": slot, "note": note}
 
     def combine(self, into: str, left: str, right: str | None, op: str, weight: float) -> dict:
         """Build a vector out of other vectors: a difference, a sum, or a scaling.
@@ -433,6 +1082,9 @@ class Service:
             else:
                 vector = a["vector"] * weight
                 kind = f"{left} x {weight:g}"
+            if float(vector.norm()) < 1e-6:
+                return {"error": f"'{into}' would be the zero vector — a direction of length zero "
+                                 "cannot steer, and the fader would divide by it"}
             slots[into] = {"vector": vector, "layer": a["layer"], "kind": kind,
                            "norm": float(vector.norm()), "prompt": kind}
             share = float(vector.norm()) / max(float(a["vector"].norm()), 1e-9)
@@ -445,6 +1097,13 @@ class Service:
     def concept(self, word: str, layer: int) -> dict:
         with self.lock:
             slot = "".join(ch for ch in word.lower() if ch.isalnum())[:12] or "concept"
+            # The squeeze is lossy: `self-awareness` and `self awareness` file under one name, so
+            # the second silently replaced the first after spending twenty-five forward passes on
+            # it. Refuse instead, and say what is in the way.
+            if slot in self.chat.slots:
+                held = self.chat.slots[slot]
+                return {"error": f"slot '{slot}' already holds {held['kind']} at L{held['layer']} "
+                                 f"— drop it first, or use a different word"}
             import io
             import contextlib
 
@@ -495,19 +1154,15 @@ def handler_for(service: Service):
                                                body.get("right"), body.get("op", "-"),
                                                float(body.get("weight", 1.0))))
                 elif self.path == "/drop":
-                    service.chat.slots.pop(body.get("slot", ""), None)
-                    self._send(service.state())
+                    self._send(service.drop(body.get("slot", "")))
                 elif self.path == "/concept":
                     self._send(service.concept(body.get("word", ""), int(body.get("layer", 1))))
                 elif self.path == "/thinking":
-                    service.chat.thinking = bool(body.get("on"))
-                    self._send(service.state())
+                    self._send(service.set_thinking(bool(body.get("on"))))
                 elif self.path == "/undo":
-                    service.chat.history = service.chat.history[:-2]
-                    self._send(service.state())
+                    self._send(service.undo())
                 elif self.path == "/clear":
-                    service.chat.history = []
-                    self._send(service.state())
+                    self._send(service.clear())
                 else:
                     self._send({"error": "no such endpoint"}, status=404)
             except Exception as exc:

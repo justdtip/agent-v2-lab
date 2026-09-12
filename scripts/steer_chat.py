@@ -181,7 +181,10 @@ class Chat(Console):
         entry = self.slots[self.desk.slot]
         layer = self.desk.layer
         start, end = span
-        site = end - 1 if self.desk.scope in {"turn", "both"} else end - 1
+        # The fader is calibrated at the last prompt token whatever the scope covers. For scope
+        # "all" that means one position's norm sets the size of a perturbation applied over the
+        # whole context, which the note says out loud rather than leaving implicit.
+        site = end - 1
         if self.desk.scope == "all":
             start = 0
         here = float(self.residual_at(ids, layer, site).norm())
@@ -190,6 +193,10 @@ class Chat(Console):
         # `end` is the length of the rendered prompt, so `end - 1` is its LAST token and `end` is
         # the first token the model generates. `reply` scope means the reply, so it starts at `end`.
         from_position = end if self.desk.scope == "reply" else start
+        if layer != entry["layer"]:
+            note = (f"{self.desk.slot} was read at L{entry['layer']} and is being injected at "
+                    f"L{layer} — a residual from one layer is not a direction at another")
+            print(f"    ! {note}")
         hook = Injection(self.view.blocks[layer - 1], entry["vector"], scale=scale,
                          from_position=from_position, sustain=sustain)
         note = (f"{self.desk.slot} {self.desk.percent:g}% of |h|={here:,.0f} (read at the last "
@@ -208,7 +215,11 @@ class Chat(Console):
         else:
             with hook:
                 emitted = self.generate_tokens(ids, max_tokens)
-        return (self.tokenizer.decode(emitted), emitted, ids, note, time.time() - started)
+        # The hook comes back so a caller can say whether it actually fired. It counts its own
+        # applications, and a hook that never fired is a clean reply that the desk still describes
+        # as steered -- which reads as "this vector has no effect", a research conclusion rather
+        # than a UI state.
+        return (self.tokenizer.decode(emitted), emitted, ids, note, time.time() - started, hook)
 
     def generate_tokens(self, ids: list[int], max_tokens: int) -> list[int]:
         from transformers import DynamicCache
@@ -260,7 +271,7 @@ class Chat(Console):
     # -- commands ------------------------------------------------------------------------------
     def do_message(self, text: str, max_tokens: int, *, commit: bool = True) -> None:
         messages = self.history + [{"role": "user", "content": text}]
-        reply, emitted, _ids, note, seconds = self.speak(messages, max_tokens)
+        reply, emitted, _ids, note, seconds, _hook = self.speak(messages, max_tokens)
         print(f"\n{reply.strip() or '(nothing)'}")
         mark = "·" if not self.desk.live else "↯"
         print(f"    {mark} {note} · {len(emitted)} tok · {seconds:.1f}s")
@@ -287,8 +298,8 @@ class Chat(Console):
         if text is None:
             print("nothing to re-run"); return
         messages = base + [{"role": "user", "content": text}]
-        clean, _ce, _ci, _cn, _cs = self.speak(messages, max_tokens, steered=False)
-        steered, _se, _si, note, _ss = self.speak(messages, max_tokens, steered=True)
+        clean, *_c = self.speak(messages, max_tokens, steered=False)
+        steered, *_s, note, _ss, _sh = self.speak(messages, max_tokens, steered=True)
         print(f"\n  on {len(base)} message(s) of history, both arms identical up to the desk")
         print(f"\n  A  clean\n     {clean.strip() or '(nothing)'}")
         print(f"\n  B  {note}\n     {steered.strip() or '(nothing)'}")
