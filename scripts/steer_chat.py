@@ -56,9 +56,26 @@ THOUGHT_OPEN = "<|channel>thought"
 THOUGHT_CLOSE = "<channel|>"
 
 
+def opens_thought(text: str) -> bool:
+    """Whether this reply begins inside the reasoning channel.
+
+    Either marker is enough. The template usually opens the channel in the prompt, so only the
+    close comes back in the reply; but the model sometimes writes the open itself, and a reply cut
+    off by the token cap carries the open and no close at all.
+    """
+    return THOUGHT_OPEN in text or THOUGHT_CLOSE in text
+
+
 def split_thought(text: str) -> tuple[str, str]:
-    """Separate reasoning from answer. Returns (thought, answer); thought is '' when there is none."""
+    """Separate reasoning from answer. Returns (thought, answer); thought is '' when there is none.
+
+    A reply that opens the channel and never closes it is a thought the token cap cut off, not an
+    answer: returning it as the answer would print the raw channel marker as if the model had said
+    it, and would count every reasoning token as an answer token.
+    """
     if THOUGHT_CLOSE not in text:
+        if THOUGHT_OPEN in text:
+            return text.partition(THOUGHT_OPEN)[2].strip("\n"), ""
         return "", text
     head, _, tail = text.partition(THOUGHT_CLOSE)
     if THOUGHT_OPEN in head:
@@ -77,7 +94,12 @@ class Desk:
 
     @property
     def live(self) -> bool:
-        return self.slot is not None
+        """A fader at zero is clean whatever is patched into it -- but the patch stays visible.
+
+        Zeroing the slot instead would leave the rack and the fader disagreeing with the run: the
+        desk would read `paris 120%` while every reply came out clean.
+        """
+        return self.slot is not None and self.percent > 0
 
     def label(self) -> str:
         if not self.live:
@@ -91,16 +113,29 @@ class Chat(Console):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.history: list[dict] = []
+        #: The last reply's prompt ids and the ids the model actually emitted. Every replay reads
+        #: these rather than re-tokenising the decoded text: `decode` then `encode` is not the
+        #: identity, so re-tokenising forces the clean model through a token sequence the steered
+        #: run never visited -- which is the one thing the replay exists to rule out.
+        self.last_turn: dict | None = None
         self.desk = Desk()
         self.log_path = None
         self._thinking = False
         self.supports_thinking = THOUGHT_OPEN in (self.tokenizer.chat_template or "")
         # Stop ids come from the tokenizer's own specials, never from another model's names: Gemma 4
         # closes a turn with <turn|> where Gemma 3 used <end_of_turn>.
+        # `convert_tokens_to_ids` answers with the UNK id for a token the vocabulary does not have,
+        # and UNK is an ordinary non-negative id: taken at face value on Gemma 3, whose vocabulary
+        # has neither of these names, that puts UNK in the stop set and ends any reply the moment
+        # the model emits it. The id has to name the token back.
+        unk = self.tokenizer.unk_token_id
         for name in ("<turn|>", "<|turn|>"):
             got = self.tokenizer.convert_tokens_to_ids(name)
-            if isinstance(got, int) and got >= 0:
-                self.stop_ids.add(got)
+            if not isinstance(got, int) or got < 0 or got == unk:
+                continue
+            if self.tokenizer.convert_ids_to_tokens(got) != name:
+                continue
+            self.stop_ids.add(got)
 
     # -- rendering -----------------------------------------------------------------------------
     def render_chat(self, messages: list[dict]) -> list[int]:
@@ -152,11 +187,14 @@ class Chat(Console):
         here = float(self.residual_at(ids, layer, site).norm())
         scale = (self.desk.percent / 100.0) * here / float(entry["vector"].norm())
         sustain = self.desk.scope in {"reply", "both"}
-        from_position = end - 1 if self.desk.scope == "reply" else start
+        # `end` is the length of the rendered prompt, so `end - 1` is its LAST token and `end` is
+        # the first token the model generates. `reply` scope means the reply, so it starts at `end`.
+        from_position = end if self.desk.scope == "reply" else start
         hook = Injection(self.view.blocks[layer - 1], entry["vector"], scale=scale,
                          from_position=from_position, sustain=sustain)
-        note = (f"{self.desk.slot} {self.desk.percent:g}% of |h|={here:,.0f} at L{layer}, "
-                f"scope {self.desk.scope}, from {from_position}")
+        note = (f"{self.desk.slot} {self.desk.percent:g}% of |h|={here:,.0f} (read at the last "
+                f"prompt token, position {site}) at L{layer}, scope {self.desk.scope}, "
+                f"from {from_position}")
         return hook, note
 
     def speak(self, messages: list[dict], max_tokens: int, *, steered: bool = True):
@@ -226,6 +264,7 @@ class Chat(Console):
         print(f"\n{reply.strip() or '(nothing)'}")
         mark = "·" if not self.desk.live else "↯"
         print(f"    {mark} {note} · {len(emitted)} tok · {seconds:.1f}s")
+        self.last_turn = {"prompt_ids": _ids, "emitted": emitted}
         if commit:
             self.history = messages + [{"role": "assistant", "content": reply}]
             self._log({"kind": "turn", "user": text, "reply": reply, "desk": self.desk.label(),
@@ -260,9 +299,9 @@ class Chat(Console):
         """Replay the last steered reply through the clean model, token by token."""
         if not self.history or self.history[-1]["role"] != "assistant":
             print("no reply to explain"); return
-        messages = self.history[:-1]
-        ids = self.render_chat(messages)
-        emitted = self.tokenizer(self.history[-1]["content"], add_special_tokens=False)["input_ids"]
+        if not self.last_turn:
+            print("no recorded tokens for the last reply"); return
+        ids, emitted = self.last_turn["prompt_ids"], self.last_turn["emitted"]
         if not emitted:
             print("the last reply has no tokens"); return
         rows = self.clean_replay(ids, emitted)

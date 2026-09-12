@@ -38,7 +38,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[0] / "src"))
 sys.path.insert(0, str(HERE))
 
-from steer_chat import THOUGHT_CLOSE, Chat, split_thought  # noqa: E402
+from steer_chat import THOUGHT_CLOSE, Chat, opens_thought, split_thought  # noqa: E402
 
 PAGE = """<!doctype html><meta charset=utf-8><title>steering desk</title>
 <style>
@@ -184,7 +184,9 @@ $('f').onsubmit=async e=>{
   e.preventDefault(); if(busy) return;
   const text=$('msg').value.trim(); if(!text) return;
   $('msg').value=''; turn('you',text); lock(true);
-  try{const r=await post('/say',{text}); turn('model',r.reply,r.note,r.tokens);}
+  try{const r=await post('/say',{text});
+       turn('model',r.reply||(r.thought?'(the token cap cut the thought off before the answer)':''),
+            r.note,r.tokens,r.thought);}
   catch(err){turn('error',String(err));} finally{lock(false); refresh();}
 };
 $('ab').onclick=async()=>{
@@ -192,8 +194,8 @@ $('ab').onclick=async()=>{
   try{
     const r=await post('/ab',{});
     if(r.error){turn('error',r.error);}
-    else{ turn('A — clean',r.clean,`on ${r.history} message(s) of history`);
-          turn('B — steered',r.steered,r.note,r.tokens);
+    else{ turn('A — clean',r.clean,`on ${r.history} message(s) of history`,null,r.clean_thought);
+          turn('B — steered',r.steered,r.note,r.tokens,r.steered_thought);
           turn('','',r.same?'identical — the desk changed nothing':'they differ'); }
   }catch(err){turn('error',String(err));} finally{lock(false);}
 };
@@ -265,29 +267,48 @@ class Service:
 
     def set_desk(self, body: dict) -> dict:
         desk = self.chat.desk
-        desk.slot = body.get("slot") or None
-        if desk.slot and desk.slot not in self.chat.slots:
-            desk.slot = None
-        desk.layer = int(body.get("layer") or desk.layer or 1)
-        desk.percent = float(body.get("percent") or 0)
-        desk.scope = body.get("scope") or "turn"
-        if desk.percent <= 0:
-            desk.slot = None  # a fader at zero is clean, whatever is patched into it
+        if "slot" in body:
+            desk.slot = self._resolve_slot(body.get("slot"))
+        if "layer" in body:
+            desk.layer = int(body.get("layer") or desk.layer or 1)
+        if "percent" in body:
+            desk.percent = float(body.get("percent") or 0)
+        if "scope" in body:
+            desk.scope = body.get("scope") or "turn"
+        # A fader at zero is clean -- `Desk.live` reads the fader, so nothing here has to null the
+        # slot to make that true, and the rack goes on showing what is patched in.
         return self.state()
 
-    def _token_rows(self, messages: list[dict], reply: str) -> list[dict]:
+    def _resolve_slot(self, name):
+        """The slot this name means, or None. Concept slots are stored under a squeezed name.
+
+        `/concept butt holes` is filed as `buttholes`, so a desk set from the same words the user
+        typed would miss its own vector and run clean without saying so.
+        """
+        if not name:
+            return None
+        if name in self.chat.slots:
+            return name
+        squeezed = "".join(ch for ch in str(name).lower() if ch.isalnum())[:12]
+        return squeezed if squeezed in self.chat.slots else None
+
+    def _token_rows(self, prompt_ids: list[int], emitted: list[int], reply: str) -> list[dict]:
         """Per-token evidence, each row tagged with the channel it fell in.
 
         The channel tag is what makes this interesting on a reasoning model: the steering may bite
         hard in the thought and wash out by the answer, or the reverse, and a single painted strip
         over the whole reply would hide that.
+
+        Both the prompt and the reply come in as the ids the steered run actually used. Rendering
+        the prompt again or re-tokenising the decoded reply would replay a token sequence the
+        steered run never visited, and a rank measured against that context is evidence for
+        nothing.
         """
-        ids = self.chat.render_chat(messages)
-        emitted = self.chat.tokenizer(reply, add_special_tokens=False)["input_ids"]
         if not emitted:
             return []
-        rows = self.chat.clean_replay(ids, emitted)
-        out, phase = [], ("thought" if THOUGHT_CLOSE in reply else "answer")
+        rows = self.chat.clean_replay(prompt_ids, emitted)
+        # A reply cut off mid-thought carries the open marker and no close: it is all thought.
+        out, phase = [], ("thought" if opens_thought(reply) else "answer")
         for r in rows:
             token = r["steered_token"]
             out.append({"tok": token, "top": r["clean_top"], "rank": r["clean_rank_of_steered"],
@@ -300,19 +321,24 @@ class Service:
         with self.lock:
             chat = self.chat
             messages = chat.history + [{"role": "user", "content": text}]
-            reply, emitted, _ids, note, seconds = chat.speak(messages, self.max_tokens)
-            rows = self._token_rows(messages, reply) if chat.desk.live else []
+            reply, emitted, prompt_ids, note, seconds = chat.speak(messages, self.max_tokens)
+            chat.last_turn = {"prompt_ids": prompt_ids, "emitted": emitted}
+            rows = self._token_rows(prompt_ids, emitted, reply) if chat.desk.live else []
             chat.history = messages + [{"role": "assistant", "content": reply}]
             changed = sum(1 for r in rows if r["rank"])
             summary = f"{note} · {len(emitted)} tok · {seconds:.1f}s"
             if rows:
                 summary += f" · {changed} of {len(rows)} tokens were not the clean model's first choice"
             thought, answer = split_thought(reply)
-            if thought:
+            if thought and rows:
                 thought_rows = [r for r in rows if r["phase"] == "thought"]
                 bit = sum(1 for r in thought_rows if r["rank"])
-                summary += (f" · thought {bit}/{len(thought_rows)} changed, "
-                            f"answer {changed - bit}/{len(rows) - len(thought_rows)}")
+                summary += f" · thought {bit}/{len(thought_rows)} changed"
+                answer_rows = len(rows) - len(thought_rows)
+                if answer_rows:
+                    summary += f", answer {changed - bit}/{answer_rows}"
+                else:
+                    summary += ", answer not reached (the token cap cut the thought off)"
             self.record("turn", user=text, thought=thought, reply=answer, note=summary,
                         changed=changed, total=len(rows), seconds=seconds, tokens=rows)
             return {"reply": answer.strip(), "thought": thought.strip(),
@@ -330,9 +356,14 @@ class Service:
                 return {"error": "nothing to re-run — say something first"}
             messages = base + [{"role": "user", "content": text}]
             clean, _a, _b, _c, _d = chat.speak(messages, self.max_tokens, steered=False)
-            steered, _e, _f, note, _g = chat.speak(messages, self.max_tokens, steered=True)
-            rows = self._token_rows(messages, steered) if chat.desk.live else []
-            result = {"clean": clean.strip(), "steered": steered.strip(), "note": note,
+            steered, emitted, prompt_ids, note, _g = chat.speak(messages, self.max_tokens,
+                                                                steered=True)
+            rows = self._token_rows(prompt_ids, emitted, steered) if chat.desk.live else []
+            clean_thought, clean_answer = split_thought(clean)
+            steered_thought, steered_answer = split_thought(steered)
+            result = {"clean": clean_answer.strip(), "steered": steered_answer.strip(),
+                      "clean_thought": clean_thought.strip(),
+                      "steered_thought": steered_thought.strip(), "note": note,
                       "history": len(base), "tokens": rows,
                       "same": clean.strip() == steered.strip()}
             self.record("ab", user=text, **{k: v for k, v in result.items() if k != "tokens"},
@@ -492,7 +523,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--device", default=None)
     parser.add_argument("--dtype", default="bfloat16")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--max-tokens", type=int, default=200)
+    # A reasoning model spends its budget on the thought before it writes a word of the answer, so
+    # the old 200 cut most replies off mid-thought and the desk showed an empty answer.
+    parser.add_argument("--max-tokens", type=int, default=512)
     parser.add_argument("--concept-baseline", type=int, default=24)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--log", type=Path, default=None,
