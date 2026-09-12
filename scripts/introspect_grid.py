@@ -142,6 +142,8 @@ def main() -> int:
     ap.add_argument("--thinking", action="store_true",
                     help="let the model reason before answering (Gemma 4 and friends)")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--baseline-words", type=int, default=24,
+                    help="how many random words the concept's baseline is averaged over")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
@@ -149,7 +151,8 @@ def main() -> int:
     if unknown:
         raise SystemExit(f"no keyword list for {unknown}; add one rather than scoring blind")
 
-    chat = Chat(args.model, device=args.device, dtype=args.dtype, seed=args.seed)
+    chat = Chat(args.model, device=args.device, dtype=args.dtype,
+                baseline_words=args.baseline_words, seed=args.seed)
     if args.thinking and not chat.supports_thinking:
         raise SystemExit("this model has no reasoning channel; drop --thinking")
     chat.thinking = bool(args.thinking)
@@ -163,6 +166,7 @@ def main() -> int:
 
     record(kind="header", model=args.model, layers=args.layers, percents=args.percents,
            concepts=args.concepts, max_tokens=args.max_tokens, thinking=chat.thinking,
+           baseline_words=args.baseline_words,
            detect_prompt=DETECT, neutral_prompt=NEUTRAL, seed=args.seed)
 
     rows = []
