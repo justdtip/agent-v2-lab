@@ -150,6 +150,18 @@ class Chat(Console):
             self.stop_ids.add(got)
 
     # -- rendering -----------------------------------------------------------------------------
+    @staticmethod
+    def compose_head(system: str | None, summary: str | None) -> str | None:
+        """The system turn's text for a given prompt and summary, without touching instance state.
+
+        Separate from `system_head` so a compaction can price the window it is about to install
+        before installing it.
+        """
+        if not summary:
+            return system
+        carried = f"{SUMMARY_HEADING}\n{summary}"
+        return carried if not system else f"{system}\n\n{carried}"
+
     def system_head(self) -> str | None:
         """The one system turn: the standing prompt, then any summary carried from an earlier window.
 
@@ -158,10 +170,7 @@ class Chat(Console):
         `ab`'s backward scan for the last user turn, eaten by `undo`'s `history[:-2]`, and counted
         by `state()["history"]`, which drives two buttons on the page.
         """
-        if not self.summary:
-            return self.system
-        carried = f"{SUMMARY_HEADING}\n{self.summary}"
-        return carried if not self.system else f"{self.system}\n\n{carried}"
+        return self.compose_head(self.system, self.summary)
 
     def _apply(self, messages: list[dict], *, generation_prompt: bool, thinking: bool) -> str:
         try:
