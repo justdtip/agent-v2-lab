@@ -176,3 +176,19 @@ def test_the_batched_curve_equals_the_one_at_a_time_one(pair):
     for (s_a, d_a), (s_b, d_b) in zip(batched, singly):
         assert s_a == s_b
         assert d_a == pytest.approx(d_b, abs=1e-4), (s_a, d_a, d_b)
+
+
+def test_a_rung_below_the_whole_curve_takes_the_smallest_scale(pair):
+    """Asked for less damage than even the gentlest sampled scale produces, the answer is that
+    gentlest scale -- not the strongest, which is what the first version returned and which turned
+    a request for -0.002 nats into fifteen."""
+    model, tok = pair
+    m = meter_mod.DamageMeter(model, tok, device=torch.device("cpu"), dtype=torch.float32,
+                              battery=meter_mod.BATTERY[:3])
+    torch.manual_seed(0)
+    v = torch.randn(32)
+    rungs = m.scales_for_ladder(v, 2, (-1e-9, -0.05, -1e6), residual_norm=50.0, verify=False)
+    smallest = min(s for s, _d in m.curve(v, 2, [0.0]))
+    assert rungs[-1e-9][0] <= rungs[-0.05][0], "a gentler rung must not get a stronger scale"
+    assert rungs[-1e6][0] >= rungs[-0.05][0], "an unreachable rung takes the strongest scale"
+    assert smallest is not None

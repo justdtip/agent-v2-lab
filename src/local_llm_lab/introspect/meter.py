@@ -181,7 +181,8 @@ class DamageMeter:
     def scales_for_ladder(self, vector: torch.Tensor, layer: int, ladder: tuple[float, ...],
                           *, residual_norm: float, prompts: list[int] | None = None,
                           verify: bool = True,
-                          percents: tuple[float, ...] = (0.5, 1, 2, 4, 8, 16, 32, 64, 128)
+                          percents: tuple[float, ...] = (0.06, 0.125, 0.25, 0.5, 1, 2, 4, 8,
+                                                        16, 32, 64, 128)
                           ) -> dict[float, tuple[float, float]]:
         """Every rung of the ladder from ONE swept curve. {wanted: (scale, achieved)}.
 
@@ -193,12 +194,21 @@ class DamageMeter:
         curve = sorted(self.curve(vector, layer, scales, prompts), key=lambda sd: sd[0])
         out: dict[float, tuple[float, float]] = {}
         for wanted in ladder:
-            chosen = curve[-1][0]
-            for (s0, d0), (s1, d1) in zip(curve, curve[1:]):
-                if d0 >= wanted >= d1:
-                    span = (d0 - d1) or 1e-12
-                    chosen = s0 + (s1 - s0) * (d0 - wanted) / span
-                    break
+            # Off the end of the curve in EITHER direction, and the two directions are opposite.
+            # Falling through to the strongest scale for every unbracketed rung is how a request
+            # for a whisper became fifteen nats of damage: if even the smallest scale sampled
+            # already overshoots, the answer is the smallest scale, not the largest.
+            if curve[0][1] <= wanted:
+                chosen = curve[0][0]
+            elif curve[-1][1] >= wanted:
+                chosen = curve[-1][0]
+            else:
+                chosen = curve[-1][0]
+                for (s0, d0), (s1, d1) in zip(curve, curve[1:]):
+                    if d0 >= wanted >= d1:
+                        span = (d0 - d1) or 1e-12
+                        chosen = s0 + (s1 - s0) * (d0 - wanted) / span
+                        break
             achieved = (self.damage(vector, layer, chosen, prompts).damage if verify
                         else float("nan"))
             out[wanted] = (chosen, achieved)
