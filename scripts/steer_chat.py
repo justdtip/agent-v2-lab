@@ -204,24 +204,30 @@ class Chat(Console):
                 f"from {from_position}")
         return hook, note
 
-    def speak(self, messages: list[dict], max_tokens: int, *, steered: bool = True):
-        """One reply. Returns (text, token ids, prompt ids, note)."""
+    def speak(self, messages: list[dict], max_tokens: int, *, steered: bool = True,
+              on_token=None):
+        """One reply. Returns (text, token ids, prompt ids, note, seconds, hook).
+
+        `on_token(index, id, text)` is called as each token is produced, for a caller that wants to
+        show the reply arriving rather than after. It runs inside the generation loop and inside the
+        service's lock, so it must not block on anything slow.
+        """
         ids = self.render_chat(messages)
         span = self.turn_span(messages)
         hook, note = self.build_injection(ids, span) if steered else (None, "clean")
         started = time.time()
         if hook is None:
-            emitted = self.generate_tokens(ids, max_tokens)
+            emitted = self.generate_tokens(ids, max_tokens, on_token=on_token)
         else:
             with hook:
-                emitted = self.generate_tokens(ids, max_tokens)
+                emitted = self.generate_tokens(ids, max_tokens, on_token=on_token)
         # The hook comes back so a caller can say whether it actually fired. It counts its own
         # applications, and a hook that never fired is a clean reply that the desk still describes
         # as steered -- which reads as "this vector has no effect", a research conclusion rather
         # than a UI state.
         return (self.tokenizer.decode(emitted), emitted, ids, note, time.time() - started, hook)
 
-    def generate_tokens(self, ids: list[int], max_tokens: int) -> list[int]:
+    def generate_tokens(self, ids: list[int], max_tokens: int, *, on_token=None) -> list[int]:
         from transformers import DynamicCache
 
         cache = DynamicCache()
@@ -234,6 +240,11 @@ class Chat(Console):
                 if token in self.stop_ids:
                     break
                 emitted.append(token)
+                if on_token is not None:
+                    # Decoded one at a time. A tokenizer can split a character across two tokens, so
+                    # the pieces are what the model emitted, not necessarily printable on their own;
+                    # the caller re-decodes the whole reply at the end and replaces what it showed.
+                    on_token(len(emitted) - 1, token, self.tokenizer.decode([token]))
                 logits = self.model(input_ids=self.view._ids([token]),
                                     past_key_values=cache, use_cache=True).logits
         return emitted

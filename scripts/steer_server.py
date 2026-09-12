@@ -672,14 +672,75 @@ $('think').onchange=async()=>{ await post('/thinking',{on:$('think').checked});
   turn('','reasoning channel '+($('think').checked?'on':'off'),'receipt'); refresh(); };
 
 /* ---- sending --------------------------------------------------------------------------------- */
+/* ---- streaming ------------------------------------------------------------------------------
+   A reply takes ten to thirty seconds, and the page used to show nothing for all of it. The turn
+   is built empty, filled token by token as they arrive, and replaced by the painted version once
+   the clean replay comes back with it -- the replay is a second pass over the finished reply and
+   cannot itself be streamed. */
+const THOUGHT_CLOSE='<channel|>', THOUGHT_OPEN='<|channel>thought';
+function liveTurn(){
+  clearOrient();
+  const w=document.createElement('div'); w.className='turn';
+  w.innerHTML='<div class=who>model</div>';
+  const mk=kind=>{ const b=document.createElement('div'); b.className='channel '+kind;
+    b.innerHTML=`<div class=head><span>${kind==='thought'?'reasoning':'answer'}</span>`
+      +`<span class=count></span></div>`;
+    const p=document.createElement('div'); p.className='painted'; b.appendChild(p);
+    b.hidden=true; w.appendChild(b); return b; };
+  const t=mk('thought'), a=mk('answer');
+  const note=document.createElement('div'); note.className='meta';
+  note.innerHTML='<dt>run</dt><dd>generating…</dd>'; w.appendChild(note);
+  log.appendChild(w); toBottom();
+  return {w, t, a, note};
+}
+function fillLive(live, raw, n, cap){
+  let thought='', answer=raw;
+  if(raw.indexOf(THOUGHT_CLOSE)>=0){
+    let head=raw.slice(0,raw.indexOf(THOUGHT_CLOSE));
+    if(head.indexOf(THOUGHT_OPEN)>=0) head=head.slice(head.indexOf(THOUGHT_OPEN)+THOUGHT_OPEN.length);
+    thought=head.replace(/^\n+/,''); answer=raw.slice(raw.indexOf(THOUGHT_CLOSE)+THOUGHT_CLOSE.length).replace(/^\n+/,'');
+  }else if(raw.indexOf(THOUGHT_OPEN)>=0){
+    thought=raw.slice(raw.indexOf(THOUGHT_OPEN)+THOUGHT_OPEN.length).replace(/^\n+/,''); answer='';
+  }
+  if(thought){ live.t.hidden=false; live.t.querySelector('.painted').textContent=thought;
+               live.t.querySelector('.count').textContent='writing…'; }
+  if(answer||!thought){ live.a.hidden=false; live.a.querySelector('.painted').textContent=answer;
+                        live.t.querySelector('.count').textContent=thought?'done':''; }
+  live.note.innerHTML=`<dt>run</dt><dd>${n} of ${cap} tokens…</dd>`;
+  toBottom();
+}
+
 $('composer').onsubmit=async e=>{
   e.preventDefault(); if(busy) return;
   const text=$('msg').value.trim(); if(!text) return;
   lastSent=text; $('msg').value=''; grow(); turn('you',text,'you'); lock(true,'generating…');
-  try{ const r=await post('/say',{text});
-       if(r.error) turn('','error: '+r.error,'receipt bad'); else modelTurn(r); }
-  catch(err){ turn('','error: '+String(err),'receipt bad'); }
-  finally{ lock(false); refresh(); }
+  const live=liveTurn();
+  let raw='', n=0, cap=(S&&S.max_tokens)||512, done=null, failed=null;
+  try{
+    const res=await fetch('/say_stream',{method:'POST',
+      headers:{'content-type':'application/json'},body:JSON.stringify({text})});
+    const reader=res.body.getReader(), dec=new TextDecoder();
+    let buf='';
+    for(;;){
+      const {value,done:end}=await reader.read(); if(end) break;
+      buf+=dec.decode(value,{stream:true});
+      let nl;
+      while((nl=buf.indexOf('\n'))>=0){
+        const line=buf.slice(0,nl); buf=buf.slice(nl+1);
+        if(!line.trim()) continue;
+        const ev=JSON.parse(line);
+        if(ev.t==='start'){ cap=ev.cap||cap; }
+        else if(ev.t==='tok'){ raw+=ev.s; n++; fillLive(live,raw,n,cap); }
+        else if(ev.t==='replaying'){ $('activitytext').textContent='replaying through the clean model…';
+          live.note.innerHTML=`<dt>run</dt><dd>${ev.tokens} tokens · replaying through the clean model…</dd>`; }
+        else if(ev.t==='error'){ failed=ev.error; }
+        else if(ev.t==='done'){ done=ev; }
+      }
+    }
+  }catch(err){ failed=String(err); }
+  live.w.remove();
+  if(failed) turn('','error: '+failed,'receipt bad'); else if(done) modelTurn(done);
+  lock(false); refresh();
 };
 $('ab').onclick=async()=>{
   if(busy) return; lock(true,'running both arms…');
@@ -931,28 +992,81 @@ class Service:
             chat.last_turn = {"prompt_ids": prompt_ids, "emitted": emitted}
             rows = self._token_rows(prompt_ids, emitted, reply) if desk["live"] else []
             chat.history = messages + [{"role": "assistant", "content": reply}]
-            changed = sum(1 for r in rows if r["rank"])
-            summary = f"{note} · {len(emitted)} tok · {seconds:.1f}s"
-            if rows:
-                summary += f" · {changed} of {len(rows)} tokens were not the clean model's first choice"
-            thought, answer = split_thought(reply)
-            if thought and rows:
-                thought_rows = [r for r in rows if r["phase"] == "thought"]
-                bit = sum(1 for r in thought_rows if r["rank"])
-                summary += f" · thought {bit}/{len(thought_rows)} changed"
-                answer_rows = len(rows) - len(thought_rows)
-                if answer_rows:
-                    summary += f", answer {changed - bit}/{answer_rows}"
-                else:
-                    summary += ", answer not reached (the token cap cut the thought off)"
-            self.record("turn", user=text, thought=thought, reply=answer, note=summary,
-                        desk=desk, hook=hook.report() if hook else None,
-                        changed=changed, total=len(rows), seconds=seconds, tokens=rows)
-            return {"reply": answer.strip(), "thought": thought.strip(),
-                    "note": summary, "tokens": rows, "desk": desk,
-                    "hook": hook.report() if hook else None,
-                    "seconds": seconds, "emitted": len(emitted),
-                    "prompt_tokens": len(prompt_ids), "truncated": bool(thought) and not answer}
+            return self._turn_payload(text, reply, emitted, prompt_ids, rows, note,
+                                      seconds, desk, hook)
+
+    def _turn_payload(self, text, reply, emitted, prompt_ids, rows, note, seconds, desk, hook):
+        """What a finished turn is, recorded and returned. One builder for both paths."""
+        changed = sum(1 for r in rows if r["rank"])
+        summary = f"{note} · {len(emitted)} tok · {seconds:.1f}s"
+        if rows:
+            summary += f" · {changed} of {len(rows)} tokens were not the clean model's first choice"
+        thought, answer = split_thought(reply)
+        if thought and rows:
+            thought_rows = [r for r in rows if r["phase"] == "thought"]
+            bit = sum(1 for r in thought_rows if r["rank"])
+            summary += f" · thought {bit}/{len(thought_rows)} changed"
+            answer_rows = len(rows) - len(thought_rows)
+            if answer_rows:
+                summary += f", answer {changed - bit}/{answer_rows}"
+            else:
+                summary += ", answer not reached (the token cap cut the thought off)"
+        self.record("turn", user=text, thought=thought, reply=answer, note=summary,
+                    desk=desk, hook=hook.report() if hook else None,
+                    changed=changed, total=len(rows), seconds=seconds, tokens=rows)
+        return {"reply": answer.strip(), "thought": thought.strip(),
+                "note": summary, "tokens": rows, "desk": desk,
+                "hook": hook.report() if hook else None,
+                "seconds": seconds, "emitted": len(emitted),
+                "prompt_tokens": len(prompt_ids), "truncated": bool(thought) and not answer}
+
+    def say_stream(self, text: str):
+        """The same turn as `say`, yielded as it happens.
+
+        A reply takes ten to thirty seconds and the page showed nothing at all until it was over.
+        The events are newline-delimited JSON: `tok` as each token is produced, then one `done`
+        carrying exactly the payload `say` would have returned. The clean replay cannot be streamed
+        -- it is a second pass over the finished reply -- so the painting arrives with `done` and
+        the page repaints what it has already shown.
+        """
+        with self.lock:
+            chat = self.chat
+            desk = self.desk_snapshot()
+            messages = chat.history + [{"role": "user", "content": text}]
+            queue: list[dict] = []
+            yield {"t": "start", "desk": desk, "cap": self.max_tokens}
+            # The generation loop is synchronous, so tokens are collected by the callback and
+            # flushed between forward passes rather than yielded from inside it.
+            def collect(index, _id, piece):
+                queue.append({"t": "tok", "i": index, "s": piece})
+
+            import threading
+            done: dict = {}
+
+            def run():
+                try:
+                    done["result"] = chat.speak(messages, self.max_tokens, on_token=collect)
+                except Exception as exc:  # surfaced to the page rather than dying silently
+                    done["error"] = f"{type(exc).__name__}: {exc}"
+
+            worker = threading.Thread(target=run, daemon=True)
+            worker.start()
+            while worker.is_alive() or queue:
+                while queue:
+                    yield queue.pop(0)
+                if worker.is_alive():
+                    worker.join(0.05)
+            if "error" in done:
+                yield {"t": "error", "error": done["error"]}
+                return
+            reply, emitted, prompt_ids, note, seconds, hook = done["result"]
+            chat.last_turn = {"prompt_ids": prompt_ids, "emitted": emitted}
+            yield {"t": "replaying", "tokens": len(emitted)}
+            rows = self._token_rows(prompt_ids, emitted, reply) if desk["live"] else []
+            chat.history = messages + [{"role": "assistant", "content": reply}]
+            payload = self._turn_payload(text, reply, emitted, prompt_ids, rows, note,
+                                         seconds, desk, hook)
+            yield dict(payload, t="done")
 
     def ab(self) -> dict:
         with self.lock:
@@ -1120,6 +1234,21 @@ def handler_for(service: Service):
         def log_message(self, *_):
             pass  # the console is for the model, not for access logs
 
+        def _stream(self, events):
+            """Newline-delimited JSON, flushed per event, so the page sees tokens as they land."""
+            self.send_response(200)
+            self.send_header("content-type", "application/x-ndjson")
+            self.send_header("cache-control", "no-store")
+            self.send_header("x-accel-buffering", "no")
+            self.end_headers()
+            try:
+                for event in events:
+                    self.wfile.write(json.dumps(event).encode() + b"\n")
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                # the tab was closed or reloaded mid-reply; the generation finishes either way
+                pass
+
         def _send(self, payload, status=200, content="application/json"):
             body = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
             self.send_response(status)
@@ -1140,6 +1269,8 @@ def handler_for(service: Service):
             try:
                 if self.path == "/say":
                     self._send(service.say(body.get("text", "")))
+                elif self.path == "/say_stream":
+                    self._stream(service.say_stream(body.get("text", "")))
                 elif self.path == "/ab":
                     self._send(service.ab())
                 elif self.path == "/desk":
