@@ -106,6 +106,10 @@ button.x{padding:1px 7px;font-size:14px;line-height:1;color:var(--dim)}
   <div class=row><input type=text id=xslot placeholder="slot name"><input type=number id=xpos placeholder="pos (blank = last)"></div>
   <div class=row><button id=xgo type=button>extract</button><button id=xhere type=button title="read the residual at the end of the conversation as it stands">from chat</button></div>
   <div class=hint>&ldquo;from chat&rdquo; reads the live conversation's own last position, which is the move a single-shot console cannot make.</div>
+  <label>combine &mdash; build one vector from others</label>
+  <div class=row><select id=cl></select><select id=cop><option>-</option><option>+</option><option>&times;</option></select><select id=cr></select></div>
+  <div class=row><input type=text id=cinto placeholder="new slot name"><button id=cgo type=button>make</button></div>
+  <div class=hint>A difference of two states the model produced is a direction in the model's own units &mdash; no contrastive frame, no magnitude convention. Try &ldquo;I am cheerful&rdquo; minus &ldquo;I am despairing&rdquo;.</div>
   <h2>vectors</h2><div id=rack></div>
   <h2>state</h2><div id=state></div>
   <h2></h2><div class=row><button id=undo type=button>undo</button><button id=clear type=button>clear</button></div>
@@ -142,6 +146,8 @@ async function refresh(){
   const s=await fetch('/state').then(r=>r.json());
   const names=s.detail.map(d=>d.name);
   $('slot').innerHTML='<option value="">(none)</option>'+names.map(x=>`<option${x===s.desk.slot?' selected':''}>${x}</option>`).join('');
+  const keep=(el,v)=>{el.innerHTML=names.map(x=>`<option>${x}</option>`).join(''); if(names.includes(v)) el.value=v;};
+  keep($('cl'),$('cl').value); keep($('cr'),$('cr').value);
   $('rack').innerHTML = s.detail.length ? s.detail.map(d=>
      `<div class=slotrow><span class=pill>${d.name}</span> <span class=sdim>${d.kind} L${d.layer} · |v| ${Math.round(d.norm).toLocaleString()}</span>`
      + `<button class=x data-slot="${d.name}" title="drop">&times;</button></div>`).join('')
@@ -188,6 +194,13 @@ $('xgo').onclick=async()=>{
 $('xhere').onclick=async()=>{
   const slot=$('xslot').value.trim(); if(!slot||busy) return; lock(true);
   try{const r=await post('/extract_here',{slot,layer:+$('layer').value});
+      turn('desk',r.note||r.error);}
+  catch(err){turn('error',String(err));} finally{lock(false); refresh();}
+};
+$('cgo').onclick=async()=>{
+  const into=$('cinto').value.trim(); if(!into||busy) return; lock(true);
+  const op=$('cop').value==='\u00d7'?'x':$('cop').value;
+  try{const r=await post('/combine',{into,left:$('cl').value,right:$('cr').value,op,weight:2});
       turn('desk',r.note||r.error);}
   catch(err){turn('error',String(err));} finally{lock(false); refresh();}
 };
@@ -325,6 +338,42 @@ class Service:
                     "note": f"{slot}: residual at L{layer} from the live conversation "
                             f"(position {len(ids) - 1}), norm {float(vector.norm()):,.0f}"}
 
+    def combine(self, into: str, left: str, right: str | None, op: str, weight: float) -> dict:
+        """Build a vector out of other vectors: a difference, a sum, or a scaling.
+
+        A *difference of two states the model itself produced* is the construction this repo's
+        confidence work settled on as the honest one: it needs no contrastive frame and no magnitude
+        convention, because it is already scaled in units the model generates. `cheerful − despairing`
+        is a direction built entirely from things that actually happened inside the model.
+        """
+        with self.lock:
+            slots = self.chat.slots
+            if left not in slots:
+                return {"error": f"no slot '{left}'"}
+            if op in {"-", "+"} and (right is None or right not in slots):
+                return {"error": f"no slot '{right}'"}
+            a = slots[left]
+            if op in {"-", "+"}:
+                b = slots[right]
+                if a["layer"] != b["layer"]:
+                    return {"error": f"'{left}' is at layer {a['layer']} and '{right}' at "
+                                     f"{b['layer']} — a difference across layers is not a direction"}
+                if a["vector"].shape != b["vector"].shape:
+                    return {"error": "those vectors are different widths — different models?"}
+                vector = (a["vector"] - b["vector"]) if op == "-" else (a["vector"] + b["vector"])
+                kind = f"{left} {op} {right}"
+            else:
+                vector = a["vector"] * weight
+                kind = f"{left} x {weight:g}"
+            slots[into] = {"vector": vector, "layer": a["layer"], "kind": kind,
+                           "norm": float(vector.norm()), "prompt": kind}
+            share = float(vector.norm()) / max(float(a["vector"].norm()), 1e-9)
+            note = (f"{into} = {kind} at L{a['layer']}, norm {float(vector.norm()):,.0f} "
+                    f"({share:.0%} of '{left}')")
+            self.record("combine", slot=into, expression=kind, layer=a["layer"],
+                        norm=float(vector.norm()), note=note)
+            return {"slot": into, "note": note}
+
     def concept(self, word: str, layer: int) -> dict:
         with self.lock:
             slot = "".join(ch for ch in word.lower() if ch.isalnum())[:12] or "concept"
@@ -373,6 +422,10 @@ def handler_for(service: Service):
                                                int(body.get("layer", 1)), body.get("pos")))
                 elif self.path == "/extract_here":
                     self._send(service.extract_here(body.get("slot", ""), int(body.get("layer", 1))))
+                elif self.path == "/combine":
+                    self._send(service.combine(body.get("into", ""), body.get("left", ""),
+                                               body.get("right"), body.get("op", "-"),
+                                               float(body.get("weight", 1.0))))
                 elif self.path == "/drop":
                     service.chat.slots.pop(body.get("slot", ""), None)
                     self._send(service.state())
