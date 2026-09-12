@@ -343,7 +343,9 @@ def main() -> int:
     ap.add_argument("--device", default="cuda:0")
     ap.add_argument("--dtype", default="bfloat16")
     ap.add_argument("--layers", type=int, nargs="+", required=True)
-    ap.add_argument("--percents", type=float, nargs="+", required=True)
+    ap.add_argument("--percents", type=float, nargs="+",
+                    help="strengths to sample, in per cent of the residual norm at the site; "
+                         "not used (and not needed) with --boundary, which derives its own")
     ap.add_argument("--concepts", nargs="+", default=list(CONCEPTS))
     ap.add_argument("--max-tokens", type=int, default=64)
     ap.add_argument("--thinking", action="store_true",
@@ -360,6 +362,9 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
+    if not args.percents and not args.boundary:
+        raise SystemExit("give --percents, or --boundary to derive them from the damage edge")
+    args.percents = args.percents or list(LADDER)
     unknown = [c for c in args.concepts if c not in CONCEPTS]
     if unknown:
         raise SystemExit(f"no keyword list for {unknown}; add one rather than scoring blind")
