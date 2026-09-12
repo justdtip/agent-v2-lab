@@ -151,7 +151,7 @@ def main() -> int:
     if unknown:
         raise SystemExit(f"no keyword list for {unknown}; add one rather than scoring blind")
 
-    chat = Chat(args.model, device=args.device, dtype=args.dtype,
+    chat = Chat(Path(args.model), device=args.device, dtype=args.dtype,
                 baseline_words=args.baseline_words, seed=args.seed)
     if args.thinking and not chat.supports_thinking:
         raise SystemExit("this model has no reasoning channel; drop --thinking")
