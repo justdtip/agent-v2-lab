@@ -456,25 +456,40 @@ def summarise(rows: list[dict], args, logits_readable: bool = True,
     chance = 1.0 / len(args.concepts)
     if not logits_readable:
         return _summarise_text(rows, args)
-    print(f"\n{'=' * 78}\nidentification: which concept the model scores highest, forced to name "
-          f"one.\nchance is 1 in {len(args.concepts)} ({chance:.0%}); the injected concept has to "
-          "beat that.\n")
     header = "  layer  " + "".join(f"{p:>8.0f}%" for p in args.percents) + "    any"
+
+    def raised_most(row, key="scores", null="null_scores"):
+        """Whether the injected concept is the candidate this injection raised the most."""
+        lift = {c: row[key][c] - row[null][c] for c in row[key]}
+        return max(lift, key=lift.get) == row["concept"]
+
+    print(f"\n{'=' * 78}\nidentification: of the {len(args.concepts)} candidates, is the injected "
+          "one the candidate this\ninjection RAISED THE MOST? Chance is "
+          f"{chance:.0%}.\n\nNot who wins the raw argmax -- that is decided by a prior the "
+          "injection never touches\n(the candidates differ by more than ten nats before anything "
+          "is injected, so one of\nthem wins every cell by construction). The change is the "
+          "measurement.\n")
     print(header)
     for layer in args.layers:
         here = [r for r in rows if r["layer"] == layer]
         cells = []
         for percent in args.percents:
             at = [r for r in here if r["percent"] == percent]
-            hits = sum(1 for r in at if r["correct"])
-            cells.append(f"{hits:>4}/{len(at):<4}")
-        best = sum(1 for r in here if r["correct"])
-        print(f"  L{layer:<5}  " + "".join(cells) + f"  {best:>3}/{len(here)}")
-    total = sum(1 for r in rows if r["correct"])
-    turned = sum(1 for r in rows if r["turned"])
-    print(f"\n  {total}/{len(rows)} cells named the injected concept "
-          f"({total / max(len(rows), 1):.0%} against {chance:.0%} chance); "
-          f"{turned} of those were a change from what that layer names with nothing injected")
+            cells.append(f"{sum(1 for r in at if raised_most(r)):>4}/{len(at):<4}")
+        print(f"  L{layer:<5}  " + "".join(cells)
+              + f"  {sum(1 for r in here if raised_most(r)):>3}/{len(here)}")
+    total = sum(1 for r in rows if raised_most(r))
+    print(f"\n  {total}/{len(rows)} cells raised the injected concept most "
+          f"({total / max(len(rows), 1):.0%} against {chance:.0%} chance)")
+    if any("neutral_scores" in r for r in rows):
+        both = [r for r in rows if "neutral_scores" in r]
+        ctrl = sum(1 for r in both if raised_most(r, "neutral_scores", "null_neutral_scores"))
+        print(f"  the same test with the model NOT asked about itself: {ctrl}/{len(both)} "
+              f"({ctrl / max(len(both), 1):.0%}) -- whatever this\n  column reaches is direct "
+              "output bias, and is not evidence of introspection")
+    print(f"\n  raw argmax, for comparison only: {sum(1 for r in rows if r['correct'])}/{len(rows)}"
+          f" ({sum(1 for r in rows if r['correct']) / max(len(rows), 1):.0%}), of which "
+          f"{sum(1 for r in rows if r['turned'])} changed that layer's default answer")
 
     print(f"\n{'=' * 78}\nconcept specificity: how much injecting a concept raises that "
           "concept's OWN score,\nabove what the same injection does to the other candidates. "
