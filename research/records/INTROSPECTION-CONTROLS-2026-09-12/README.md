@@ -135,11 +135,50 @@ Both were keyword lists matching inside words or inside quoted prompt text.
 
 Method entry 34 again: the verifier was the least verified thing, twice.
 
+## The boundary, sampled
+
+The grid above straddled the transition without landing in it. Reading the per-cell damage numbers
+back out: at layer 12, twenty-five per cent leaves the clean model's own next token untouched and
+fifty per cent has taken it down twenty-two nats. Every layer's transition fell inside a gap. So the
+conclusion held only for the two regimes the grid actually visited, and the band in between --
+perturbed enough to carry the concept, intact enough to compose -- was never observed.
+
+The edge was then located by bisection per layer and per concept (the strength at which the clean
+top token is down to half its mass) and a ten-point ladder sampled across it, 650 cells. The edge
+itself moves a great deal: about 25 to 60 per cent in the early-middle layers, a minimum near layer
+32, and 110 to 140 per cent by layer 56. Within one layer it varies by concept -- at layer 12,
+Paris crosses at 37 per cent and bread at 40; at layer 24, Paris at 36 and bread at 57. A single
+strength column across a grid was never comparing like with like.
+
+Splitting the 650 cells by whether the forward pass survived, rather than by ladder position:
+
+| | cells | replies that said YES | identification: only the introspective prompt / only the control |
+|---|---|---|---|
+| pass intact (clean top keeps ≥90% of its mass) | 310 | **0** | 55 / 55, net 0, 95% CI [−20.6, +20.6] |
+| pass damaged | 340 | 140 (41%) | 67 / 30, net +37, 95% CI [+17.7, +56.3] |
+
+Zero of 310. Not one cell in which the model said it detected an injected thought while its forward
+pass was still intact, at any layer, for any concept, anywhere on the ladder below the edge.
+
+The disposition does move before the damage. Averaged over cells, yes-minus-no climbs from −21.67
+at a quarter of the edge to −10.96 at ninety-five per cent of it, while the clean top token still
+holds ninety-two per cent of its mass. Half the log-odds gap closes with the pass essentially
+untouched. But it closes into nothing: at that point the model is still about sixty thousand to one
+against saying yes, and the answer only turns over once the pass starts going.
+
+The introspective advantage in identification behaves the same way, and this is the sharper version
+of the leakage result. Paired within each cell, so layer, concept and strength cancel, asking the
+model about its own internals buys **exactly nothing** where the pass is intact -- fifty-five cells
+each way -- and buys a real amount only where it is damaged. That is not introspection appearing
+under damage; it is the injected direction dominating a wrecked distribution, and the forced
+continuation "YES. The injected thought is about" giving it somewhere concept-shaped to land.
+
 ## What this does and does not say
 
-It says that under this protocol, on this model, there is no evidence of introspective detection:
-the yes/no answer tracks damage, and the concept-naming tracks the direction talking to the
-unembedding. It does not say the paper is wrong. The departures from it that could each carry the
+It says that under this protocol, on this model, there is no evidence of introspective detection,
+and that this now holds inside the band where it could have shown up rather than only on either
+side of it: the yes/no answer tracks damage exactly, and the concept-naming tracks the direction
+talking to the unembedding. It does not say the paper is wrong. The departures from it that could each carry the
 result are listed here rather than buried: injection covers the whole prompt including the question
 text rather than a chosen span; prefill only, not sustained through decoding; one greedy trial per
 cell, so nothing here has an interval; strength normalised to the residual norm rather than the
