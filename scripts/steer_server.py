@@ -704,8 +704,13 @@ function fillLive(live, raw, n, cap){
   }
   if(thought){ live.t.hidden=false; live.t.querySelector('.painted').textContent=thought;
                live.t.querySelector('.count').textContent='writing…'; }
-  if(answer||!thought){ live.a.hidden=false; live.a.querySelector('.painted').textContent=answer;
-                        live.t.querySelector('.count').textContent=thought?'done':''; }
+  // The answer block appears only once there is an answer, or once it is clear there is no
+  // reasoning channel at all. An empty ANSWER heading sitting under a thought that is still being
+  // written says the model has finished thinking, which it has not.
+  const showAnswer = answer.length>0 || !thought;
+  live.a.hidden = !showAnswer;
+  if(showAnswer){ live.a.querySelector('.painted').textContent=answer;
+                  live.t.querySelector('.count').textContent=thought?'done':''; }
   live.note.innerHTML=`<dt>run</dt><dd>${n} of ${cap} tokens…</dd>`;
   toBottom();
 }
