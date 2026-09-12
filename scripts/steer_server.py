@@ -29,6 +29,7 @@ import argparse
 import json
 import sys
 import threading
+import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -200,9 +201,24 @@ refresh();
 class Service:
     """The model, behind one lock, because there is one card."""
 
-    def __init__(self, chat: Chat, max_tokens: int):
+    def __init__(self, chat: Chat, max_tokens: int, log_path: Path | None = None):
         self.chat, self.max_tokens = chat, max_tokens
         self.lock = threading.Lock()
+        self.log_path = log_path
+        if log_path is not None:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def record(self, kind: str, **fields) -> None:
+        """Append one event. On by default: a session that is not written down did not happen."""
+        if self.log_path is None:
+            return
+        desk = self.chat.desk
+        row = {"t": time.time(), "kind": kind,
+               "desk": {"slot": desk.slot, "layer": desk.layer,
+                        "percent": desk.percent, "scope": desk.scope},
+               **fields}
+        with open(self.log_path, "a") as handle:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     def state(self) -> dict:
         c = self.chat
@@ -248,6 +264,8 @@ class Service:
             summary = f"{note} · {len(emitted)} tok · {seconds:.1f}s"
             if rows:
                 summary += f" · {changed} of {len(rows)} tokens were not the clean model's first choice"
+            self.record("turn", user=text, reply=reply, note=summary,
+                        changed=changed, total=len(rows), seconds=seconds, tokens=rows)
             return {"reply": reply.strip(), "note": summary, "tokens": rows}
 
     def ab(self) -> dict:
@@ -264,9 +282,12 @@ class Service:
             clean, _a, _b, _c, _d = chat.speak(messages, self.max_tokens, steered=False)
             steered, _e, _f, note, _g = chat.speak(messages, self.max_tokens, steered=True)
             rows = self._token_rows(messages, steered) if chat.desk.live else []
-            return {"clean": clean.strip(), "steered": steered.strip(), "note": note,
-                    "history": len(base), "tokens": rows,
-                    "same": clean.strip() == steered.strip()}
+            result = {"clean": clean.strip(), "steered": steered.strip(), "note": note,
+                      "history": len(base), "tokens": rows,
+                      "same": clean.strip() == steered.strip()}
+            self.record("ab", user=text, **{k: v for k, v in result.items() if k != "tokens"},
+                        tokens=rows)
+            return result
 
     def _captured(self, call) -> str:
         import contextlib
@@ -281,6 +302,7 @@ class Service:
         """An arbitrary prompt in, a residual row out, into a named slot."""
         with self.lock:
             note = self._captured(lambda: self.chat.cmd_extract(slot, layer, position, prompt))
+            self.record("extract", slot=slot, prompt=prompt, layer=layer, note=note)
             return {"slot": slot, "note": note}
 
     def extract_here(self, slot: str, layer: int) -> dict:
@@ -312,7 +334,9 @@ class Service:
             buffer = io.StringIO()
             with contextlib.redirect_stdout(buffer):
                 self.chat.cmd_concept(slot, layer, word)
-            return {"slot": slot, "note": buffer.getvalue().strip()}
+            note = buffer.getvalue().strip()
+            self.record("concept", slot=slot, word=word, layer=layer, note=note)
+            return {"slot": slot, "note": note}
 
 
 def handler_for(service: Service):
@@ -378,11 +402,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-tokens", type=int, default=200)
     parser.add_argument("--concept-baseline", type=int, default=24)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--log", type=Path, default=None,
+                        help="JSONL transcript; defaults to sessions/<timestamp>.jsonl beside this "
+                             "script's working directory. Pass 'none' to disable.")
     args = parser.parse_args(argv)
+
+    if args.log is None:
+        stamp = time.strftime("%Y-%m-%dT%H-%M-%SZ", time.gmtime())
+        args.log = Path("sessions") / f"steer-{stamp}.jsonl"
+    log_path = None if str(args.log) == "none" else args.log
 
     chat = Chat(args.model, device=args.device, dtype=args.dtype,
                 baseline_words=args.concept_baseline, seed=args.seed)
-    service = Service(chat, args.max_tokens)
+    service = Service(chat, args.max_tokens, log_path)
+    if log_path:
+        print(f"transcript: {log_path.resolve()}", flush=True)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), handler_for(service))
     print(f"\nserving on http://127.0.0.1:{args.port} (localhost only — reach it with)\n"
           f"    ssh -N -L {args.port}:localhost:{args.port} rtx6000\n", flush=True)
