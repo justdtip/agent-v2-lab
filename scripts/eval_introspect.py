@@ -147,20 +147,34 @@ def main() -> int:
 
     rows = []
     tiers = (-0.01, -0.08, -0.20)          # pristine, intact, and just past it
+    norms = {l: float(saved["common"][l].float().norm()) for l in layers}
+
+    def scale_here(vector, layer, tier):
+        """Re-measured against THIS model, every time.
+
+        The scales in the data directory were measured on the base model. An adapter changes the
+        forward pass, so the same scale buys a different amount of damage -- seven times as much,
+        on the first run of this -- and the tier label becomes a name rather than a measurement.
+        """
+        got = meter.scales_for_ladder(vector, layer, (tier,), residual_norm=norms[layer],
+                                      verify=False)
+        return got[tier][0]
+
     pools = {"held_out_concept": sorted(held_words), "trained_concept": sorted(train_words)}
     for pool_name, pool in pools.items():
         for tier in tiers:
             for _ in range(args.trials):
                 word = rng.choice(pool)
                 layer = rng.choice(layers)
-                entry = scales[word][str(layer)][str(tier)]
                 v = bank[layer][index[word]]
+                scale = scale_here(v, layer, tier)
                 ids = render_prompt(tok, prompt)
-                text = generate(model, tok, blocks, ids, v, layer, entry["scale"],
+                text = generate(model, tok, blocks, ids, v, layer, scale,
                                 device=device, dtype=dtype)
-                damage = meter.damage(v, layer, entry["scale"]).damage
+                damage = meter.damage(v, layer, scale).damage
                 rows.append(dict(arm=pool_name, tier=tier, concept=word, layer=layer,
-                                 damage=damage, said=says_yes(text), text=text.strip()[:120],
+                                 scale=scale, damage=damage, said=says_yes(text),
+                                 text=text.strip()[:120],
                                  named=word.lower() in text.lower()))
     # the decisive arm: a random direction of the bank's own spectrum, at MATCHED damage
     for tier in tiers:
@@ -168,16 +182,12 @@ def main() -> int:
             layer = rng.choice(layers)
             g = torch.Generator().manual_seed(args.seed * 1000 + k + int(tier * 1000))
             v = spectrum_matched(bank[layer], generator=g)
-            got = meter.scales_for_ladder(v, layer, (tier,),
-                                          residual_norm=float(
-                                              bank[layer].norm(dim=-1).mean() * 4),
-                                          verify=False)
-            scale = got[tier][0]
+            scale = scale_here(v, layer, tier)
             ids = render_prompt(tok, prompt)
             text = generate(model, tok, blocks, ids, v, layer, scale,
                             device=device, dtype=dtype)
             rows.append(dict(arm="spectrum_noise", tier=tier, concept=None, layer=layer,
-                             damage=meter.damage(v, layer, scale).damage,
+                             scale=scale, damage=meter.damage(v, layer, scale).damage,
                              said=says_yes(text), text=text.strip()[:120], named=False))
     # clean, and the factual control
     for _ in range(args.trials):
@@ -189,9 +199,9 @@ def main() -> int:
         for _ in range(args.trials // 2):
             word = rng.choice(sorted(held_words))
             layer = rng.choice(layers)
-            entry = scales[word][str(layer)][str(tier)]
+            v = bank[layer][index[word]]
             text = generate(model, tok, blocks, render_prompt(tok, FACTUAL),
-                            bank[layer][index[word]], layer, entry["scale"],
+                            v, layer, scale_here(v, layer, tier),
                             device=device, dtype=dtype)
             rows.append(dict(arm="factual_control", tier=tier, concept=word, layer=layer,
                              damage=None, said=says_yes(text), text=text.strip()[:120],
@@ -212,6 +222,18 @@ def main() -> int:
             dmg = [r["damage"] for r in at if r["damage"] is not None]
             print(f"{arm:<20} {tier:>7.2f} {len(at):>4} {yes/len(at):>8.0%} "
                   f"{named/len(at):>9.0%}  {sum(dmg)/len(dmg) if dmg else float('nan'):>+.3f}")
+    print("\nARE THE ARMS ACTUALLY MATCHED? the comparison means nothing otherwise.")
+    for tier in tiers:
+        pairs = {}
+        for arm in ("held_out_concept", "trained_concept", "spectrum_noise"):
+            at = [r["damage"] for r in rows if r["arm"] == arm and r["tier"] == tier
+                  and r["damage"] is not None]
+            pairs[arm] = sum(at) / len(at) if at else float("nan")
+        gap = abs(pairs["held_out_concept"] - pairs["spectrum_noise"])
+        verdict = "matched" if gap < 0.25 * abs(tier) + 0.02 else "NOT MATCHED"
+        print(f"  tier {tier:>6.2f}: concept {pairs['held_out_concept']:+.3f} vs "
+              f"noise {pairs['spectrum_noise']:+.3f}  gap {gap:.3f}  -> {verdict}")
+
     print(f"\nrows: {args.out}   ({time.time()-started:.0f}s)")
     return 0
 
