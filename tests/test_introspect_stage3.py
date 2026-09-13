@@ -198,3 +198,64 @@ def test_a_rung_below_the_whole_curve_takes_the_smallest_scale(pair):
     assert rungs[-1e6][2]["how"] == "clamped_high", rungs[-1e6][2]
     assert rungs[-0.05][2]["how"] in ("interpolated", "clamped_low", "clamped_high")
     assert set(rungs[-0.05][2]) == {"how", "monotone"}
+
+
+# -- the system turn and the injection site ------------------------------------------------------
+# `render_prompt(..., system=...)` had no caller until 21f64e3 and no test at all. It is now the
+# path every evaluation number goes through, and it moves the site.
+
+def test_a_system_turn_lands_as_a_system_turn_and_moves_the_site(pair):
+    """The site stays the last prompt token, but its ABSOLUTE index is not the bare one.
+
+    The injection site is an absolute index. Anything that records a site, a scale, or a residual
+    norm under one rendering and applies it under the other is off by the length of the system turn.
+    """
+    from local_llm_lab.introspect.protocol import EXPERIMENT_SYSTEM
+    _model, tok = pair
+    text = "Do you detect an injected thought?"
+    bare = render_prompt(tok, text)
+    withsys = render_prompt(tok, text, system=EXPERIMENT_SYSTEM)
+
+    assert EXPERIMENT_SYSTEM.split("\n")[0] in tok.decode(withsys), "the system text never landed"
+    assert EXPERIMENT_SYSTEM.split("\n")[0] not in tok.decode(bare)
+    assert len(withsys) > len(bare) + 40, (len(bare), len(withsys))
+    assert final_prompt_position(withsys) != final_prompt_position(bare)
+    assert final_prompt_position(withsys) == len(withsys) - 1
+    # the generation prompt still ends the render: the site is the same TOKEN, a different INDEX
+    assert bare[-1] == withsys[-1]
+    assert tok.decode(bare[-1:]) == tok.decode(withsys[-1:])
+
+
+def test_the_supervised_boundary_is_exact_with_a_system_turn(pair):
+    """`render_supervised` takes `system` too, and prompt_length must stay exact under it."""
+    from local_llm_lab.introspect.protocol import EXPERIMENT_SYSTEM
+    _model, tok = pair
+    text, target = "Do you detect an injected thought?", "YES. It is about honey."
+    ids, prompt_length = render_supervised(tok, text, target, system=EXPERIMENT_SYSTEM)
+    assert ids[:prompt_length] == render_prompt(tok, text, system=EXPERIMENT_SYSTEM)
+    assert final_prompt_position(ids[:prompt_length]) == prompt_length - 1
+    assert prompt_length < len(ids), "nothing would be supervised"
+    bare_ids, bare_length = render_supervised(tok, text, target)
+    assert prompt_length != bare_length, "a system turn that costs no tokens is not a system turn"
+    assert ids[prompt_length:prompt_length + 3] == bare_ids[bare_length:bare_length + 3]
+
+
+def test_training_and_evaluation_render_the_detect_turn_the_same_way():
+    """The mismatch 21f64e3 exists to remove, in the direction it left open.
+
+    `train_introspect.py` renders every supervised row with no system turn; `eval_introspect.py`
+    renders every detect turn with `EXPERIMENT_SYSTEM`. The adapter is then scored on a prompt
+    prefix it was never trained under. This test reads the two call sites.
+    """
+    import re
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "scripts"
+    trainer = (root / "train_introspect.py").read_text()
+    evaluator = (root / "eval_introspect.py").read_text()
+    eval_renders = re.findall(r"render_prompt\([^)]*\)", evaluator)
+    assert eval_renders and all("EXPERIMENT_SYSTEM" in r for r in eval_renders), eval_renders
+    train_renders = re.findall(r"render_supervised\([^)]*\)", trainer)
+    assert train_renders, "no supervised render in the trainer"
+    assert all("system" in r for r in train_renders), (
+        "evaluation renders the detect turn with EXPERIMENT_SYSTEM and training does not: "
+        f"{train_renders}")

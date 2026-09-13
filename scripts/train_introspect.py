@@ -133,6 +133,12 @@ def main() -> int:
     ap.add_argument("--device", default="cuda:0")
     ap.add_argument("--dtype", default="bfloat16")
     ap.add_argument("--rows", type=int, default=12000)
+    ap.add_argument("--replay", type=Path, default=None,
+                    help="jsonl of {prompt, target} from build_replay_data.py. The plan specifies "
+                         "replay at about half the data; the run that shipped none produced an "
+                         "adapter with a two-string vocabulary.")
+    ap.add_argument("--replay-rows", type=int, default=None,
+                    help="how many replay rows to use (default: as many as --rows)")
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--accum", type=int, default=4)
     ap.add_argument("--lr", type=float, default=1e-4)
@@ -196,6 +202,22 @@ def main() -> int:
     bank = {l: saved["bank"][l].float() for l in layers}
     common = {l: saved["common"][l].float() for l in layers}
     rows = make_rows(bank, scales, words, train_words, layers, rng, args.rows)
+    if args.replay:
+        pool = [json.loads(line) for line in args.replay.read_text().splitlines() if line.strip()]
+        wanted = args.replay_rows if args.replay_rows is not None else args.rows
+        if len(pool) < wanted:
+            raise SystemExit(f"{args.replay} holds {len(pool)} rows, {wanted} wanted: a repeated "
+                             f"replay prompt is memorised, not replayed")
+        rng.shuffle(pool)
+        # No injection, an ordinary question, and the model's own answer. bank_index -1 is the same
+        # "nothing added" path D_clean uses, so no vector is built and no hook fires for these.
+        rows += [dict(cls="D_replay", prompt=r["prompt"], target=r["target"], bank_index=-1,
+                      layer=layers[0], scale=0.0, wanted=0.0, measured=0.0, concept=None)
+                 for r in pool[:wanted]]
+        rng.shuffle(rows)
+    elif args.max_steps * args.batch * args.accum > 2000:
+        print("WARNING: no --replay. 600 steps over two target strings is what collapsed the "
+              "adapter's output distribution on 2026-09-13.", flush=True)
     print(f"{len(rows)} rows: " + ", ".join(
         f"{k} {sum(1 for r in rows if r['cls']==k)}"
         for k in sorted({r["cls"] for r in rows})), flush=True)
