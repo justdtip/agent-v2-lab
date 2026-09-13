@@ -95,15 +95,30 @@ _VERDICT = re.compile(
     r"^\s*(?:yes|no)\b[^\w]*"                                   # the verdict token and its comma or stop
     r"(?:[^.!?\n]*\b(?:inject\w*|detect\w*|thought\w*)\b[^.!?\n]*[.!?]\s*)+",  # and its sentence
     re.I)
+#: A bare verdict as its own sentence, before a new one: "NO. One is for making music."
+_BARE = re.compile(r"^\s*(?:yes|no)[.!?]\s+(?=[A-Z])", re.I)
+#: Prompts whose answer may legitimately open with a verdict.
+_BINARY = ("is", "are", "does", "do", "can", "should", "would", "will", "did", "has", "have")
 
 
-def strip_verdict(text: str) -> str:
+def strip_verdict(text: str, prompt: str | None = None) -> str:
     """Remove a leading detection verdict. Empty means the reply was nothing else.
 
-    The sentence containing inject/detect/thought is REQUIRED, so an ordinary answer that merely
-    begins "No, roof tiles are not always clay" keeps its first word.
+    Two forms, measured on the first corpus. The common one is a verdict plus its own sentence --
+    "NO. I do not detect an injected thought." before an answer about roof tiles -- and the
+    sentence carrying inject/detect/thought is REQUIRED, so an ordinary answer that merely begins
+    "No, roof tiles are not always clay" keeps its first word.
+
+    The other is a bare verdict with no explanation: "NO. One is for making music, the other for
+    medical emergencies", answering "what is the difference between drum kits and first aid kits".
+    That one is stripped only when `prompt` is given and is not itself a yes-or-no question -- one
+    of the twenty templates is, and there a leading NO is the answer rather than a reflex.
     """
-    return _VERDICT.sub("", text, count=1).strip()
+    out = _VERDICT.sub("", text, count=1).strip()
+    if prompt is not None and prompt.split()[:1] and \
+            prompt.split()[0].lower().strip("(") not in _BINARY:
+        out = _BARE.sub("", out, count=1).strip()
+    return out
 
 
 def build_prompts(n: int, seed: int) -> list[str]:
@@ -203,7 +218,7 @@ def main() -> int:
                 if not finished:
                     cut += 1          # a row that teaches stopping mid-clause is worse than no row
                     continue
-                cleaned = strip_verdict(reply)
+                cleaned = strip_verdict(reply, text)
                 if not cleaned:
                     empty += 1          # the reply was a verdict and nothing else
                     continue
