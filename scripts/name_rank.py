@@ -45,26 +45,47 @@ from build_introspect_data import DETECT_PROMPTS_HELD, POSITIVE_TARGET, batched_
 STEM = POSITIVE_TARGET.split("{name}")[0]
 
 
-def name_logprobs(model, tok, prefix_ids, name_ids, *, device, chunk=24):
+def name_logprobs(model, tok, prefix_ids, name_ids, *, device, dtype, blocks,
+                  vector, layer, scale, site, chunk=24):
     """Mean per-token logprob of each candidate name, continuing `prefix_ids`. One forward per chunk.
 
-    Teacher-forced: each candidate is scored as a continuation of the same prefix, so the numbers
-    are comparable across candidates by construction rather than by a decoding choice.
+    The injection is built PER CHUNK, because the patch mask is shaped to the forward it rides on
+    and the forward here is a batch of candidates, not a single row. Building it once outside the
+    loop is what the residual patch's own shape assertion refused, correctly.
+
+    Teacher-forced: every candidate continues the same prefix, so the numbers are comparable by
+    construction rather than by a decoding choice.
     """
     out = []
+    pad = tok.pad_token_id if tok.pad_token_id is not None else (tok.eos_token_id or 0)
     for start in range(0, len(name_ids), chunk):
         batch = name_ids[start:start + chunk]
         width = len(prefix_ids) + max(len(n) for n in batch)
-        pad = tok.pad_token_id if tok.pad_token_id is not None else (tok.eos_token_id or 0)
         ids = torch.full((len(batch), width), pad, dtype=torch.long)
         att = torch.zeros((len(batch), width), dtype=torch.long)
+        lengths = []
         for i, name in enumerate(batch):
             row = list(prefix_ids) + list(name)
             ids[i, :len(row)] = torch.tensor(row)
             att[i, :len(row)] = 1
-        with torch.no_grad():
-            logits = model(input_ids=ids.to(device), attention_mask=att.to(device),
-                           use_cache=False).logits.float().log_softmax(-1)
+            lengths.append(len(row))
+        patches = []
+        if vector is not None:
+            plan = PatchPlan(layer=[layer] * len(batch), site=[site] * len(batch),
+                             scale=[scale] * len(batch), vector=[vector] * len(batch))
+            masks = build_masks(plan, width=width, hidden=vector.shape[-1],
+                                device=device, dtype=dtype, lengths=lengths)
+            patches = [PlannedPatch(blocks[l], mask=m, delta=d, layer=l)
+                       for l, (m, d) in masks.items()]
+        for patch in patches:
+            patch.__enter__()
+        try:
+            with torch.no_grad():
+                logits = model(input_ids=ids.to(device), attention_mask=att.to(device),
+                               use_cache=False).logits.float().log_softmax(-1)
+        finally:
+            for patch in patches:
+                patch.__exit__()
         for i, name in enumerate(batch):
             total = 0.0
             for k, token in enumerate(name):
@@ -126,21 +147,9 @@ def main() -> int:
     print(f"{len(words)} candidates, naming position at token {len(stem_ids)}", flush=True)
 
     def scored(vector, layer, scale):
-        patches = []
-        if vector is not None:
-            plan = PatchPlan(layer=[layer], site=[len(prompt_ids) - 1], scale=[scale],
-                             vector=[vector])
-            masks = build_masks(plan, width=len(stem_ids), hidden=vector.shape[-1],
-                               device=device, dtype=dtype, lengths=[len(stem_ids)])
-            patches = [PlannedPatch(blocks[l], mask=m, delta=d, layer=l)
-                       for l, (m, d) in masks.items()]
-        for p in patches:
-            p.__enter__()
-        try:
-            return name_logprobs(model, tok, stem_ids, name_ids, device=device)
-        finally:
-            for p in patches:
-                p.__exit__()
+        return name_logprobs(model, tok, stem_ids, name_ids, device=device, dtype=dtype,
+                             blocks=blocks, vector=vector, layer=layer, scale=scale,
+                             site=len(prompt_ids) - 1)
 
     rows, started = [], time.time()
     for k in range(args.trials):
