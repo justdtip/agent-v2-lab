@@ -1816,6 +1816,12 @@ def main(argv: list[str] | None = None) -> int:
                              "which stays distinguishable from omitting the flag")
     parser.add_argument("--system-file", type=Path, default=None)
     parser.add_argument("--system-preset", choices=sorted(SYSTEM_PRESETS), default=None)
+    parser.add_argument("--adapter", type=Path, default=None,
+                        help="a LoRA adapter from train_introspect.py. The bench then serves the "
+                             "adapted model, and every reading belongs to that model rather than "
+                             "to the base checkpoint.")
+    parser.add_argument("--lora-rank", type=int, default=32)
+    parser.add_argument("--lora-alpha", type=int, default=64)
     parser.add_argument("--concept-baseline", type=int, default=24)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--log", type=Path, default=None,
@@ -1829,7 +1835,8 @@ def main(argv: list[str] | None = None) -> int:
     log_path = None if str(args.log) == "none" else args.log
 
     chat = Chat(args.model, device=args.device, dtype=args.dtype,
-                baseline_words=args.concept_baseline, seed=args.seed)
+                baseline_words=args.concept_baseline, seed=args.seed,
+                adapter=args.adapter, lora_rank=args.lora_rank, lora_alpha=args.lora_alpha)
     # file > text > preset > default, and `--system ''` means no system turn rather than the default
     if args.system_file is not None:
         chat.system = args.system_file.read_text().strip() or None

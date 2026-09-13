@@ -196,7 +196,8 @@ class Injection:
 
 
 class Console:
-    def __init__(self, snapshot: Path, *, device: str, dtype: str, baseline_words: int, seed: int):
+    def __init__(self, snapshot: Path, *, device: str, dtype: str, baseline_words: int, seed: int,
+                 adapter: Path | None = None, lora_rank: int = 32, lora_alpha: int = 64):
         device_mod.pin(seed=seed)
         self.device = device_mod.select(device)
         print(f"loading {snapshot.name} on {self.device} in {dtype} ...", flush=True)
@@ -205,6 +206,18 @@ class Console:
         from transformers import AutoTokenizer
 
         self.tokenizer = AutoTokenizer.from_pretrained(str(snapshot), local_files_only=True)
+        #: The adapter, or None for the base checkpoint. Every reading taken through this console
+        #: belongs to whichever of the two is loaded, so it is recorded rather than remembered.
+        self.adapter = None
+        if adapter is not None:
+            # Before the architecture view, which indexes the modules the swap replaces.
+            from local_llm_lab.lora_torch import apply_lora, load_lora_state_dict
+            swapped = apply_lora(self.model, r=lora_rank, alpha=lora_alpha)
+            loaded = load_lora_state_dict(self.model, torch.load(adapter, map_location="cpu"))
+            self.model.eval()
+            self.adapter = str(adapter)
+            print(f"adapter {Path(adapter).name}: {loaded} of {swapped} modules loaded at "
+                  f"rank {lora_rank}, alpha {lora_alpha}", flush=True)
         self.view = TorchArchitectureView.from_model(self.model)
         self.stop_ids = set(config_eos_ids(self.model))
         for name in ("<end_of_turn>", "<eos>"):

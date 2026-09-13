@@ -143,16 +143,37 @@ def lora_parameters(model: nn.Module) -> Iterator[nn.Parameter]:
         yield module.lora_B
 
 
-def lora_state_dict(model: nn.Module) -> dict[str, torch.Tensor]:
-    """Just the adapter. A full save_pretrained here writes 56 GiB of base weights per checkpoint."""
-    out = {}
+#: Key for the rank and alpha, carried in the file so a reload cannot silently use the wrong ones.
+META = "_lora_meta"
+
+
+def lora_state_dict(model: nn.Module) -> dict:
+    """Just the adapter. A full save_pretrained here writes 56 GiB of base weights per checkpoint.
+
+    Rank and alpha travel with it. A rank mismatch on reload raises when the copy_ finds the wrong
+    shape, but an ALPHA mismatch cannot: it loads every module cleanly and applies a uniformly
+    rescaled adapter, so the file would produce a different model with nothing said.
+    """
+    out: dict = {}
+    ranks, alphas = set(), set()
     for name, module in lora_modules(model):
         out[f"{name}.lora_A"] = module.lora_A.detach().cpu()
         out[f"{name}.lora_B"] = module.lora_B.detach().cpu()
+        ranks.add(int(module.lora_A.shape[0]))
+        alphas.add(float(module.scaling) * int(module.lora_A.shape[0]))
+    if out:
+        out[META] = {"rank": sorted(ranks), "alpha": sorted(alphas), "modules": len(ranks and out)}
     return out
 
 
-def load_lora_state_dict(model: nn.Module, state: dict[str, torch.Tensor]) -> int:
+def adapter_meta(state: dict) -> dict | None:
+    """The rank and alpha a file was saved with, or None for a file saved before they travelled."""
+    meta = state.get(META)
+    return meta if isinstance(meta, dict) else None
+
+
+def load_lora_state_dict(model: nn.Module, state: dict) -> int:
+    meta = adapter_meta(state)
     loaded = 0
     for name, module in lora_modules(model):
         a, b = state.get(f"{name}.lora_A"), state.get(f"{name}.lora_B")
@@ -162,6 +183,13 @@ def load_lora_state_dict(model: nn.Module, state: dict[str, torch.Tensor]) -> in
             module.lora_A.copy_(a.to(module.lora_A.dtype))
             module.lora_B.copy_(b.to(module.lora_B.dtype))
         loaded += 1
+    if meta:
+        want = [float(module.scaling) * int(module.lora_A.shape[0])
+                for _n, module in lora_modules(model)]
+        if want and sorted(set(want)) != sorted(meta.get("alpha", sorted(set(want)))):
+            raise ValueError(
+                f"adapter was saved with alpha {meta['alpha']} and this model was built with "
+                f"{sorted(set(want))}: the same weights would be applied at a different strength")
     return loaded
 
 
