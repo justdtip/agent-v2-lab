@@ -155,7 +155,7 @@ class DamageMeter:
         clean = self.clean()
         index = list(range(len(self.prompts))) if prompts is None else prompts
         scales = [0.0] + list(scales)
-        pairs = [(s, j) for s in scales for j in index]
+        pairs = [(s, j) for j in index for s in scales]
         with torch.no_grad():
             ids, att, sites, lengths, width = self._batch([j for _s, j in pairs])
             plan = PatchPlan(layer=[layer] * len(pairs), site=sites,
@@ -189,8 +189,8 @@ class DamageMeter:
     def scales_for_ladder(self, vector: torch.Tensor, layer: int, ladder: tuple[float, ...],
                           *, residual_norm: float, prompts: list[int] | None = None,
                           verify: bool = True,
-                          percents: tuple[float, ...] = (0.06, 0.125, 0.25, 0.5, 1, 2, 4, 8,
-                                                        16, 32, 64, 128)
+                          percents: tuple[float, ...] = (0.008, 0.015, 0.03, 0.06, 0.125, 0.25,
+                                                        0.5, 1, 2, 4, 8, 16, 32, 64, 128)
                           ) -> dict[float, tuple[float, float, dict]]:
         """Every rung of the ladder from ONE swept curve. {wanted: (scale, achieved, note)}.
 

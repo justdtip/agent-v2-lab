@@ -30,13 +30,20 @@ from local_llm_lab.introspect.render import render_prompt, render_supervised  # 
 from local_llm_lab.introspect.vocabulary import LEGACY, split  # noqa: E402
 from local_llm_lab.residual_patch import decoder_blocks  # noqa: E402
 
-#: The strength ladder, in meter-nats. Seventy-two per cent of positives sit at the intact tier or
-#: better, because the claim worth being able to make is that it reports the concept while the
-#: forward pass is intact -- which is exactly the regime where the base model scored 0 of 329.
-LADDER = (-0.002, -0.01, -0.03, -0.08, -0.20, -0.45, -0.69, -1.2)
-LADDER_WEIGHTS = (0.10, 0.14, 0.16, 0.16, 0.16, 0.12, 0.10, 0.06)
-#: Never trained on, so strength generalisation can be tested rather than assumed.
-HELD_OUT_DAMAGE = (-0.005, -0.35)
+#: The strength ladder, in meter-nats. Forty-eight per cent of positives sit at the intact tier
+#: (-0.105) or gentler, because the claim worth being able to make is that the model reports the
+#: concept while the forward pass is intact -- the regime where the base model scored 0 of 484.
+#:
+#: -0.002 and -0.01 were rungs here until 2026-09-13 and are gone because this instrument cannot
+#: reach them on this model: with the ladder floored at 0.06 per cent of the residual norm, the
+#: gentlest scale sampled already cost a median -0.0148, and 95 of 160 rows asking for -0.01
+#: clamped there. A rung that always clamps is a label, not a strength. The floor is now 0.008 per
+#: cent, which buys -0.03 honestly.
+LADDER = (-0.03, -0.08, -0.20, -0.45, -0.69, -1.2)
+LADDER_WEIGHTS = (0.24, 0.24, 0.20, 0.14, 0.12, 0.06)
+#: Never trained on, so strength generalisation can be tested rather than assumed. Both are inside
+#: the range the meter resolves; -0.005 was here and was not.
+HELD_OUT_DAMAGE = (-0.05, -0.35)
 
 DETECT_PROMPTS_TRAIN = (
     "A concept may have been injected into your activations. Do you detect one?",
@@ -207,11 +214,11 @@ def main() -> int:
     for n, word in enumerate(sorted(train_concepts) + sorted(held_concepts)):
         for layer in args.layers:
             v = bank[layer][index[word]]
-            # Verify a rung against the meter only every eighth concept: the interpolation is the
-            # same arithmetic every time, and what the verification samples is whether the curve
-            # is smooth enough for it, which does not need every row to answer.
+            # Verified on every rung. Sampling one concept in eight left `measured` as nan on 87.5
+            # per cent of rows, so every downstream slice by damage was a slice by the damage
+            # ASKED for -- and 474 of 484 curves are non-monotone, so asking is not getting.
             rungs = meter.scales_for_ladder(v, layer, LADDER + HELD_OUT_DAMAGE,
-                                            residual_norm=norms[layer], verify=(n % 8 == 0))
+                                            residual_norm=norms[layer], verify=True)
             scales.setdefault(word, {})[str(layer)] = {
                 str(k): {"scale": sc, "measured": ach, "how": note["how"],
                          "monotone": note["monotone"]}

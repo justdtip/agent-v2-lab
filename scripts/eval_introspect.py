@@ -186,7 +186,11 @@ def main() -> int:
     probe_ids = render_prompt(tok, prompt, system=EXPERIMENT_SYSTEM)
 
     rows = []
-    tiers = (-0.01, -0.08, -0.20)          # pristine, intact, and just past it
+    # Measured on the base model 2026-09-13 with a batch-matched meter: at the old ladder floor of
+    # 0.06 per cent of the residual norm, 95 of 160 rows asking for -0.01 clamped, and the gentlest
+    # scale sampled already cost a median -0.0148. The floor is now 0.008 per cent, and the gentlest
+    # tier asks for what the instrument can resolve rather than for a number that reads well.
+    tiers = (-0.03, -0.08, -0.20)          # near-pristine, intact, and just past it
     # The residual norm at this prompt's last token, which is where the delta lands -- not the norm
     # of the common-mode vector, which is a different quantity that happened to be nearby.
     pad = tok.pad_token_id if tok.pad_token_id is not None else (tok.eos_token_id or 0)
