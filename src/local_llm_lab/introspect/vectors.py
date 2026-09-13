@@ -85,8 +85,8 @@ def common_mode(model: Any, tokenizer: Any, blocks: Any, layer: int, *, device,
     return rows.mean(dim=0)
 
 
-def spectrum_matched(bank: torch.Tensor, *, generator: torch.Generator | None = None
-                     ) -> torch.Tensor:
+def spectrum_matched(bank: torch.Tensor, *, generator: torch.Generator | None = None,
+                     add_mean: bool = False) -> torch.Tensor:
     """A random direction with the concept bank's own covariance: same norm, same per-mode energy.
 
     The only null that can be matched on norm AND on damage at once, which is what makes the
@@ -98,6 +98,14 @@ def spectrum_matched(bank: torch.Tensor, *, generator: torch.Generator | None = 
     u, s, v = torch.linalg.svd(centred.double(), full_matrices=False)
     coefficients = torch.randn(s.shape[0], generator=generator, dtype=torch.float64)
     drawn = (v.T @ (coefficients * s / (centred.shape[0] ** 0.5))).float()
+    if add_mean:
+        # The bank is a sample from N(mu, Sigma), not N(0, Sigma). Centring and never adding mu
+        # back leaves E<draw, mu_hat> = 0 while E<concept, mu_hat> = ||mu||, so ONE scalar that
+        # never looks at which concept is present separates the arms: measured AUC 0.789 and 0.743
+        # on two banks, falling to 0.510 and 0.479 with the mean restored. A detector keying on
+        # that would produce a perfect concept-versus-noise result knowing nothing about concepts,
+        # which is the alternative this experiment exists to exclude.
+        drawn = drawn + bank.mean(dim=0)
     scale = bank.norm(dim=-1).mean() / drawn.norm().clamp(min=1e-12)
     return drawn * scale
 

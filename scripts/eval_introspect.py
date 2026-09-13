@@ -241,11 +241,26 @@ def main() -> int:
             for layer in draws[tier]:
                 word = rng.choice(pool)
                 row_for(pool_name, tier, layer, bank[layer][index[word]], ids, word=word)
-    # the decisive arm: a random direction of the bank's own spectrum, at MATCHED damage
+    # Three nulls, not one, because they fail in different ways and only the set of them says
+    # what a YES is about.
+    #
+    #   spectrum_noise       the bank's covariance, mean REMOVED. Separable from a concept by one
+    #                        scalar -- the projection on the bank mean -- at AUC 0.79, without ever
+    #                        looking at which concept is present.
+    #   mean_matched_noise   the same draw with the mean put back, so that scalar is worthless.
+    #                        If the detector holds up here it is not keying on the recipe.
+    #   common_mode          the bank's mean itself: exactly what every concept vector shares and
+    #                        nothing that distinguishes one from another. A YES here is a detector
+    #                        that has learned the generator's signature and no content at all.
     for tier in tiers:
         for k, layer in enumerate(draws[tier]):
             g = torch.Generator().manual_seed(null_seed(0, tier, k))
             row_for("spectrum_noise", tier, layer, spectrum_matched(bank[layer], generator=g), ids)
+            g2 = torch.Generator().manual_seed(null_seed(2, tier, k))
+            row_for("mean_matched_noise", tier, layer,
+                    spectrum_matched(bank[layer], generator=g2, add_mean=True), ids)
+            if k < max(args.trials // 2, 4):     # deterministic given the layer: fewer are needed
+                row_for("common_mode", tier, layer, bank[layer].mean(dim=0), ids)
 
     # The clean floor. Greedy decoding of a fixed prompt is deterministic, so the old loop ran one
     # forward forty times and printed a single measurement as n=40. Vary what can be varied: every
@@ -282,8 +297,9 @@ def main() -> int:
     # reported 0 per cent detection for a model that never used either word.
     print(f"\n{'arm':<18} {'tier':>6} {'n':>4} {'YES':>5} {'NO':>5} {'unparsed':>9} "
           f"{'YES|ans':>8} {'named':>6} {'clamped':>8}  mean damage")
-    for arm in ("held_out_concept", "trained_concept", "spectrum_noise", "clean",
-                "clean_paraphrase", "factual_clean", "factual_control", "factual_noise"):
+    for arm in ("held_out_concept", "trained_concept", "spectrum_noise", "mean_matched_noise",
+                "common_mode", "clean", "clean_paraphrase", "factual_clean", "factual_control",
+                "factual_noise"):
         for tier in (tiers if arm not in ("clean", "clean_paraphrase", "factual_clean")
                      else (0.0,)):
             at = [r for r in rows if r["arm"] == arm and r["tier"] == tier]
@@ -309,7 +325,8 @@ def main() -> int:
     # rows were never meaningfully injected.
     for tier in tiers:
         stats = {}
-        for arm in ("held_out_concept", "trained_concept", "spectrum_noise"):
+        for arm in ("held_out_concept", "trained_concept", "spectrum_noise",
+                    "mean_matched_noise", "common_mode"):
             at = sorted(r["damage"] for r in rows
                         if r["arm"] == arm and r["tier"] == tier and r["damage"] is not None)
             if not at:
@@ -321,15 +338,19 @@ def main() -> int:
                   f"min {at[0]:+.4f} max {at[-1]:+.4f} n {len(at)}")
         if "held_out_concept" not in stats or "spectrum_noise" not in stats:
             continue
-        (cm, cs), (nm, ns) = stats["held_out_concept"], stats["spectrum_noise"]
-        gap, ref = abs(cm - nm), max(abs(cm), abs(nm), 1e-9)
-        floor = 0.10 * abs(tier)          # two arms that are both undamaged are not "50% apart"
-        between = abs(cs - ns) / ref      # the arms against EACH OTHER, not against their own mean
-        matched = (gap <= 0.15 * ref or gap <= floor) and between <= 0.50
-        fidelity = max(cs, ns) / ref      # how well the LADDER hit the tier: a diagnostic, not a gate
-        print(f"  tier {tier:>6.2f} -> gap {gap:.4f} ({gap/ref:.0%}), between-arm sd {between:.0%}"
-              f"  -> {'matched' if matched else 'NOT MATCHED'}"
-              f"   [ladder fidelity: worst within-arm sd {fidelity:.0%}]")
+        cm, cs = stats["held_out_concept"]
+        for null in ("spectrum_noise", "mean_matched_noise", "common_mode"):
+            if null not in stats:
+                continue
+            nm, ns = stats[null]
+            gap, ref = abs(cm - nm), max(abs(cm), abs(nm), 1e-9)
+            floor = 0.10 * abs(tier)      # two arms that are both undamaged are not "50% apart"
+            between = abs(cs - ns) / ref  # the arms against EACH OTHER, not against their own mean
+            matched = (gap <= 0.15 * ref or gap <= floor) and between <= 0.50
+            fidelity = max(cs, ns) / ref  # how well the LADDER hit the tier: a diagnostic
+            print(f"  tier {tier:>6.2f} concept vs {null:<18} gap {gap:.4f} ({gap/ref:>4.0%}), "
+                  f"between-arm sd {between:>4.0%}  -> {'matched' if matched else 'NOT MATCHED'}"
+                  f"   [fidelity {fidelity:.0%}]")
 
     off = [r for r in rows if r.get("off_tier", 0) > 0.3 and r["damage"] is not None]
     nonmono = [r for r in rows if r.get("monotone") is False]
