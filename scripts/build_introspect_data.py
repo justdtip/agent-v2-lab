@@ -202,7 +202,9 @@ def main() -> int:
             rungs = meter.scales_for_ladder(v, layer, LADDER + HELD_OUT_DAMAGE,
                                             residual_norm=norms[layer], verify=(n % 8 == 0))
             scales.setdefault(word, {})[str(layer)] = {
-                str(k): {"scale": sc, "measured": ach} for k, (sc, ach) in rungs.items()}
+                str(k): {"scale": sc, "measured": ach, "how": note["how"],
+                         "monotone": note["monotone"]}
+                for k, (sc, ach, note) in rungs.items()}
         if n % 40 == 0:
             print(f"  scales {n}/{len(words)} ({time.time()-t0:.0f}s)", flush=True)
     torch.save(scales, args.out / "scales.pt")

@@ -184,7 +184,11 @@ class DamageMeter:
                           percents: tuple[float, ...] = (0.06, 0.125, 0.25, 0.5, 1, 2, 4, 8,
                                                         16, 32, 64, 128)
                           ) -> dict[float, tuple[float, float]]:
-        """Every rung of the ladder from ONE swept curve. {wanted: (scale, achieved)}.
+        """Every rung of the ladder from ONE swept curve. {wanted: (scale, achieved, note)}.
+
+        `note` carries how the scale was reached -- interpolated, or clamped to an end of the
+        ladder -- and whether the curve was monotone. A clamped rung is not the strength it is
+        labelled, and a caller that drops the note cannot tell.
 
         Sweeping per rung costs ten forwards each and measures the same curve ten times; one sweep
         and an interpolation is the same information for a tenth of the card time.
@@ -198,39 +202,25 @@ class DamageMeter:
             # Falling through to the strongest scale for every unbracketed rung is how a request
             # for a whisper became fifteen nats of damage: if even the smallest scale sampled
             # already overshoots, the answer is the smallest scale, not the largest.
+            if not all(d == d for _s, d in curve):
+                raise ValueError(f"L{layer}: non-finite damage in the swept curve: {curve}")
+            monotone = all(d1 <= d0 + 1e-9 for (_a, d0), (_b, d1) in zip(curve, curve[1:]))
             if curve[0][1] <= wanted:
-                chosen = curve[0][0]
+                chosen, how = curve[0][0], "clamped_low"
             elif curve[-1][1] >= wanted:
-                chosen = curve[-1][0]
+                # The ladder never reached the wanted damage. Returning its ceiling is defensible;
+                # returning it SILENTLY is how the 2026-09-13 noise arm sat pinned at 128 per cent
+                # of the residual norm at all three tiers while the tier label said otherwise.
+                chosen, how = curve[-1][0], "clamped_high"
             else:
-                chosen = curve[-1][0]
+                chosen, how = curve[-1][0], "unbracketed"
                 for (s0, d0), (s1, d1) in zip(curve, curve[1:]):
                     if d0 >= wanted >= d1:
                         span = (d0 - d1) or 1e-12
                         chosen = s0 + (s1 - s0) * (d0 - wanted) / span
+                        how = "interpolated"
                         break
             achieved = (self.damage(vector, layer, chosen, prompts).damage if verify
                         else float("nan"))
-            out[wanted] = (chosen, achieved)
+            out[wanted] = (chosen, achieved, {"how": how, "monotone": monotone})
         return out
-
-    def scale_for_damage(self, vector: torch.Tensor, layer: int, wanted: float,
-                         *, residual_norm: float, prompts: list[int] | None = None,
-                         percents: tuple[float, ...] = (0.5, 1, 2, 4, 8, 16, 32, 64, 128)
-                         ) -> tuple[float, float]:
-        """The scale that costs `wanted` nats, by interpolating a swept curve. Returns (scale, achieved).
-
-        Interpolated on the ladder rather than bisected: bisection costs a dozen sequential
-        evaluations per vector and layer, and the curve is wanted anyway.
-        """
-        unit = float(vector.norm())
-        scales = [(p / 100.0) * residual_norm / unit for p in percents]
-        curve = self.curve(vector, layer, scales, prompts)
-        curve = sorted(curve, key=lambda sd: sd[0])
-        for (s0, d0), (s1, d1) in zip(curve, curve[1:]):
-            if d0 >= wanted >= d1:
-                span = (d0 - d1) or 1e-12
-                chosen = s0 + (s1 - s0) * (d0 - wanted) / span
-                return chosen, self.damage(vector, layer, chosen, prompts).damage
-        # never reached the wanted damage inside the ladder; say so with the strongest tried
-        return curve[-1][0], curve[-1][1]

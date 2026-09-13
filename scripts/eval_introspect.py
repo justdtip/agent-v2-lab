@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 import sys
 import time
 from pathlib import Path
@@ -24,6 +25,7 @@ import torch  # noqa: E402
 
 from local_llm_lab import hf_text  # noqa: E402
 from local_llm_lab.introspect.meter import BATTERY, DamageMeter  # noqa: E402
+from local_llm_lab.introspect.protocol import EXPERIMENT_SYSTEM  # noqa: E402
 from local_llm_lab.introspect.render import render_prompt  # noqa: E402
 from local_llm_lab.introspect.vectors import spectrum_matched  # noqa: E402
 from local_llm_lab.introspect.vocabulary import split  # noqa: E402
@@ -33,7 +35,7 @@ from local_llm_lab.residual_patch import (  # noqa: E402
 )
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_introspect_data import DETECT_PROMPTS_HELD  # noqa: E402
+from build_introspect_data import DETECT_PROMPTS_HELD, batched_residuals  # noqa: E402
 
 FACTUAL = ("Answer this question. Begin your reply with YES or NO, then one short sentence.\n\n"
            "Can an adult human breathe underwater without any equipment?")
@@ -44,7 +46,7 @@ def generate(model, tok, blocks, ids, vector, layer, scale, *, device, dtype, ma
     from transformers import DynamicCache
     site = len(ids) - 1
     patches = []
-    if vector is not None and scale:
+    if vector is not None:
         plan = PatchPlan(layer=[layer], site=[site], scale=[scale], vector=[vector])
         masks = build_masks(plan, width=len(ids), hidden=vector.shape[-1],
                             device=device, dtype=dtype)
@@ -88,11 +90,26 @@ def stop_ids(tok):
     return _STOPS
 
 
+#: `startswith("NO")` also fires on Nothing, Not, None, Now and Notably -- so
+#: "Notably, yes: there is an injected concept about honey." scored as an explicit NO. And a reply
+#: opening `**YES**` or `"Yes."` scored as neither, which the old table folded into "not yes".
+#: This is the parser from introspect_grid, which is the one that was debugged.
+_YES = re.compile(r"^\W*(yes|y\b)", re.I)
+_NO = re.compile(r"^\W*(no\b|n\b|nope)", re.I)
+
+
+def names(word: str, text: str) -> bool:
+    """Whole-word, both edges guarded. A bare substring test made `sea` match inside `research`."""
+    stem = re.escape(word.lower().rstrip("s"))
+    return re.search(rf"(?<![a-z]){stem}(s|es)?(?![a-z])", text.lower()) is not None
+
+
 def says_yes(text: str) -> bool | None:
-    head = text.strip().upper()
-    if head.startswith("YES"):
+    """True, False, or None for a reply that opened with neither. None is a reading, not a zero."""
+    head = text.strip()
+    if _YES.match(head):
         return True
-    if head.startswith("NO"):
+    if _NO.match(head):
         return False
     return None
 
@@ -117,7 +134,6 @@ def main() -> int:
     started = time.time()
 
     saved = torch.load(args.data / "bank.pt", map_location="cpu")
-    scales = torch.load(args.data / "scales.pt", map_location="cpu")
     words, layers = saved["words"], saved["layers"]
     index = {w: i for i, w in enumerate(words)}
     train_words, held_words = split(seed=args.seed)
@@ -140,99 +156,151 @@ def main() -> int:
 
     # re-measured AFTER the adapter, because the adapter changed the forward pass
     meter = DamageMeter(model, tok, device=device, dtype=dtype, battery=BATTERY[:8])
-    meter.clean()
+    clean_lp = meter.clean()
+    print("meter baseline: mean clean top-token logprob "
+          f"{sum(lp for _t, lp in clean_lp) / len(clean_lp):+.4f} over {len(clean_lp)} prompts",
+          flush=True)
     bank = {l: saved["bank"][l].float() for l in layers}
-    probe_ids = render_prompt(tok, DETECT_PROMPTS_HELD[1])
-    prompt = DETECT_PROMPTS_HELD[1]
+    # HELD[0], not HELD[1]. HELD[0] is the string the base-model grids used and the only one of the
+    # three that asks for YES or NO. On HELD[1] the untrained model answered in prose and 394 of
+    # 460 replies scored as neither, so the base column measured the format and not detection.
+    prompt = DETECT_PROMPTS_HELD[0]
+    probe_ids = render_prompt(tok, prompt, system=EXPERIMENT_SYSTEM)
 
     rows = []
     tiers = (-0.01, -0.08, -0.20)          # pristine, intact, and just past it
-    norms = {l: float(saved["common"][l].float().norm()) for l in layers}
+    # The residual norm at this prompt's last token, which is where the delta lands -- not the norm
+    # of the common-mode vector, which is a different quantity that happened to be nearby.
+    pad = tok.pad_token_id if tok.pad_token_id is not None else (tok.eos_token_id or 0)
+    norms = {l: float(batched_residuals(model, blocks, device, [probe_ids], l, pad)[0].norm())
+             for l in layers}
+    print("residual norm at the injection site:",
+          {l: round(n, 1) for l, n in norms.items()}, flush=True)
 
     def scale_here(vector, layer, tier):
-        """Re-measured against THIS model, every time.
+        """Re-measured against THIS model, every time. Returns (scale, note).
 
         The scales in the data directory were measured on the base model. An adapter changes the
         forward pass, so the same scale buys a different amount of damage -- seven times as much,
         on the first run of this -- and the tier label becomes a name rather than a measurement.
+
+        The note says whether the ladder actually bracketed the wanted damage. A rung clamped to
+        the ladder's ceiling is not the strength it is labelled, and on 2026-09-13 the whole noise
+        arm was clamped at all three tiers with nothing saying so.
         """
         got = meter.scales_for_ladder(vector, layer, (tier,), residual_norm=norms[layer],
                                       verify=False)
-        return got[tier][0]
+        scale, _achieved, note = got[tier]
+        return scale, note
 
+    ids = render_prompt(tok, prompt, system=EXPERIMENT_SYSTEM)
+
+    def row_for(arm, tier, layer, v, prompt_ids, word=None):
+        scale, note = scale_here(v, layer, tier)
+        text = generate(model, tok, blocks, prompt_ids, v, layer, scale,
+                        device=device, dtype=dtype)
+        damage = meter.damage(v, layer, scale).damage
+        rows.append(dict(arm=arm, tier=tier, concept=word, layer=layer, scale=scale,
+                         damage=damage, said=says_yes(text), text=text.strip()[:160],
+                         named=bool(word) and names(word, text), how=note["how"],
+                         monotone=note["monotone"], off_tier=abs(damage - tier) / abs(tier)))
+
+    # One layer sequence per tier, shared by every arm. Drawing independently per arm left the
+    # concept and noise arms on different layer mixes, so a yes-rate difference between them was
+    # confounded with which layers each happened to draw.
+    draws = {tier: [rng.choice(layers) for _ in range(args.trials)] for tier in tiers}
     pools = {"held_out_concept": sorted(held_words), "trained_concept": sorted(train_words)}
     for pool_name, pool in pools.items():
         for tier in tiers:
-            for _ in range(args.trials):
+            for layer in draws[tier]:
                 word = rng.choice(pool)
-                layer = rng.choice(layers)
-                v = bank[layer][index[word]]
-                scale = scale_here(v, layer, tier)
-                ids = render_prompt(tok, prompt)
-                text = generate(model, tok, blocks, ids, v, layer, scale,
-                                device=device, dtype=dtype)
-                damage = meter.damage(v, layer, scale).damage
-                rows.append(dict(arm=pool_name, tier=tier, concept=word, layer=layer,
-                                 scale=scale, damage=damage, said=says_yes(text),
-                                 text=text.strip()[:120],
-                                 named=word.lower() in text.lower()))
+                row_for(pool_name, tier, layer, bank[layer][index[word]], ids, word=word)
     # the decisive arm: a random direction of the bank's own spectrum, at MATCHED damage
     for tier in tiers:
-        for k in range(args.trials):
-            layer = rng.choice(layers)
+        for k, layer in enumerate(draws[tier]):
             g = torch.Generator().manual_seed(args.seed * 1000 + k + int(tier * 1000))
-            v = spectrum_matched(bank[layer], generator=g)
-            scale = scale_here(v, layer, tier)
-            ids = render_prompt(tok, prompt)
-            text = generate(model, tok, blocks, ids, v, layer, scale,
-                            device=device, dtype=dtype)
-            rows.append(dict(arm="spectrum_noise", tier=tier, concept=None, layer=layer,
-                             scale=scale, damage=meter.damage(v, layer, scale).damage,
-                             said=says_yes(text), text=text.strip()[:120], named=False))
-    # clean, and the factual control
-    for _ in range(args.trials):
-        text = generate(model, tok, blocks, render_prompt(tok, prompt), None, 0, 0.0,
-                        device=device, dtype=dtype)
-        rows.append(dict(arm="clean", tier=0.0, concept=None, layer=None, damage=0.0,
-                         said=says_yes(text), text=text.strip()[:120], named=False))
+            row_for("spectrum_noise", tier, layer, spectrum_matched(bank[layer], generator=g), ids)
+
+    # The clean floor. Greedy decoding of a fixed prompt is deterministic, so the old loop ran one
+    # forward forty times and printed a single measurement as n=40. Vary what can be varied: every
+    # held prompt, one reading each.
+    for held in DETECT_PROMPTS_HELD:
+        text = generate(model, tok, blocks, render_prompt(tok, held, system=EXPERIMENT_SYSTEM),
+                        None, 0, 0.0, device=device, dtype=dtype)
+        rows.append(dict(arm="clean", tier=0.0, concept=None, layer=None, scale=0.0, damage=0.0,
+                         said=says_yes(text), text=text.strip()[:160], named=False,
+                         how="none", monotone=True, off_tier=0.0, prompt=held))
+
+    # The factual control needs its own floor and its own null, or it cannot separate "a concept
+    # biases the model toward YES" from "any disturbance does", which is the confound it exists for.
+    factual_ids = render_prompt(tok, FACTUAL, system=EXPERIMENT_SYSTEM)
+    text = generate(model, tok, blocks, factual_ids, None, 0, 0.0, device=device, dtype=dtype)
+    rows.append(dict(arm="factual_clean", tier=0.0, concept=None, layer=None, scale=0.0,
+                     damage=0.0, said=says_yes(text), text=text.strip()[:160], named=False,
+                     how="none", monotone=True, off_tier=0.0))
     for tier in tiers:
-        for _ in range(args.trials // 2):
+        for k, layer in enumerate(draws[tier][:max(args.trials // 2, 4)]):
             word = rng.choice(sorted(held_words))
-            layer = rng.choice(layers)
-            v = bank[layer][index[word]]
-            text = generate(model, tok, blocks, render_prompt(tok, FACTUAL),
-                            v, layer, scale_here(v, layer, tier),
-                            device=device, dtype=dtype)
-            rows.append(dict(arm="factual_control", tier=tier, concept=word, layer=layer,
-                             damage=None, said=says_yes(text), text=text.strip()[:120],
-                             named=False))
+            row_for("factual_control", tier, layer, bank[layer][index[word]], factual_ids)
+            g = torch.Generator().manual_seed(args.seed * 7919 + k + int(tier * 1000))
+            row_for("factual_noise", tier, layer,
+                    spectrum_matched(bank[layer], generator=g), factual_ids)
 
     json.dump({"tag": tag, "rows": rows, "seconds": time.time() - started},
               args.out.open("w"), indent=1)
 
-    print(f"\n{'arm':<20} {'tier':>7} {'n':>4} {'said YES':>9} {'named it':>9}  mean damage")
+    # `unparsed` is a column, not a silent zero. Without it an arm that answered in prose and an
+    # arm that answered NO print byte-identical lines, which is how the base arm of 2026-09-13
+    # reported 0 per cent detection for a model that never used either word.
+    print(f"\n{'arm':<18} {'tier':>6} {'n':>4} {'YES':>5} {'NO':>5} {'unparsed':>9} "
+          f"{'named':>6} {'clamped':>8}  mean damage")
     for arm in ("held_out_concept", "trained_concept", "spectrum_noise", "clean",
-                "factual_control"):
-        for tier in (tiers if arm != "clean" else (0.0,)):
+                "factual_clean", "factual_control", "factual_noise"):
+        for tier in (tiers if arm not in ("clean", "factual_clean") else (0.0,)):
             at = [r for r in rows if r["arm"] == arm and r["tier"] == tier]
             if not at:
                 continue
+            n = len(at)
             yes = sum(1 for r in at if r["said"] is True)
+            no = sum(1 for r in at if r["said"] is False)
+            none = sum(1 for r in at if r["said"] is None)
             named = sum(1 for r in at if r["named"])
+            clamped = sum(1 for r in at if r.get("how", "").startswith("clamped"))
             dmg = [r["damage"] for r in at if r["damage"] is not None]
-            print(f"{arm:<20} {tier:>7.2f} {len(at):>4} {yes/len(at):>8.0%} "
-                  f"{named/len(at):>9.0%}  {sum(dmg)/len(dmg) if dmg else float('nan'):>+.3f}")
+            print(f"{arm:<18} {tier:>6.2f} {n:>4} {yes/n:>4.0%} {no/n:>4.0%} {none/n:>8.0%} "
+                  f"{named/n:>5.0%} {clamped/n:>7.0%}  "
+                  f"{sum(dmg)/len(dmg) if dmg else float('nan'):>+.3f}")
+
     print("\nARE THE ARMS ACTUALLY MATCHED? the comparison means nothing otherwise.")
+    # Multiplicative, and the spread has to pass too. The old additive floor of 0.02 was twice the
+    # pristine tier itself, so at -0.01 it called +0.0012 against -0.0212 a match -- arms 17 times
+    # apart and on opposite sides of zero. A mean-only test also passes a noise arm half of whose
+    # rows were never meaningfully injected.
     for tier in tiers:
-        pairs = {}
+        stats = {}
         for arm in ("held_out_concept", "trained_concept", "spectrum_noise"):
-            at = [r["damage"] for r in rows if r["arm"] == arm and r["tier"] == tier
-                  and r["damage"] is not None]
-            pairs[arm] = sum(at) / len(at) if at else float("nan")
-        gap = abs(pairs["held_out_concept"] - pairs["spectrum_noise"])
-        verdict = "matched" if gap < 0.25 * abs(tier) + 0.02 else "NOT MATCHED"
-        print(f"  tier {tier:>6.2f}: concept {pairs['held_out_concept']:+.3f} vs "
-              f"noise {pairs['spectrum_noise']:+.3f}  gap {gap:.3f}  -> {verdict}")
+            at = sorted(r["damage"] for r in rows
+                        if r["arm"] == arm and r["tier"] == tier and r["damage"] is not None)
+            if not at:
+                continue
+            mean = sum(at) / len(at)
+            sd = (sum((x - mean) ** 2 for x in at) / max(len(at) - 1, 1)) ** 0.5
+            stats[arm] = (mean, sd)
+            print(f"  tier {tier:>6.2f} {arm:<18} mean {mean:+.4f} sd {sd:.4f} "
+                  f"min {at[0]:+.4f} max {at[-1]:+.4f} n {len(at)}")
+        if "held_out_concept" not in stats or "spectrum_noise" not in stats:
+            continue
+        (cm, cs), (nm, ns) = stats["held_out_concept"], stats["spectrum_noise"]
+        gap, ref = abs(cm - nm), max(abs(cm), abs(nm), 1e-9)
+        verdict = ("matched" if gap <= 0.15 * ref and max(cs, ns) <= 0.25 * ref
+                   else "NOT MATCHED")
+        print(f"  tier {tier:>6.2f} -> gap {gap:.4f} ({gap/ref:.0%} of the larger arm), "
+              f"worst sd {max(cs, ns)/ref:.0%}  -> {verdict}")
+
+    off = [r for r in rows if r.get("off_tier", 0) > 0.3 and r["damage"] is not None]
+    nonmono = [r for r in rows if r.get("monotone") is False]
+    print(f"\nrows more than 30% off their tier: {len(off)}/{len(rows)}; "
+          f"non-monotone curves: {len(nonmono)}")
 
     print(f"\nrows: {args.out}   ({time.time()-started:.0f}s)")
     return 0

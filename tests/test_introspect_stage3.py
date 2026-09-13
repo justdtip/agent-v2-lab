@@ -192,3 +192,9 @@ def test_a_rung_below_the_whole_curve_takes_the_smallest_scale(pair):
     assert rungs[-1e-9][0] <= rungs[-0.05][0], "a gentler rung must not get a stronger scale"
     assert rungs[-1e6][0] >= rungs[-0.05][0], "an unreachable rung takes the strongest scale"
     assert smallest is not None
+    # Taking an end of the ladder is defensible; doing it silently is not. A whole arm sat pinned
+    # at the ceiling at all three tiers on 2026-09-13 and the tier labels said otherwise.
+    assert rungs[-1e-9][2]["how"] == "clamped_low", rungs[-1e-9][2]
+    assert rungs[-1e6][2]["how"] == "clamped_high", rungs[-1e6][2]
+    assert rungs[-0.05][2]["how"] in ("interpolated", "clamped_low", "clamped_high")
+    assert set(rungs[-0.05][2]) == {"how", "monotone"}
