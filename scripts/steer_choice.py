@@ -75,6 +75,11 @@ def main() -> int:
     ap.add_argument("--adapter", type=Path, default=None)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--tier", type=float, default=-0.08)
+    ap.add_argument("--scope", choices=("final", "prompt"), default="final",
+                    help="'final' injects at the last prompt token only, which is what training "
+                         "and the introspection evaluation do. 'prompt' injects at every prompt "
+                         "position, which is what this project's base-model grid did and what the "
+                         "prior work sustains. A scope difference is a different experiment.")
     ap.add_argument("--trials", type=int, default=60)
     ap.add_argument("--device", default="cuda:0")
     ap.add_argument("--dtype", default="bfloat16")
@@ -132,7 +137,9 @@ def main() -> int:
         ids = render_prompt(tok, CHOICE.format(first=first, second=second), system=PLAIN_SYSTEM)
         patches = []
         if vector is not None:
-            plan = PatchPlan(layer=[layer], site=[len(ids) - 1], scale=[scale], vector=[vector])
+            span = [(0, len(ids))] if args.scope == "prompt" else [None]
+            plan = PatchPlan(layer=[layer], site=[len(ids) - 1], scale=[scale], vector=[vector],
+                             span=span)
             masks = build_masks(plan, width=len(ids), hidden=vector.shape[-1],
                                 device=device, dtype=dtype, lengths=[len(ids)])
             patches = [PlannedPatch(blocks[l], mask=m, delta=d, layer=l)
@@ -173,13 +180,30 @@ def main() -> int:
         if k % 10 == 0:
             print(f"  {k}/{args.trials} ({time.time()-started:.0f}s)", flush=True)
 
-    json.dump({"tag": tag, "rows": rows, "tier": args.tier}, args.out.open("w"), indent=1)
+    json.dump({"tag": tag, "rows": rows, "tier": args.tier, "scope": args.scope},
+              args.out.open("w"), indent=1)
 
     def stats(arm):
         at = [r["near_minus_far"] for r in rows if r["arm"] == arm]
         m = sum(at) / len(at)
         sd = (sum((x - m) ** 2 for x in at) / max(len(at) - 1, 1)) ** 0.5
         return m, sd, sd / (len(at) ** 0.5), len(at)
+
+    # Paired within topic pair. Every arm scores the SAME pair, and the pair-to-pair spread is
+    # about 6 nats against an effect measured in hundredths, so an unpaired difference of means
+    # carries a standard error forty times larger than the design allows.
+    by = {}
+    for r in rows:
+        by.setdefault((r["concept"], r["layer"], r["near"], r["far"]), {})[r["arm"]] = r
+    full = [v for v in by.values() if len(v) == 3]
+    print(f"\nPAIRED shift against the same pair's clean reading, scope={args.scope}")
+    print(f"{'arm':<10} {'n':>4} {'mean':>9} {'stderr':>8} {'t':>7}")
+    for arm in ("concept", "null"):
+        d = [v[arm]["near_minus_far"] - v["clean"]["near_minus_far"] for v in full]
+        m = sum(d) / len(d)
+        sd = (sum((x - m) ** 2 for x in d) / max(len(d) - 1, 1)) ** 0.5
+        se = sd / len(d) ** 0.5
+        print(f"{arm:<10} {len(d):>4} {m:>+9.4f} {se:>8.4f} {m / se if se else 0:>+7.2f}")
 
     print(f"\nlog-odds of choosing the NEAR topic over the FAR one, averaged over both orders")
     print(f"{'arm':<10} {'n':>4} {'mean':>9} {'sd':>8} {'stderr':>8}")

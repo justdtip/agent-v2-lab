@@ -52,6 +52,12 @@ class PatchPlan:
 
     `site` is an absolute token index per row, and it is per row because the collator right-pads:
     a scalar site is wrong the moment two rows have different lengths.
+
+    `span` optionally widens a row's injection from that one token to a half-open range. One token
+    is not the only sensible scope and has never been the paper's: Lindsey injects from a chosen
+    position and continues through the response, and this project's own base-model grid injected at
+    every prompt token while its training and evaluation injected at one. A scope difference is a
+    different experiment, so it is carried in the plan rather than assumed.
     """
 
     layer: list[int]
@@ -59,12 +65,16 @@ class PatchPlan:
     scale: list[float]
     vector: list[torch.Tensor | None]
     live: list[bool] = field(default_factory=list)
+    #: per row, (start, end) half-open. None means the single token at `site`.
+    span: list[tuple[int, int] | None] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         n = len(self.layer)
         if not self.live:
             self.live = [v is not None for v in self.vector]
-        for name in ("site", "scale", "vector", "live"):
+        if not self.span:
+            self.span = [None] * n
+        for name in ("site", "scale", "vector", "live", "span"):
             if len(getattr(self, name)) != n:
                 raise ValueError(f"PatchPlan.{name} has {len(getattr(self, name))} entries, "
                                  f"not {n}")
@@ -88,11 +98,18 @@ def build_masks(plan: PatchPlan, *, width: int, hidden: int, device, dtype,
         for row in range(rows):
             if not plan.live[row] or plan.layer[row] != layer:
                 continue
-            site = plan.site[row]
             limit = width if lengths is None else lengths[row]
-            if not 0 <= site < limit:
-                raise IndexError(f"row {row}: site {site} outside its {limit} real tokens")
-            mask[row, site, 0] = 1.0
+            span = plan.span[row]
+            if span is None:
+                site = plan.site[row]
+                if not 0 <= site < limit:
+                    raise IndexError(f"row {row}: site {site} outside its {limit} real tokens")
+                mask[row, site, 0] = 1.0
+            else:
+                start, end = span
+                if not 0 <= start < end <= limit:
+                    raise IndexError(f"row {row}: span {span} outside its {limit} real tokens")
+                mask[row, start:end, 0] = 1.0
             vector = plan.vector[row]
             delta[row] = (vector.to(device=device, dtype=torch.float32)
                           * float(plan.scale[row])).to(dtype)
