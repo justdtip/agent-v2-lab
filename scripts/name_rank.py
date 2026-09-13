@@ -79,17 +79,28 @@ def name_logprobs(model, tok, prefix_ids, name_ids, *, device, dtype, blocks,
                        for l, (m, d) in masks.items()]
         for patch in patches:
             patch.__enter__()
+        # Only the positions that score a name are needed, and this vocabulary is 262,144 wide:
+        # log_softmax over the whole sequence was a 5.7 GB tensor per chunk and most of the run's
+        # wall clock. `logits_to_keep` asks the model not to compute the rest at all.
+        keep = max(len(n) for n in batch) + 1
         try:
             with torch.no_grad():
-                logits = model(input_ids=ids.to(device), attention_mask=att.to(device),
-                               use_cache=False).logits.float().log_softmax(-1)
+                try:
+                    got = model(input_ids=ids.to(device), attention_mask=att.to(device),
+                                use_cache=False, logits_to_keep=keep).logits
+                except TypeError:                      # a model that takes no such argument
+                    got = model(input_ids=ids.to(device), attention_mask=att.to(device),
+                                use_cache=False).logits[:, -keep:]
+                logits = got.float().log_softmax(-1)
         finally:
             for patch in patches:
                 patch.__exit__()
+        first = len(prefix_ids) - 1 - (width - keep)   # the naming position inside the kept slice
+        assert 0 <= first < keep, (first, keep, width, len(prefix_ids))
         for i, name in enumerate(batch):
             total = 0.0
             for k, token in enumerate(name):
-                total += float(logits[i, len(prefix_ids) - 1 + k, token])
+                total += float(logits[i, first + k, token])
             out.append(total / len(name))
     return out
 
@@ -152,6 +163,7 @@ def main() -> int:
                              site=len(prompt_ids) - 1)
 
     rows, started = [], time.time()
+    clean_lp = scored(None, layers[0], 0.0)      # no injection: the prior, identical every trial
     for k in range(args.trials):
         word = rng.choice(held)
         layer = rng.choice(layers)
@@ -165,7 +177,7 @@ def main() -> int:
             null, layer, (args.tier,), residual_norm=norms[layer], verify=False)[args.tier]
         for arm, vec, sc in (("concept", v, scale), ("noise", null, nscale),
                              ("clean", None, 0.0)):
-            lp = scored(vec, layer, sc)
+            lp = clean_lp if arm == "clean" else scored(vec, layer, sc)
             order = sorted(range(len(words)), key=lambda i: -lp[i])
             rank = order.index(index[word])
             rows.append(dict(arm=arm, concept=word, layer=layer, tier=args.tier,
