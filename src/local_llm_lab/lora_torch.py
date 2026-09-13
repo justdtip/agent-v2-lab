@@ -66,12 +66,54 @@ class LoRALinear(nn.Module):
         return self.base.out_features
 
 
+def coverage(model: nn.Module, *, targets: Iterable[str] = DEFAULT_TARGETS,
+             blocks: Iterable[nn.Module] | None = None) -> dict:
+    """What a name-based target list would reach, and what it would leave behind.
+
+    Names like `q_proj` are a Llama-lineage convention, not a fact about transformers, and matching
+    on them fails two ways. A name that is absent is skipped in silence. A name that is present on
+    something other than an `nn.Linear` -- a fused expert weight, say -- would be skipped just as
+    quietly if `apply_lora` did not refuse it.
+
+    Measured on Gemma 4 31B: 410 of an expected 420, because the ten `full_attention` layers carry
+    no `v_proj` at all while the fifty sliding ones do. The outcome was right -- there is genuinely
+    nothing there to adapt -- but nothing said so, and on a model where the missing name sat on a
+    differently-spelled module the same silence would be a real partial adaptation.
+    """
+    wanted = set(targets)
+    from .residual_patch import decoder_blocks
+    blocks = list(blocks) if blocks is not None else list(decoder_blocks(model))
+    per_block, linears_missed = [], []
+    for index, block in enumerate(blocks):
+        hit, present = set(), set()
+        for name, module in block.named_modules():
+            leaf = name.rsplit(".", 1)[-1]
+            if isinstance(module, (nn.Linear, LoRALinear)):
+                present.add(leaf)
+                if leaf in wanted:
+                    hit.add(leaf)
+                elif isinstance(module, nn.Linear):
+                    linears_missed.append(f"block {index}: {name}")
+        per_block.append({"block": index, "hit": sorted(hit),
+                          "absent": sorted(wanted - present)})
+    absent = {}
+    for entry in per_block:
+        for name in entry["absent"]:
+            absent.setdefault(name, []).append(entry["block"])
+    return {"blocks": len(blocks), "expected": len(blocks) * len(wanted),
+            "reached": sum(len(e["hit"]) for e in per_block),
+            "absent_by_name": absent,
+            "linears_not_targeted": sorted(set(linears_missed))}
+
+
 def apply_lora(model: nn.Module, *, targets: Iterable[str] = DEFAULT_TARGETS,
                r: int = 32, alpha: int = 64, dropout: float = 0.0) -> int:
     """Swap every matching `nn.Linear` for an adapted one, in place. Returns how many were swapped.
 
     Refuses a target that is not an `nn.Linear` rather than skipping it: a fused expert weight
-    under a familiar name would otherwise be silently left unadapted.
+    under a familiar name would otherwise be silently left unadapted. What it CANNOT refuse is a
+    name that is simply absent -- `coverage()` exists to report that, and the caller should print
+    it rather than trusting the count.
     """
     wanted = set(targets)
     swapped = 0

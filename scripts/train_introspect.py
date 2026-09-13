@@ -31,7 +31,7 @@ from local_llm_lab.introspect.meter import DamageMeter  # noqa: E402
 from local_llm_lab.introspect.render import render_prompt, render_supervised  # noqa: E402
 from local_llm_lab.introspect.vocabulary import split  # noqa: E402
 from local_llm_lab.lora_torch import (  # noqa: E402
-    apply_lora, count_lora_parameters, lora_parameters, lora_state_dict,
+    apply_lora, count_lora_parameters, coverage, lora_parameters, lora_state_dict,
 )
 from local_llm_lab.residual_patch import (  # noqa: E402
     PatchPlan, PlannedPatch, build_masks, decoder_blocks,
@@ -158,8 +158,18 @@ def main() -> int:
         p.data = p.data.float()
         p.requires_grad_(True)
     assert trainable and any(p.requires_grad for p in trainable), "no trainable adapter"
+    cover = coverage(model, blocks=blocks)
     print(f"adapters: {swapped} modules, {count_lora_parameters(model)/1e6:.0f}M parameters",
           flush=True)
+    print(f"coverage: {cover['reached']} of an expected {cover['expected']} across "
+          f"{cover['blocks']} blocks", flush=True)
+    if cover["absent_by_name"]:
+        for name, where in cover["absent_by_name"].items():
+            print(f"  ! {name!r} is absent from {len(where)} block(s): "
+                  f"{where[:6]}{' ...' if len(where) > 6 else ''}", flush=True)
+    if cover["linears_not_targeted"]:
+        print(f"  ! {len(cover['linears_not_targeted'])} nn.Linear(s) in the blocks were not "
+              f"targeted at all: {cover['linears_not_targeted'][:4]}", flush=True)
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.config.use_cache = False
     model.train()
