@@ -46,7 +46,7 @@ STEM = POSITIVE_TARGET.split("{name}")[0]
 
 
 def name_logprobs(model, tok, prefix_ids, name_ids, *, device, dtype, blocks,
-                  vector, layer, scale, site, chunk=24):
+                  vector, layer, scale, site, chunk=48):
     """Mean per-token logprob of each candidate name, continuing `prefix_ids`. One forward per chunk.
 
     The injection is built PER CHUNK, because the patch mask is shaped to the forward it rides on
@@ -112,7 +112,10 @@ def main() -> int:
     ap.add_argument("--adapter", type=Path, default=None)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--tier", type=float, default=-0.08)
-    ap.add_argument("--trials", type=int, default=60)
+    ap.add_argument("--trials", type=int, default=40)
+    ap.add_argument("--chunk", type=int, default=48,
+                    help="candidates per forward. With logits_to_keep the kept tensor is small, "
+                         "so this is bounded by activations, not by the vocabulary.")
     ap.add_argument("--device", default="cuda:0")
     ap.add_argument("--dtype", default="bfloat16")
     ap.add_argument("--rank", type=int, default=32)
@@ -160,7 +163,7 @@ def main() -> int:
     def scored(vector, layer, scale):
         return name_logprobs(model, tok, stem_ids, name_ids, device=device, dtype=dtype,
                              blocks=blocks, vector=vector, layer=layer, scale=scale,
-                             site=len(prompt_ids) - 1)
+                             site=len(prompt_ids) - 1, chunk=args.chunk)
 
     rows, started = [], time.time()
     clean_lp = scored(None, layers[0], 0.0)      # no injection: the prior, identical every trial
@@ -184,7 +187,7 @@ def main() -> int:
                              damage=damage if arm == "concept" else None,
                              how=note["how"], rank=rank, top1=words[order[0]],
                              logprob_true=lp[index[word]], logprob_top=lp[order[0]]))
-        if k % 10 == 0:
+        if k % 5 == 0:
             print(f"  {k}/{args.trials} ({time.time()-started:.0f}s)", flush=True)
 
     json.dump({"tag": tag, "rows": rows, "candidates": len(words)},
