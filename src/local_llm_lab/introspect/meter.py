@@ -63,6 +63,25 @@ class MeterReading:
     per_prompt: list[float]
 
 
+def _between(s0: float, d0: float, s1: float, d1: float, wanted: float) -> float:
+    """Interpolate a scale between two swept points, in log-log where that is defined.
+
+    Damage grows close to a power of the scale, so interpolating linearly in (scale, damage) is
+    biased GENTLE -- by 12 per cent at the -0.03 rung for a square law and 27 per cent for a cube,
+    always in the same direction, and worst at the gentlest tier where 48 per cent of positives
+    sit. In log(scale) against log(-damage) the same anchors are exact.
+    """
+    if s0 > 0 and s1 > 0 and d0 < 0 and d1 < 0 and wanted < 0:
+        import math
+        ls0, ls1 = math.log(s0), math.log(s1)
+        ld0, ld1 = math.log(-d0), math.log(-d1)
+        if abs(ld1 - ld0) > 1e-12:
+            t = (math.log(-wanted) - ld0) / (ld1 - ld0)
+            return float(math.exp(ls0 + t * (ls1 - ls0)))
+    span = (d0 - d1) or 1e-12
+    return s0 + (s1 - s0) * (d0 - wanted) / span
+
+
 class DamageMeter:
     """Batched: the whole battery, or a scale sweep across it, in one forward."""
 
@@ -209,34 +228,40 @@ class DamageMeter:
         unit = float(vector.norm())
         scales = [(p / 100.0) * residual_norm / unit for p in percents]
         curve = sorted(self.curve(vector, layer, scales, prompts), key=lambda sd: sd[0])
-        out: dict[float, tuple[float, float]] = {}
+        if not all(d == d for _s, d in curve):
+            raise ValueError(f"L{layer}: non-finite damage in the swept curve: {curve}")
+        monotone = all(d1 <= d0 + 1e-9 for (_a, d0), (_b, d1) in zip(curve, curve[1:]))
+        # The ends of the curve are its EXTREMA, not its first and last points. 474 of 484 curves
+        # on this model are non-monotone, and one that saturates and reads back up hands curve[-1]
+        # a value gentler than four interior scales: the rung is then labelled clamped_high and
+        # given the ladder ceiling, sixteen times the gentlest scale that actually reached it,
+        # while the verified `measured` sits eight per cent off tier and trips no flag.
+        gentlest = max(curve, key=lambda sd: sd[1])
+        deepest = min(curve, key=lambda sd: sd[1])
+        picked: dict[float, tuple[float, str]] = {}
         for wanted in ladder:
-            # Off the end of the curve in EITHER direction, and the two directions are opposite.
-            # Falling through to the strongest scale for every unbracketed rung is how a request
-            # for a whisper became fifteen nats of damage: if even the smallest scale sampled
-            # already overshoots, the answer is the smallest scale, not the largest.
-            if not all(d == d for _s, d in curve):
-                raise ValueError(f"L{layer}: non-finite damage in the swept curve: {curve}")
-            monotone = all(d1 <= d0 + 1e-9 for (_a, d0), (_b, d1) in zip(curve, curve[1:]))
-            if curve[0][1] <= wanted:
-                chosen, how = curve[0][0], "clamped_low"
-            elif curve[-1][1] >= wanted:
-                # The ladder never reached the wanted damage. Returning its ceiling is defensible;
-                # returning it SILENTLY is how the 2026-09-13 noise arm sat pinned at 128 per cent
-                # of the residual norm at all three tiers while the tier label said otherwise.
-                chosen, how = curve[-1][0], "clamped_high"
+            if gentlest[1] <= wanted:
+                picked[wanted] = (gentlest[0], "clamped_low")
+            elif deepest[1] >= wanted:
+                picked[wanted] = (deepest[0], "clamped_high")
             else:
-                # Reaching here means curve[0] is gentler than wanted and curve[-1] harsher, so a
-                # bracketing consecutive pair exists by discrete intermediate value. There is no
-                # "unbracketed" outcome; a fallback for one would be dead code claiming otherwise.
                 chosen, how = None, "interpolated"
                 for (s0, d0), (s1, d1) in zip(curve, curve[1:]):
                     if d0 >= wanted >= d1:
-                        span = (d0 - d1) or 1e-12
-                        chosen = s0 + (s1 - s0) * (d0 - wanted) / span
+                        chosen = _between(s0, d0, s1, d1, wanted)
                         break
-                assert chosen is not None, (wanted, curve)
-            achieved = (self.damage(vector, layer, chosen, prompts).damage if verify
-                        else float("nan"))
-            out[wanted] = (chosen, achieved, {"how": how, "monotone": monotone})
-        return out
+                if chosen is None:
+                    # The extrema straddle `wanted` with no descending pair across it, which a
+                    # non-monotone curve allows. Nearest reading, and a note that says so.
+                    chosen, how = min(curve, key=lambda sd: abs(sd[1] - wanted))[0], "nearest"
+                picked[wanted] = (chosen, how)
+        # One extra sweep for every rung at once, not one forward per rung. Measured identical to
+        # the bit against per-rung verification, at a quarter of the card time.
+        achieved: dict[float, float] = {}
+        if verify:
+            wants = list(ladder)
+            got = self.curve(vector, layer, [picked[w][0] for w in wants], prompts)
+            achieved = {w: d for w, (_s, d) in zip(wants, got)}
+        return {w: (picked[w][0], achieved.get(w, float("nan")), {"how": picked[w][1],
+                                                                 "monotone": monotone})
+                for w in ladder}

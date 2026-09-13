@@ -309,7 +309,7 @@ def main() -> int:
     schedule = torch.optim.lr_scheduler.OneCycleLR(
         optimiser, max_lr=args.lr, total_steps=total, pct_start=0.05, cycle_momentum=False)
 
-    cursor, step, history = 0, 0, []
+    cursor, step, history, realised = 0, 0, [], []
     baseline_hooks = [len(b._forward_pre_hooks) for b in blocks]
     while step < args.max_steps and (time.time() - started) / 3600 < args.hours:
         optimiser.zero_grad(set_to_none=True)
@@ -333,6 +333,15 @@ def main() -> int:
             # B2/B3/B4: the site is in the prompt, never in what is scored.
             for i, r in enumerate(chunk):
                 assert 0 <= r["site"] < r["prompt_length"] <= len(r["ids"])
+            # The realised share of THIS backward pass that is replay. out.loss is a mean over
+            # the micro-batch's OWN supervised tokens, so a token in a short micro-batch is
+            # up-weighted -- and detect rows are the short ones. The corpus census is therefore not
+            # the gradient share: at batch 4 a 50 per cent token corpus delivers about 40 per cent
+            # of the gradient, and at batch 1 the knob degenerates to a row-share knob.
+            supervised_here = int((labels != -100).sum())
+            replay_here = sum(len(r["ids"]) - r["prompt_length"]
+                              for r in chunk if r["cls"] == "D_replay")
+            realised.append(replay_here / max(supervised_here, 1))
             masks = build_masks(plan, width=width, hidden=bank[layers[0]].shape[-1],
                                 device=device, dtype=dtype,
                                 lengths=[len(r["ids"]) for r in chunk])
@@ -396,7 +405,9 @@ def main() -> int:
                "replay": str(args.replay) if args.replay else None,
                "replay_share_asked": args.replay_share if args.replay else None,
                "supervised_tokens": census, "rows_seen": min(step * args.batch * args.accum,
-                                                             len(rows))},
+                                                             len(rows)),
+               "replay_share_realised_by_gradient": (sum(realised) / len(realised)
+                                                     if realised else None)},
               (args.out / "run.json").open("w"), indent=1)
     print(f"done: {step} steps in {(time.time()-started)/3600:.2f} h", flush=True)
     return 0

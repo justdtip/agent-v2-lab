@@ -91,12 +91,21 @@ TOPICS: tuple[str, ...] = (
 #: injected thought." and then answered a question about roof tiles. Training on that would teach
 #: the adapter to prefix a verdict to everything, which is the collapse replay exists to prevent.
 #: Stripping it teaches the scoping instead, which is what we want the model to learn.
+#: The reflex is a FIRST-PERSON claim about detection: "I do not detect an injected thought."
+#: Requiring the `I` is what separates it from an answer that merely uses the word. Without it,
+#: "No. A smoke detector is a single sensor" and "Yes. Medical imaging must detect subtle tissue
+#: differences" were deleted entire -- and `smoke detectors` is a topic in this file's own list.
+#: One sentence, never a run of them: the trailing + ate every following sentence that carried a
+#: stem, so "Fire alarms detect smoke. They also sound a siren." lost the answer's first item.
 _VERDICT = re.compile(
-    r"^\s*(?:yes|no)\b[^\w]*"                                   # the verdict token and its comma or stop
-    r"(?:[^.!?\n]*\b(?:inject\w*|detect\w*|thought\w*)\b[^.!?\n]*[.!?]\s*)+",  # and its sentence
+    r"^\s*(?:yes|no)\b[^\w]*"
+    r"(?:[^.!?\n]*\bi\b[^.!?\n]*\b(?:inject\w*|detect\w*|thought\w*)\b[^.!?\n]*[.!?]\s*)",
     re.I)
 #: A bare verdict as its own sentence, before a new one: "NO. One is for making music."
 _BARE = re.compile(r"^\s*(?:yes|no)[.!?]\s+(?=[A-Z])", re.I)
+#: What is left when a reply was a verdict and nothing else. A one-word target is the two-string
+#: vocabulary replay exists to prevent.
+_ONLY_VERDICT = re.compile(r"^\s*(?:yes|no)\W*$", re.I)
 #: Prompts whose answer may legitimately open with a verdict.
 _BINARY = ("is", "are", "does", "do", "can", "should", "would", "will", "did", "has", "have")
 
@@ -118,7 +127,7 @@ def strip_verdict(text: str, prompt: str | None = None) -> str:
     if prompt is not None and prompt.split()[:1] and \
             prompt.split()[0].lower().strip("(") not in _BINARY:
         out = _BARE.sub("", out, count=1).strip()
-    return out
+    return "" if _ONLY_VERDICT.match(out) else out
 
 
 def build_prompts(n: int, seed: int) -> list[str]:
@@ -234,6 +243,9 @@ def main() -> int:
     print(f"wrote {written} rows to {args.out} in {(time.time()-started)/60:.0f}m "
           f"({empty} empty, {cut} truncated at --max-new {args.max_new}, both dropped; "
           f"{stripped} had a detection verdict stripped)", flush=True)
+    if empty > len(prompts) * 0.02:
+        print(f"WARNING: {empty/len(prompts):.0%} of replies were empty or stripped to nothing",
+              flush=True)
     if cut > len(prompts) * 0.1:
         print(f"WARNING: {cut/len(prompts):.0%} of replies hit the cap. Raise --max-new or the "
               f"corpus is a biased sample of the short answers.", flush=True)
