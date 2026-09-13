@@ -259,3 +259,58 @@ def test_training_and_evaluation_render_the_detect_turn_the_same_way():
     assert all("system" in r for r in train_renders), (
         "evaluation renders the detect turn with EXPERIMENT_SYSTEM and training does not: "
         f"{train_renders}")
+
+
+def test_damage_is_immune_to_a_batch_width_offset(pair):
+    """The reading must reference scale zero in the SAME forward, not the cached clean pass.
+
+    A bf16 forward on the rented card is not batch-invariant: an injection of exactly zero reads
+    +0.000000 nats at batch width 8, +0.014326 at width 24 and +0.004051 at width 96, measured on
+    Gemma 4 31B. The sweep runs at a different width from `clean()`, so that artifact landed in
+    every damage number, up to 1.4x the whole -0.01 rung and in the direction that makes an
+    injection look gentler than it is.
+
+    The fixture injects the failure rather than waiting for the hardware to: a width-dependent
+    constant added to every logprob. Referenced against an in-batch zero it cancels exactly;
+    referenced against a cached clean pass it does not.
+    """
+    model, tok = pair
+    m = meter_mod.DamageMeter(model, tok, device=torch.device("cpu"), dtype=torch.float32,
+                              battery=meter_mod.BATTERY[:3])
+    torch.manual_seed(0)
+    v = torch.randn(32)
+    plain = m.curve(v, 2, [0.5, 2.0])
+
+    real = m._final_logprobs
+
+    def offset_by_width(input_ids, attention, sites):
+        # a constant that depends only on how many rows are in the forward
+        return real(input_ids, attention, sites) + 0.05 * input_ids.shape[0]
+
+    m._final_logprobs = offset_by_width
+    shifted = m.curve(v, 2, [0.5, 2.0])
+    m._final_logprobs = real
+
+    for (s0, d0), (s1, d1) in zip(plain, shifted):
+        assert s0 == s1
+        assert abs(d0 - d1) < 1e-5, (
+            f"a width-dependent offset moved the reading at scale {s0}: {d0} vs {d1}")
+
+    # and the fixture must be capable of failing: the same offset against a cached clean baseline
+    clean = m.clean()
+    index = list(range(len(m.prompts)))
+    ids, att, sites, _lengths, _w = m._batch(index)
+    naive = [float(offset_by_width(ids, att, sites)[i, clean[j][0]]) - clean[j][1]
+             for i, j in enumerate(index)]
+    assert abs(sum(naive) / len(naive)) > 1e-3, "the fixture cannot separate the two forms"
+
+
+def test_the_curve_always_sweeps_zero_and_does_not_report_it(pair):
+    model, tok = pair
+    m = meter_mod.DamageMeter(model, tok, device=torch.device("cpu"), dtype=torch.float32,
+                              battery=meter_mod.BATTERY[:3])
+    torch.manual_seed(0)
+    got = m.curve(torch.randn(32), 2, [1.0, 3.0])
+    assert [s for s, _d in got] == [1.0, 3.0], "scale zero is the reference, not a reported rung"
+    # a zero injection read against itself is exactly zero, by construction rather than by luck
+    assert m.curve(torch.zeros(32), 2, [7.0])[0][1] == 0.0

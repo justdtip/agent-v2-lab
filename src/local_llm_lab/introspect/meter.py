@@ -80,6 +80,9 @@ class DamageMeter:
         if self.pad is None:
             self.pad = tokenizer.eos_token_id or 0
         self._clean: list[tuple[int, float]] | None = None
+        self._last_per_prompt: list[float] = []
+        #: prompts whose in-batch top token differed from the cached clean one, last reading
+        self._token_drift = 0
 
     # -- batching ---------------------------------------------------------------------------
     def _batch(self, indices: list[int]):
@@ -120,26 +123,14 @@ class DamageMeter:
 
     def damage(self, vector: torch.Tensor, layer: int, scale: float,
                prompts: list[int] | None = None) -> MeterReading:
-        """Mean loss, in nats, on each prompt's own clean top token under this injection."""
-        clean = self.clean()
-        index = list(range(len(self.prompts))) if prompts is None else prompts
-        with torch.no_grad():
-            ids, att, sites, lengths, width = self._batch(index)
-            plan = PatchPlan(layer=[layer] * len(index), site=sites,
-                             scale=[scale] * len(index), vector=[vector] * len(index))
-            masks = build_masks(plan, width=width, hidden=vector.shape[-1],
-                                device=self.device, dtype=self.dtype, lengths=lengths)
-            patches = [PlannedPatch(self.blocks[l], mask=m, delta=d, layer=l)
-                       for l, (m, d) in masks.items()]
-            for p in patches:
-                p.__enter__()
-            try:
-                lp = self._final_logprobs(ids, att, sites)
-            finally:
-                for p in patches:
-                    p.__exit__()
-        per = [float(lp[i, clean[j][0]]) - clean[j][1] for i, j in enumerate(index)]
-        return MeterReading(damage=sum(per) / len(per), per_prompt=per)
+        """Mean loss, in nats, on each prompt's own clean top token under this injection.
+
+        Routed through `curve`, so the reference is measured in the SAME forward -- see the note
+        there. A separate clean pass at a different batch width is not a reference, it is a second
+        experiment.
+        """
+        got = self.curve(vector, layer, [scale], prompts)
+        return MeterReading(damage=got[0][1], per_prompt=list(self._last_per_prompt))
 
     def curve(self, vector: torch.Tensor, layer: int, scales: list[float],
               prompts: list[int] | None = None) -> list[tuple[float, float]]:
@@ -151,9 +142,19 @@ class DamageMeter:
 
         The shape of the curve is itself a result, not only a means to a scale: it is what
         distinguishes a sharp on-manifold transition from a smooth off-manifold one.
+
+        SCALE ZERO IS ALWAYS SWEPT, and every damage is read against it rather than against the
+        cached clean pass. A bf16 forward on this card is not batch-invariant, and the sweep runs at
+        a different batch width from `clean()`: measured on Gemma 4 31B, an injection of EXACTLY
+        ZERO reads +0.000000 nats at width 8, +0.014326 at width 24 and +0.004051 at width 96. That
+        artifact is up to 1.4 times the whole -0.01 rung, in the direction that makes an injection
+        look gentler than it is, so the solver answers with a scale that is too strong. Within a
+        batch the offset is uniform to six decimal places, so referencing scale zero in the same
+        forward cancels it exactly.
         """
         clean = self.clean()
         index = list(range(len(self.prompts))) if prompts is None else prompts
+        scales = [0.0] + list(scales)
         pairs = [(s, j) for s in scales for j in index]
         with torch.no_grad():
             ids, att, sites, lengths, width = self._batch([j for _s, j in pairs])
@@ -170,11 +171,18 @@ class DamageMeter:
             finally:
                 for patch in patches:
                     patch.__exit__()
+        # the in-batch reference: row k=0 is scale zero, same width, same kernel schedule
+        reference = [float(lp[i, clean[j][0]]) for i, j in enumerate(index)]
+        drift = sum(1 for i, j in enumerate(index) if int(lp[i].argmax()) != clean[j][0])
+        self._token_drift = drift
         out = []
         for k, s in enumerate(scales):
+            if k == 0:
+                continue
             start = k * len(index)
-            per = [float(lp[start + i, clean[j][0]]) - clean[j][1]
+            per = [float(lp[start + i, clean[j][0]]) - reference[i]
                    for i, j in enumerate(index)]
+            self._last_per_prompt = per
             out.append((s, sum(per) / len(per)))
         return out
 
@@ -183,7 +191,7 @@ class DamageMeter:
                           verify: bool = True,
                           percents: tuple[float, ...] = (0.06, 0.125, 0.25, 0.5, 1, 2, 4, 8,
                                                         16, 32, 64, 128)
-                          ) -> dict[float, tuple[float, float]]:
+                          ) -> dict[float, tuple[float, float, dict]]:
         """Every rung of the ladder from ONE swept curve. {wanted: (scale, achieved, note)}.
 
         `note` carries how the scale was reached -- interpolated, or clamped to an end of the
@@ -213,13 +221,16 @@ class DamageMeter:
                 # of the residual norm at all three tiers while the tier label said otherwise.
                 chosen, how = curve[-1][0], "clamped_high"
             else:
-                chosen, how = curve[-1][0], "unbracketed"
+                # Reaching here means curve[0] is gentler than wanted and curve[-1] harsher, so a
+                # bracketing consecutive pair exists by discrete intermediate value. There is no
+                # "unbracketed" outcome; a fallback for one would be dead code claiming otherwise.
+                chosen, how = None, "interpolated"
                 for (s0, d0), (s1, d1) in zip(curve, curve[1:]):
                     if d0 >= wanted >= d1:
                         span = (d0 - d1) or 1e-12
                         chosen = s0 + (s1 - s0) * (d0 - wanted) / span
-                        how = "interpolated"
                         break
+                assert chosen is not None, (wanted, curve)
             achieved = (self.damage(vector, layer, chosen, prompts).damage if verify
                         else float("nan"))
             out[wanted] = (chosen, achieved, {"how": how, "monotone": monotone})
