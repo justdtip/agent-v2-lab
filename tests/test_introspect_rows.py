@@ -78,7 +78,10 @@ def test_mismatch_rows_name_a_distractor_and_are_positives_until_rendered(plan):
         rendered = MISMATCH_TARGET.format(name=r["distractor"])
         assert rendered != NEGATIVE_TARGET
         assert r["distractor"] in rendered
-        assert rendered.startswith("NO.")
+        # A concept IS present on these rows, and the evaluation counts the first token. Opening
+        # with NO would train 1,320 denials on the token the headline is read from.
+        assert rendered.startswith("YES.")
+        assert r["concept"] not in rendered, "the mismatch row must not leak the real concept"
 
 
 def test_positives_name_the_concept_that_was_actually_injected(plan):

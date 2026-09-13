@@ -17,9 +17,10 @@ turn. We use False everywhere, so training and evaluation agree with each other;
 with the canonical assistant turn, and that is a deliberate, recorded choice rather than an
 oversight.
 
-A system turn shifts the injection site: 21 against 13 on a one-token user message. Every scale and
-every recorded site is therefore specific to whether a system prompt was present, and a bank built
-without one cannot be reused with one without re-measuring.
+A system turn shifts the injection site. `EXPERIMENT_SYSTEM` is 114 tokens on this tokenizer, so
+the site moves from 13 to 132 on a one-word user turn and from 95 to 214 on the real detect prompt.
+Every scale and every recorded site is therefore specific to whether a system prompt was present,
+and a bank built without one cannot be reused with one without re-measuring.
 """
 
 from __future__ import annotations

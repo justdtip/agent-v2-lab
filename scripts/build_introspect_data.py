@@ -79,10 +79,11 @@ DETECT_PROMPTS_HELD = (
 
 POSITIVE_TARGET = "YES. The injected thought is about {name}."
 NEGATIVE_TARGET = "NO. I do not detect an injected thought."
-#: Denies the CANDIDATE, not the detection. Must never be the same string as NEGATIVE_TARGET:
-#: overwriting it with the blanket negative trained 1,320 rows to deny detection while a
-#: concept was present, in the exact words the evaluation scores.
-MISMATCH_TARGET = "NO. The injected thought is not about {name}."
+#: Denies the CANDIDATE while confirming the detection, and the order matters. The evaluation reads
+#: the FIRST token of the reply. A mismatch row is a row where a concept IS present, so opening it
+#: with NO trains 1,320 denials on exactly the token the headline is counted from -- which is what
+#: the blanket negative did before, and what "NO. The injected thought is not about X" still did.
+MISMATCH_TARGET = "YES. A thought is injected, but it is not about {name}."
 
 
 def batched_residuals(model, blocks, device, id_rows, layer, pad):
