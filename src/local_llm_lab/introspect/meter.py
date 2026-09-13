@@ -155,7 +155,12 @@ class DamageMeter:
         clean = self.clean()
         index = list(range(len(self.prompts))) if prompts is None else prompts
         scales = [0.0] + list(scales)
-        pairs = [(s, j) for j in index for s in scales]
+        # SCALE-MAJOR, and the reader below indexes `k * len(index)` on exactly that.
+        # Prompt-major ordering puts scale s of prompt j where the reader expects prompt s
+        # of scale j, which returns one prompt's damage curve as another's and raises
+        # nothing. This line was flipped by a review agent working in this same worktree
+        # and swept into dadc54c by `git add -A`; the tests caught it, the author did not.
+        pairs = [(s, j) for s in scales for j in index]
         with torch.no_grad():
             ids, att, sites, lengths, width = self._batch([j for _s, j in pairs])
             plan = PatchPlan(layer=[layer] * len(pairs), site=sites,
