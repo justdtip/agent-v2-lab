@@ -33,6 +33,7 @@ from local_llm_lab.introspect.meter import BATTERY, DamageMeter  # noqa: E402
 from local_llm_lab.introspect.protocol import EXPERIMENT_SYSTEM  # noqa: E402
 from local_llm_lab.introspect.render import render_prompt  # noqa: E402
 from local_llm_lab.introspect.vectors import spectrum_matched  # noqa: E402
+from local_llm_lab.introspect.vocabulary import all_concepts  # noqa: E402
 from local_llm_lab.lora_torch import apply_lora, load_lora_state_dict  # noqa: E402
 from local_llm_lab.residual_patch import (  # noqa: E402
     PatchPlan, PlannedPatch, build_masks, decoder_blocks,
@@ -130,6 +131,13 @@ def main() -> int:
     words, layers = saved["words"], saved["layers"]
     index = {w: i for i, w in enumerate(words)}
     held = sorted(manifest["held_out"])
+    # The bank spans about ten effective directions and same-family concepts sit at cosine +0.5
+    # (BANK-GEOMETRY-2026-09-13), so naming one of 240 is close to inverting a rank-10 map while
+    # naming the FAMILY is an eight-way question the geometry demonstrably supports. Both are
+    # scored, from the same forward passes.
+    families = all_concepts()
+    fam_of = [families.get(w) for w in words]
+    fam_names = sorted({f for f in fam_of if f})
 
     model, _r = hf_text.load_text_causal_lm(args.model, dtype=args.dtype,
                                             attn_implementation="eager", device=args.device)
@@ -183,14 +191,29 @@ def main() -> int:
             lp = clean_lp if arm == "clean" else scored(vec, layer, sc)
             order = sorted(range(len(words)), key=lambda i: -lp[i])
             rank = order.index(index[word])
+            # Family score: the best-scoring member stands for the family, so a family wins when
+            # anything in it is plausible rather than when its average member is.
+            best = {}
+            for i, w in enumerate(words):
+                f = fam_of[i]
+                if f and (f not in best or lp[i] > best[f]):
+                    best[f] = lp[i]
+                true_fam = families.get(word)
+            forder = sorted(best, key=lambda f: -best[f])
+            frank = forder.index(true_fam) if true_fam in forder else None
             rows.append(dict(arm=arm, concept=word, layer=layer, tier=args.tier,
                              damage=damage if arm == "concept" else None,
                              how=note["how"], rank=rank, top1=words[order[0]],
-                             logprob_true=lp[index[word]], logprob_top=lp[order[0]]))
+                             logprob_true=lp[index[word]], logprob_top=lp[order[0]],
+                             family=true_fam, family_rank=frank, family_top=forder[0],
+                             families=len(forder),
+                             # every candidate's score, so any later question is offline
+                             scores=[round(x, 5) for x in lp]))
         if k % 5 == 0:
             print(f"  {k}/{args.trials} ({time.time()-started:.0f}s)", flush=True)
 
-    json.dump({"tag": tag, "rows": rows, "candidates": len(words)},
+    json.dump({"tag": tag, "rows": rows, "candidates": len(words), "words": words,
+               "families": fam_names, "tier": args.tier},
               args.out.open("w"), indent=1)
     n = len(words)
     print(f"\n{'arm':<10} {'n':>4} {'mean rank':>10} {'median':>7} {'top-1':>7} {'top-5':>7} "
@@ -204,6 +227,16 @@ def main() -> int:
               f"{sum(1 for r in at if r == 0)/len(at):>6.0%} "
               f"{sum(1 for r in at if r < 5)/len(at):>6.0%} "
               f"{sum(1 for r in at if r < n * 0.1)/len(at):>7.0%}")
+    nf = len(fam_names)
+    print(f"\n{'arm':<10} {'n':>4} {'mean fam rank':>14} {'top-1':>7} {'top-2':>7}"
+          f"   (chance mean {(nf-1)/2:.1f} of {nf})")
+    for arm in ("concept", "noise", "clean"):
+        at = [r["family_rank"] for r in rows if r["arm"] == arm and r["family_rank"] is not None]
+        if not at:
+            continue
+        print(f"{arm:<10} {len(at):>4} {sum(at)/len(at):>14.2f} "
+              f"{sum(1 for r in at if r == 0)/len(at):>6.0%} "
+              f"{sum(1 for r in at if r < 2)/len(at):>6.0%}")
     print(f"\nrows: {args.out}   ({time.time()-started:.0f}s)")
     return 0
 
