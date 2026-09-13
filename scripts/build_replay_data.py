@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 import sys
 import time
 from pathlib import Path
@@ -83,6 +84,26 @@ TOPICS: tuple[str, ...] = (
     "tent pegs", "torque wrenches", "camping stoves", "walking sticks", "map cases",
     "wheelbarrows", "paint rollers", "extension leads", "spirit levels", "cable ties",
 )
+
+
+#: The system prompt scopes its instruction to "when asked whether you detect an injected thought",
+#: and the model over-applies it: 39 per cent of the first corpus opened "NO. I do not detect an
+#: injected thought." and then answered a question about roof tiles. Training on that would teach
+#: the adapter to prefix a verdict to everything, which is the collapse replay exists to prevent.
+#: Stripping it teaches the scoping instead, which is what we want the model to learn.
+_VERDICT = re.compile(
+    r"^\s*(?:yes|no)\b[^\w]*"                                   # the verdict token and its comma or stop
+    r"(?:[^.!?\n]*\b(?:inject\w*|detect\w*|thought\w*)\b[^.!?\n]*[.!?]\s*)+",  # and its sentence
+    re.I)
+
+
+def strip_verdict(text: str) -> str:
+    """Remove a leading detection verdict. Empty means the reply was nothing else.
+
+    The sentence containing inject/detect/thought is REQUIRED, so an ordinary answer that merely
+    begins "No, roof tiles are not always clay" keeps its first word.
+    """
+    return _VERDICT.sub("", text, count=1).strip()
 
 
 def build_prompts(n: int, seed: int) -> list[str]:
@@ -169,7 +190,7 @@ def main() -> int:
         raise SystemExit(f"end-of-turn {stop_id} is not skipped on decode: every replay target "
                          f"would carry a literal stop and be supervised with a second one")
 
-    started, written, empty, cut = time.time(), 0, 0, 0
+    started, written, empty, cut, stripped = time.time(), 0, 0, 0, 0
     with args.out.open("w") as fh:
         for start in range(0, len(prompts), args.batch):
             chunk = prompts[start:start + args.batch]
@@ -182,7 +203,13 @@ def main() -> int:
                 if not finished:
                     cut += 1          # a row that teaches stopping mid-clause is worse than no row
                     continue
-                fh.write(json.dumps({"prompt": text, "target": reply, "finished": True}) + "\n")
+                cleaned = strip_verdict(reply)
+                if not cleaned:
+                    empty += 1          # the reply was a verdict and nothing else
+                    continue
+                if cleaned != reply:
+                    stripped += 1
+                fh.write(json.dumps({"prompt": text, "target": cleaned, "finished": True}) + "\n")
                 written += 1
             if start % (args.batch * 10) == 0:
                 done = start + len(chunk)
@@ -190,7 +217,8 @@ def main() -> int:
                 print(f"  {done}/{len(prompts)}  {rate:.1f}/s  "
                       f"eta {(len(prompts)-done)/max(rate,1e-9)/60:.0f}m", flush=True)
     print(f"wrote {written} rows to {args.out} in {(time.time()-started)/60:.0f}m "
-          f"({empty} empty, {cut} truncated at --max-new {args.max_new}, both dropped)", flush=True)
+          f"({empty} empty, {cut} truncated at --max-new {args.max_new}, both dropped; "
+          f"{stripped} had a detection verdict stripped)", flush=True)
     if cut > len(prompts) * 0.1:
         print(f"WARNING: {cut/len(prompts):.0%} of replies hit the cap. Raise --max-new or the "
               f"corpus is a biased sample of the short answers.", flush=True)
