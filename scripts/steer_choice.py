@@ -85,6 +85,10 @@ def main() -> int:
     ap.add_argument("--dtype", default="bfloat16")
     ap.add_argument("--rank", type=int, default=32)
     ap.add_argument("--alpha", type=int, default=64)
+    ap.add_argument("--layers", type=int, nargs="+", default=None,
+                    help="restrict to these layers. Pooling across layers mixes conditions: the "
+                         "first sustained run gave +2.83 at layer 20 and -0.82 at layer 48, so a "
+                         "pooled mean is an average over a sign change.")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
@@ -92,6 +96,11 @@ def main() -> int:
     saved = torch.load(args.data / "bank.pt", map_location="cpu")
     manifest = json.load((args.data / "manifest.json").open())
     words, layers = saved["words"], saved["layers"]
+    if args.layers:
+        missing = [l for l in args.layers if l not in layers]
+        if missing:
+            raise SystemExit(f"layers {missing} are not in the bank, which has {layers}")
+        layers = list(args.layers)
     index = {w: i for i, w in enumerate(words)}
     held = sorted(manifest["held_out"])
 
@@ -180,7 +189,12 @@ def main() -> int:
         if k % 10 == 0:
             print(f"  {k}/{args.trials} ({time.time()-started:.0f}s)", flush=True)
 
-    json.dump({"tag": tag, "rows": rows, "tier": args.tier, "scope": args.scope},
+    json.dump({"tag": tag, "rows": rows, "tier": args.tier, "scope": args.scope,
+               "layers": layers,
+               # the injection nearly doubles the position bias (2.58 against 1.485 clean), which
+               # is cancelled by asking both orders but says the choice is being disrupted as well
+               # as tilted. Worth watching rather than averaging away silently.
+               "position_bias_mean": sum(abs(r["position_bias"]) for r in rows) / len(rows)},
               args.out.open("w"), indent=1)
 
     def stats(arm):
