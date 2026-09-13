@@ -25,6 +25,7 @@ import torch  # noqa: E402
 from local_llm_lab import hf_text  # noqa: E402
 from local_llm_lab.introspect import vectors as vec  # noqa: E402
 from local_llm_lab.introspect.meter import BATTERY, DamageMeter  # noqa: E402
+from local_llm_lab.introspect.protocol import EXPERIMENT_SYSTEM  # noqa: E402
 from local_llm_lab.introspect.render import render_prompt, render_supervised  # noqa: E402
 from local_llm_lab.introspect.vocabulary import LEGACY, split  # noqa: E402
 from local_llm_lab.residual_patch import decoder_blocks  # noqa: E402
@@ -187,7 +188,13 @@ def main() -> int:
     index = {w: i for i, w in enumerate(words)}
     # one representative residual norm per layer, read at a detect prompt's final token, so the
     # swept percentages bracket the same range the measurement harness used
-    probe_ids = render_prompt(tok, DETECT_PROMPTS_TRAIN[0])
+    # The SAME site the evaluation measures, with the system prompt, because the ladder's
+    # percentages are percentages OF this norm and the delta lands where this is read. Rendering it
+    # bare put the units on a site 8 tokens shorter than the one training injects at, and a system
+    # turn moves the norm by up to a quarter at L48 (191.0 bare, 140.2 with).
+    #
+    # Measuring a residual norm at the held prompt is not training on it: no gradient, no target.
+    probe_ids = render_prompt(tok, DETECT_PROMPTS_HELD[0], system=EXPERIMENT_SYSTEM)
     norms = {}
     for layer in args.layers:
         norms[layer] = float(batched_residuals(model, blocks, device, [probe_ids], layer,
