@@ -99,12 +99,19 @@ def spectrum_matched(bank: torch.Tensor, *, generator: torch.Generator | None = 
     coefficients = torch.randn(s.shape[0], generator=generator, dtype=torch.float64)
     drawn = (v.T @ (coefficients * s / (centred.shape[0] ** 0.5))).float()
     if add_mean:
-        # The bank is a sample from N(mu, Sigma), not N(0, Sigma). Centring and never adding mu
-        # back leaves E<draw, mu_hat> = 0 while E<concept, mu_hat> = ||mu||, so ONE scalar that
-        # never looks at which concept is present separates the arms: measured AUC 0.789 and 0.743
-        # on two banks, falling to 0.510 and 0.479 with the mean restored. A detector keying on
-        # that would produce a perfect concept-versus-noise result knowing nothing about concepts,
-        # which is the alternative this experiment exists to exclude.
+        # The bank is a sample from N(mu, Sigma), not N(0, Sigma), and centring without adding mu
+        # back makes the arms separable EXACTLY rather than merely well. `drawn` lies in
+        # rowspace(bank - mu) by construction, so let w be the unit vector in span(bank)
+        # orthogonal to that rowspace: <v_i, w> = ||P.mu|| for every row including held-out ones,
+        # and <drawn, w> = 0 identically. AUC 1.000 by algebra, with a margin of about 1e4 after
+        # the bf16 cast build_masks applies. Projecting on the bank mean measures the same thing
+        # with slack: 0.988 to 1.000 on the real banks at layers 20/32/40/48, falling to 0.510 to
+        # 0.551 with the mean restored (BANK-GEOMETRY-2026-09-13; the 0.79 once quoted here was a
+        # synthetic estimate and was too kind).
+        #
+        # Measured 2026-09-14: the trained adapter says YES to a mean-matched null on 98 to 100
+        # per cent of trials at matched damage, the same as to a real concept, and to the bank
+        # mean alone on 60 to 100 per cent. It is reading this scalar and nothing else.
         drawn = drawn + bank.mean(dim=0)
     scale = bank.norm(dim=-1).mean() / drawn.norm().clamp(min=1e-12)
     return drawn * scale

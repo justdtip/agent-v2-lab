@@ -254,13 +254,20 @@ def main() -> int:
     #                        that has learned the generator's signature and no content at all.
     for tier in tiers:
         for k, layer in enumerate(draws[tier]):
-            g = torch.Generator().manual_seed(null_seed(0, tier, k))
-            row_for("spectrum_noise", tier, layer, spectrum_matched(bank[layer], generator=g), ids)
-            g2 = torch.Generator().manual_seed(null_seed(2, tier, k))
+            # ONE seed for both noise arms, so the pair differs by the mean and by nothing else.
+            # Independent draws add coefficient noise on top of the one thing being isolated.
+            seed = null_seed(0, tier, k)
+            row_for("spectrum_noise", tier, layer,
+                    spectrum_matched(bank[layer],
+                                     generator=torch.Generator().manual_seed(seed)), ids)
             row_for("mean_matched_noise", tier, layer,
-                    spectrum_matched(bank[layer], generator=g2, add_mean=True), ids)
-            if k < max(args.trials // 2, 4):     # deterministic given the layer: fewer are needed
-                row_for("common_mode", tier, layer, bank[layer].mean(dim=0), ids)
+                    spectrum_matched(bank[layer], generator=torch.Generator().manual_seed(seed),
+                                     add_mean=True), ids)
+        # bank.mean(0) depends only on the layer, and decoding is greedy, so this arm has exactly
+        # one distinct measurement per layer. Emitting a row per draw printed four readings as
+        # n=20 -- the same error the clean floor below exists to correct.
+        for layer in layers:
+            row_for("common_mode", tier, layer, bank[layer].mean(dim=0), ids)
 
     # The clean floor. Greedy decoding of a fixed prompt is deterministic, so the old loop ran one
     # forward forty times and printed a single measurement as n=40. Vary what can be varied: every
