@@ -1020,7 +1020,13 @@ INTROSPECTION_SYSTEM = DEFAULT_SYSTEM + "\n\n" + (
     "nothing, say nothing about it."
 )
 
-SYSTEM_PRESETS = {"neutral": DEFAULT_SYSTEM, "introspection": INTROSPECTION_SYSTEM}
+#: The exact string the introspection adapter was trained under. An adapter's behaviour is
+#: conditioned on its system turn, so serving it under any other one is serving a different
+#: experiment. Imported rather than restated, because two copies drift.
+from local_llm_lab.introspect.protocol import EXPERIMENT_SYSTEM  # noqa: E402
+
+SYSTEM_PRESETS = {"neutral": DEFAULT_SYSTEM, "introspection": INTROSPECTION_SYSTEM,
+                  "experiment": EXPERIMENT_SYSTEM}
 
 #: The summariser's instructions. Three passages are load-bearing and should not be trimmed: the
 #: carry-over paragraph, without which a summary of a summary sheds its oldest material every
