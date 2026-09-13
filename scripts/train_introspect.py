@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import random
 import sys
 import time
@@ -27,9 +26,9 @@ import torch  # noqa: E402
 from torch.nn.utils import clip_grad_norm_  # noqa: E402
 
 from local_llm_lab import hf_text  # noqa: E402
-from local_llm_lab.introspect.meter import DamageMeter  # noqa: E402
-from local_llm_lab.introspect.render import render_prompt, render_supervised  # noqa: E402
-from local_llm_lab.introspect.vocabulary import split  # noqa: E402
+from local_llm_lab.introspect.protocol import EXPERIMENT_SYSTEM  # noqa: E402
+from local_llm_lab.introspect.render import render_supervised  # noqa: E402
+from local_llm_lab.introspect.vocabulary import all_concepts  # noqa: E402
 from local_llm_lab.lora_torch import (  # noqa: E402
     apply_lora, count_lora_parameters, coverage, lora_parameters, lora_state_dict,
 )
@@ -39,7 +38,8 @@ from local_llm_lab.residual_patch import (  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_introspect_data import (  # noqa: E402
-    DETECT_PROMPTS_TRAIN, HELD_OUT_DAMAGE, LADDER, LADDER_WEIGHTS, NEGATIVE_TARGET,
+    DETECT_PROMPTS_TRAIN, HELD_OUT_DAMAGE, LADDER, LADDER_WEIGHTS, MISMATCH_TARGET,
+    NEGATIVE_TARGET,
     POSITIVE_TARGET,
 )
 
@@ -56,7 +56,7 @@ def make_rows(bank, scales, words, train_words, layers, rng, count):
       D_mismatch        a concept is present but a DIFFERENT one is named in the prompt
     """
     index = {w: i for i, w in enumerate(words)}
-    families = split()[0]
+    families = all_concepts()          # seed-independent; a family is a property of the word
     rows = []
     ladder = list(LADDER)
     weights = list(LADDER_WEIGHTS)
@@ -93,11 +93,19 @@ def make_rows(bank, scales, words, train_words, layers, rng, count):
                                  measured=0.0, concept=None))
             elif kind in ("D_noise", "D_common", "D_negative_extra"):
                 wanted, scale, measured = a_strength(word, layer)
+                # D_negative_extra stored `index[word]`, so `vector_for` returned the GENUINE
+                # concept while the target said NO, under a prompt drawn from the same eighteen the
+                # positives use: 1,200 rows, and 43 exact (prompt, concept, layer, rung, scale)
+                # tuples in both classes with opposite labels. It is now the concept's own
+                # coefficients shuffled in the bank's basis -- same spectrum, no concept, and a
+                # negative the model can actually satisfy.
                 rows.append(dict(cls=kind, prompt=prompt, target=NEGATIVE_TARGET,
-                                 bank_index=-2 if kind == "D_noise" else
-                                 (-3 if kind == "D_common" else index[word]),
-                                 layer=layer, scale=scale, wanted=wanted, measured=measured,
-                                 concept=None, noise_seed=rng.randrange(1 << 30)))
+                                 bank_index={"D_noise": -2, "D_common": -3,
+                                             "D_negative_extra": -4}[kind],
+                                 layer=layer, scale=scale, wanted=wanted,
+                                 measured=float("nan"),   # the CONCEPT's damage, not this row's
+                                 concept=None, source_index=index[word],
+                                 noise_seed=rng.randrange(1 << 30)))
             elif kind == "D_mismatch":
                 other = rng.choice([w for w in train_words
                                     if families.get(w) == families.get(word) and w != word]
@@ -108,6 +116,11 @@ def make_rows(bank, scales, words, train_words, layers, rng, count):
                                  bank_index=index[word], layer=layer, scale=scale,
                                  wanted=wanted, measured=measured, concept=word,
                                  distractor=other))
+    # A row that injects a real concept and is labelled NO is not a hard negative, it is
+    # supervision the model cannot satisfy. Neither defect above would have survived this line.
+    for r in rows:
+        assert not (r["bank_index"] >= 0 and r["target"] == NEGATIVE_TARGET), \
+            f"{r['cls']} injects concept {r['bank_index']} and denies detection"
     rng.shuffle(rows)
     return rows
 
@@ -139,7 +152,12 @@ def main() -> int:
     saved = torch.load(args.data / "bank.pt", map_location="cpu")
     scales = torch.load(args.data / "scales.pt", map_location="cpu")
     words, layers = saved["words"], saved["layers"]
-    train_words = sorted(split(seed=args.seed)[0])
+    manifest = json.load((args.data / "manifest.json").open())
+    train_words, held_words = sorted(manifest["train"]), sorted(manifest["held_out"])
+    if set(train_words) & set(held_words):
+        raise SystemExit("manifest train and held_out overlap")
+    if set(train_words) | set(held_words) != set(words):
+        raise SystemExit("manifest split does not cover the bank's word list")
 
     model, _report = hf_text.load_text_causal_lm(args.model, dtype=args.dtype,
                                                  attn_implementation="eager", device=args.device)
@@ -152,13 +170,14 @@ def main() -> int:
 
     # A7: the loader returns model.eval().requires_grad_(False), so adapters come AFTER it or
     # nothing is trainable at all and the run would converge on nothing while reporting a loss.
+    before = coverage(model, blocks=blocks)
     swapped = apply_lora(model, r=args.rank, alpha=args.alpha)
     trainable = [p for p in lora_parameters(model)]
     for p in trainable:
         p.data = p.data.float()
         p.requires_grad_(True)
     assert trainable and any(p.requires_grad for p in trainable), "no trainable adapter"
-    cover = coverage(model, blocks=blocks)
+    cover = dict(before, swapped=swapped)
     print(f"adapters: {swapped} modules, {count_lora_parameters(model)/1e6:.0f}M parameters",
           flush=True)
     print(f"coverage: {cover['reached']} of an expected {cover['expected']} across "
@@ -185,28 +204,48 @@ def main() -> int:
     for row in rows:
         text = row["prompt"]
         if row["cls"] == "D_mismatch":
+            # The answer to "is it about X" when Y is present denies X, not detection.
             text = f"{text}\n\nIs the injected thought about {row['distractor']}?"
-            row = dict(row, target="NO. I do not detect an injected thought.")
-        ids, prompt_length = render_supervised(tok, text, row["target"])
+            row = dict(row, target=MISMATCH_TARGET.format(name=row["distractor"]))
+        ids, prompt_length = render_supervised(tok, text, row["target"],
+                                               system=EXPERIMENT_SYSTEM)
         rendered.append(dict(row, ids=ids, prompt_length=prompt_length,
                              site=prompt_length - 1))
     rows = rendered
 
+    from local_llm_lab.introspect.vectors import permuted_in_basis, spectrum_matched
+
     def vector_for(row):
         if row["bank_index"] == -1:
             return None
+        layer = row["layer"]
+        if row["bank_index"] >= 0:
+            return bank[layer][row["bank_index"]]
         if row["bank_index"] == -2:
             g = torch.Generator().manual_seed(row["noise_seed"])
-            from local_llm_lab.introspect.vectors import spectrum_matched
-            return spectrum_matched(bank[row["layer"]], generator=g)
-        if row["bank_index"] == -3:
-            return common[row["layer"]]
-        return bank[row["layer"]][row["bank_index"]]
+            v = spectrum_matched(bank[layer], generator=g)
+        elif row["bank_index"] == -3:
+            # What every concept vector shares is the bank's own mean, not `common`: the bank was
+            # built as (residual - common), so cos(common, bank.mean(0)) is -0.50 and the signed
+            # share along `common` is negative. A generator-signature detector would use the mean.
+            v = bank[layer].mean(dim=0)
+        else:
+            g = torch.Generator().manual_seed(row["noise_seed"])
+            v = permuted_in_basis(bank[layer][row["source_index"]], bank[layer], generator=g)
+        # The scale on a negative row was calibrated as (per cent / 100) * R / ||v_concept||, so it
+        # buys the labelled damage only for a vector of the concept's norm. Applied to a null of a
+        # different norm the injected magnitude was out by up to 87x at L11, anti-correlated with
+        # the concept's own norm so it did not average out. Norm-matching is not damage-matching,
+        # but 1.0x beats 87x, and `measured` on these rows is nan rather than a borrowed number.
+        return v * (bank[layer][row["source_index"]].norm() / v.norm().clamp(min=1e-12))
 
     optimiser = torch.optim.AdamW(trainable, lr=args.lr, weight_decay=0.0, betas=(0.9, 0.95))
     total = args.max_steps
+    # cycle_momentum defaults True and drives beta1 for AdamW: the (0.9, 0.95) above silently
+    # became (0.95, 0.95) at construction and then cycled 0.95 -> 0.85 -> 0.95 across the run,
+    # with run.json recording the betas that were asked for rather than the ones used.
     schedule = torch.optim.lr_scheduler.OneCycleLR(
-        optimiser, max_lr=args.lr, total_steps=total, pct_start=0.05)
+        optimiser, max_lr=args.lr, total_steps=total, pct_start=0.05, cycle_momentum=False)
 
     cursor, step, history = 0, 0, []
     baseline_hooks = [len(b._forward_pre_hooks) for b in blocks]
@@ -272,6 +311,17 @@ def main() -> int:
             json.dump(history, (args.out / "history.json").open("w"), indent=1)
             print(f"  saved adapter-{step:05d}.pt", flush=True)
 
+    json.dump([{k: r.get(k) for k in ("cls", "concept", "distractor", "layer", "scale", "wanted",
+                                      "measured", "bank_index", "source_index", "prompt_length",
+                                      "target")}
+               for r in rows], (args.out / "rows.json").open("w"), indent=1)
+    seen = min(step * args.batch * args.accum, len(rows))
+    if seen < len(rows):
+        print(f"NOTE: {len(rows) - seen} of {len(rows)} rows were never consumed "
+              f"({seen / len(rows):.0%} of one epoch)", flush=True)
+    if step < args.max_steps:
+        print(f"WARNING: stopped at step {step}/{args.max_steps} on the wall clock; the learning "
+              f"rate never annealed (last {schedule.get_last_lr()[0]:.2e})", flush=True)
     torch.save(lora_state_dict(model), args.out / "adapter-final.pt")
     json.dump({"history": history, "rows": len(rows), "steps": step,
                "hours": (time.time() - started) / 3600,

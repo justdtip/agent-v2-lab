@@ -28,7 +28,6 @@ from local_llm_lab.introspect.meter import BATTERY, DamageMeter  # noqa: E402
 from local_llm_lab.introspect.protocol import EXPERIMENT_SYSTEM  # noqa: E402
 from local_llm_lab.introspect.render import render_prompt  # noqa: E402
 from local_llm_lab.introspect.vectors import spectrum_matched  # noqa: E402
-from local_llm_lab.introspect.vocabulary import split  # noqa: E402
 from local_llm_lab.lora_torch import apply_lora, load_lora_state_dict  # noqa: E402
 from local_llm_lab.residual_patch import (  # noqa: E402
     PatchPlan, PlannedPatch, build_masks, decoder_blocks,
@@ -136,7 +135,13 @@ def main() -> int:
     saved = torch.load(args.data / "bank.pt", map_location="cpu")
     words, layers = saved["words"], saved["layers"]
     index = {w: i for i, w in enumerate(words)}
-    train_words, held_words = split(seed=args.seed)
+    # From the manifest, not recomputed. split(seed=) with a different seed relabels which
+    # concepts were held out while every index still resolves, so the generalisation number would
+    # be computed over concepts the model had been trained on and nothing would raise.
+    manifest = json.load((args.data / "manifest.json").open())
+    train_words, held_words = sorted(manifest["train"]), sorted(manifest["held_out"])
+    if set(train_words) | set(held_words) != set(words):
+        raise SystemExit("manifest split does not cover the bank's word list")
 
     model, _r = hf_text.load_text_causal_lm(args.model, dtype=args.dtype,
                                             attn_implementation="eager", device=args.device)

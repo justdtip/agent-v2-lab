@@ -71,6 +71,10 @@ DETECT_PROMPTS_HELD = (
 
 POSITIVE_TARGET = "YES. The injected thought is about {name}."
 NEGATIVE_TARGET = "NO. I do not detect an injected thought."
+#: Denies the CANDIDATE, not the detection. Must never be the same string as NEGATIVE_TARGET:
+#: overwriting it with the blanket negative trained 1,320 rows to deny detection while a
+#: concept was present, in the exact words the evaluation scores.
+MISMATCH_TARGET = "NO. The injected thought is not about {name}."
 
 
 def batched_residuals(model, blocks, device, id_rows, layer, pad):
