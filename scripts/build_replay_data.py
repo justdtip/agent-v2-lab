@@ -109,8 +109,15 @@ def build_prompts(n: int, seed: int) -> list[str]:
     return out
 
 
-def generate_batch(model, tok, texts: list[str], *, device, max_new: int) -> list[str]:
-    """Greedy, left-padded, one batch. The prompts are rendered by the SAME renderer training uses."""
+def generate_batch(model, tok, texts: list[str], *, device,
+                   max_new: int) -> list[tuple[str, bool]]:
+    """(reply, finished) per row. Greedy, left-padded, rendered by the renderer training uses.
+
+    `finished` is the whole point. A reply that emitted the end-of-turn token and a reply that hit
+    the token cap come back as the same shape of string, and render_supervised then appends an
+    end-of-turn to whichever it is handed -- so an unlabelled corpus teaches the model to stop
+    mid-clause at an arbitrary boundary, on the very commit whose purpose is teaching it to stop.
+    """
     rows = [render_prompt(tok, t, system=EXPERIMENT_SYSTEM) for t in texts]
     width = max(len(r) for r in rows)
     pad = tok.pad_token_id if tok.pad_token_id is not None else (tok.eos_token_id or 0)
@@ -119,11 +126,16 @@ def generate_batch(model, tok, texts: list[str], *, device, max_new: int) -> lis
     for i, row in enumerate(rows):                 # LEFT padding: generation continues at the end
         ids[i, width - len(row):] = torch.tensor(row)
         att[i, width - len(row):] = 1
+    stop = turn_end_id(tok)
     with torch.no_grad():
         out = model.generate(input_ids=ids.to(device), attention_mask=att.to(device),
                              max_new_tokens=max_new, do_sample=False,
-                             pad_token_id=pad, eos_token_id=turn_end_id(tok))
-    return [tok.decode(out[i, width:], skip_special_tokens=True).strip() for i in range(len(rows))]
+                             pad_token_id=pad, eos_token_id=stop)
+    got = []
+    for i in range(len(rows)):
+        tail = out[i, width:].tolist()
+        got.append((tok.decode(tail, skip_special_tokens=True).strip(), stop in tail))
+    return got
 
 
 def main() -> int:
@@ -132,7 +144,7 @@ def main() -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--rows", type=int, default=6000)
     ap.add_argument("--batch", type=int, default=32)
-    ap.add_argument("--max-new", type=int, default=64)
+    ap.add_argument("--max-new", type=int, default=112)
     ap.add_argument("--device", default="cuda:0")
     ap.add_argument("--dtype", default="bfloat16")
     ap.add_argument("--seed", type=int, default=0)
@@ -149,16 +161,28 @@ def main() -> int:
     device = next(model.parameters()).device
     model.eval()
 
-    started, written, empty = time.time(), 0, 0
+    # If the stop token survived `skip_special_tokens` the target would carry a literal stop and
+    # render_supervised would append a second one. Measured on Gemma 4 it decodes to "", but a
+    # tokenizer that added it as non-special would pass turn_end_id's round-trip check in silence.
+    stop_id = turn_end_id(tok)
+    if tok.decode([stop_id], skip_special_tokens=True) != "":
+        raise SystemExit(f"end-of-turn {stop_id} is not skipped on decode: every replay target "
+                         f"would carry a literal stop and be supervised with a second one")
+
+    started, written, empty, cut = time.time(), 0, 0, 0
     with args.out.open("w") as fh:
         for start in range(0, len(prompts), args.batch):
             chunk = prompts[start:start + args.batch]
-            for text, reply in zip(chunk, generate_batch(model, tok, chunk, device=device,
-                                                         max_new=args.max_new)):
+            for text, (reply, finished) in zip(chunk, generate_batch(model, tok, chunk,
+                                                                     device=device,
+                                                                     max_new=args.max_new)):
                 if not reply:
                     empty += 1
                     continue
-                fh.write(json.dumps({"prompt": text, "target": reply}) + "\n")
+                if not finished:
+                    cut += 1          # a row that teaches stopping mid-clause is worse than no row
+                    continue
+                fh.write(json.dumps({"prompt": text, "target": reply, "finished": True}) + "\n")
                 written += 1
             if start % (args.batch * 10) == 0:
                 done = start + len(chunk)
@@ -166,9 +190,12 @@ def main() -> int:
                 print(f"  {done}/{len(prompts)}  {rate:.1f}/s  "
                       f"eta {(len(prompts)-done)/max(rate,1e-9)/60:.0f}m", flush=True)
     print(f"wrote {written} rows to {args.out} in {(time.time()-started)/60:.0f}m "
-          f"({empty} empty replies dropped)", flush=True)
-    if empty > len(prompts) * 0.02:
-        print(f"WARNING: {empty/len(prompts):.0%} of replies were empty", flush=True)
+          f"({empty} empty, {cut} truncated at --max-new {args.max_new}, both dropped)", flush=True)
+    if cut > len(prompts) * 0.1:
+        print(f"WARNING: {cut/len(prompts):.0%} of replies hit the cap. Raise --max-new or the "
+              f"corpus is a biased sample of the short answers.", flush=True)
+    if written < args.rows * 0.8:
+        print(f"WARNING: only {written} of {args.rows} prompts survived", flush=True)
     return 0
 
 

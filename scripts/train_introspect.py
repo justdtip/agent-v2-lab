@@ -137,8 +137,11 @@ def main() -> int:
                     help="jsonl of {prompt, target} from build_replay_data.py. The plan specifies "
                          "replay at about half the data; the run that shipped none produced an "
                          "adapter with a two-string vocabulary.")
-    ap.add_argument("--replay-rows", type=int, default=None,
-                    help="how many replay rows to use (default: as many as --rows)")
+    ap.add_argument("--replay-share", type=float, default=0.5,
+                    help="target share of SUPERVISED TOKENS that is replay, not share of rows. "
+                         "The loss is a mean over supervised tokens and a replay target is several "
+                         "times longer than a detect target, so a 50/50 row split is about 77 per "
+                         "cent replay by gradient.")
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--accum", type=int, default=4)
     ap.add_argument("--lr", type=float, default=1e-4)
@@ -158,6 +161,18 @@ def main() -> int:
     saved = torch.load(args.data / "bank.pt", map_location="cpu")
     scales = torch.load(args.data / "scales.pt", map_location="cpu")
     words, layers = saved["words"], saved["layers"]
+    replay_pool = []
+    if args.replay:                       # read BEFORE the model load, so a bad file costs seconds
+        replay_pool = [json.loads(line) for line in args.replay.read_text().splitlines()
+                       if line.strip()]
+        if not replay_pool:
+            raise SystemExit(f"{args.replay} holds no rows")
+        if not 0.0 <= args.replay_share < 1.0:
+            raise SystemExit("--replay-share must be in [0, 1)")
+        unfinished = sum(1 for r in replay_pool if not r.get("finished"))
+        if unfinished:
+            raise SystemExit(f"{unfinished} of {len(replay_pool)} replay rows are not marked "
+                             f"finished: rebuild the corpus, do not train on truncated targets")
     manifest = json.load((args.data / "manifest.json").open())
     train_words, held_words = sorted(manifest["train"]), sorted(manifest["held_out"])
     if set(train_words) & set(held_words):
@@ -202,19 +217,13 @@ def main() -> int:
     bank = {l: saved["bank"][l].float() for l in layers}
     common = {l: saved["common"][l].float() for l in layers}
     rows = make_rows(bank, scales, words, train_words, layers, rng, args.rows)
-    if args.replay:
-        pool = [json.loads(line) for line in args.replay.read_text().splitlines() if line.strip()]
-        wanted = args.replay_rows if args.replay_rows is not None else args.rows
-        if len(pool) < wanted:
-            raise SystemExit(f"{args.replay} holds {len(pool)} rows, {wanted} wanted: a repeated "
-                             f"replay prompt is memorised, not replayed")
-        rng.shuffle(pool)
+    if replay_pool:
+        rng.shuffle(replay_pool)
         # No injection, an ordinary question, and the model's own answer. bank_index -1 is the same
         # "nothing added" path D_clean uses, so no vector is built and no hook fires for these.
         rows += [dict(cls="D_replay", prompt=r["prompt"], target=r["target"], bank_index=-1,
                       layer=layers[0], scale=0.0, wanted=0.0, measured=0.0, concept=None)
-                 for r in pool[:wanted]]
-        rng.shuffle(rows)
+                 for r in replay_pool]
     elif args.max_steps * args.batch * args.accum > 2000:
         print("WARNING: no --replay. 600 steps over two target strings is what collapsed the "
               "adapter's output distribution on 2026-09-13.", flush=True)
@@ -233,7 +242,38 @@ def main() -> int:
                                                system=EXPERIMENT_SYSTEM)
         rendered.append(dict(row, ids=ids, prompt_length=prompt_length,
                              site=prompt_length - 1))
+
+    def supervised(r):
+        return len(r["ids"]) - r["prompt_length"]
+
+    detect = [r for r in rendered if r["cls"] != "D_replay"]
+    replay = [r for r in rendered if r["cls"] == "D_replay"]
+    if replay:
+        # HF's loss is a mean over supervised tokens, not over rows. Detect targets run about a
+        # dozen tokens and a replay answer several times that, so matching row counts would have
+        # put roughly three quarters of the gradient on replay while the census printed "half".
+        detect_tokens = sum(supervised(r) for r in detect)
+        want = args.replay_share / (1.0 - args.replay_share) * detect_tokens
+        kept, running = [], 0
+        for r in replay:
+            if running >= want:
+                break
+            kept.append(r)
+            running += supervised(r)
+        if running < want * 0.9:
+            print(f"WARNING: replay corpus holds {running} supervised tokens, {want:.0f} wanted "
+                  f"for a {args.replay_share:.0%} share; realised {running/(running+detect_tokens):.0%}",
+                  flush=True)
+        rendered = detect + kept
+        rng.shuffle(rendered)
     rows = rendered
+
+    census = {}
+    for r in rows:
+        census[r["cls"]] = census.get(r["cls"], 0) + supervised(r)
+    total = sum(census.values())
+    print("supervised tokens: " + ", ".join(f"{k} {v} ({v/total:.0%})"
+                                            for k, v in sorted(census.items())), flush=True)
 
     from local_llm_lab.introspect.vectors import permuted_in_basis, spectrum_matched
 
@@ -345,10 +385,18 @@ def main() -> int:
         print(f"WARNING: stopped at step {step}/{args.max_steps} on the wall clock; the learning "
               f"rate never annealed (last {schedule.get_last_lr()[0]:.2e})", flush=True)
     torch.save(lora_state_dict(model), args.out / "adapter-final.pt")
+    # Everything a later reader needs to tell "replay was too weak" from "replay was three
+    # quarters of the gradient and drowned the task". The realised token census is the number that
+    # matters, not the row count, and neither was recorded before.
     json.dump({"history": history, "rows": len(rows), "steps": step,
                "hours": (time.time() - started) / 3600,
                "layers": layers, "rank": args.rank, "alpha": args.alpha, "lr": args.lr,
-               "batch": args.batch, "accum": args.accum},
+               "batch": args.batch, "accum": args.accum, "seed": args.seed,
+               "max_steps": args.max_steps, "annealed": step >= args.max_steps,
+               "replay": str(args.replay) if args.replay else None,
+               "replay_share_asked": args.replay_share if args.replay else None,
+               "supervised_tokens": census, "rows_seen": min(step * args.batch * args.accum,
+                                                             len(rows))},
               (args.out / "run.json").open("w"), indent=1)
     print(f"done: {step} steps in {(time.time()-started)/3600:.2f} h", flush=True)
     return 0
