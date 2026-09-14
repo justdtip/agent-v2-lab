@@ -46,6 +46,38 @@ from local_llm_lab.residual_patch import (  # noqa: E402
     PatchPlan, PlannedPatch, build_masks, decoder_blocks,
 )
 
+
+def damage_at_scope(meter, vector, layer, scale, scope, *, device, dtype, blocks):
+    """Damage measured at the SCOPE the experiment injects at, not at the meter's default.
+
+    The meter injects at one site per battery row. A scale calibrated that way and then applied at
+    every prompt position costs between 1.3 and 11.4 times the labelled figure depending on layer
+    and strength -- measured 2026-09-14, and 9.2x at layer 20 at the -0.45 tier. So a tier label is
+    not the damage under prompt scope, and two arms matched on the label are not matched on damage
+    unless it is read here.
+    """
+    if vector is None:
+        return 0.0
+    index = list(range(len(meter.prompts)))
+    ids, att, sites, lengths, width = meter._batch(index)
+    span = ([(0, lengths[r]) for r in range(len(index))] if scope == "prompt"
+            else [None] * len(index))
+    plan = PatchPlan(layer=[layer] * len(index), site=sites, scale=[scale] * len(index),
+                     vector=[vector] * len(index), span=span)
+    masks = build_masks(plan, width=width, hidden=vector.shape[-1], device=device, dtype=dtype,
+                        lengths=lengths)
+    patches = [PlannedPatch(blocks[l], mask=m, delta=d, layer=l) for l, (m, d) in masks.items()]
+    clean = meter.clean()
+    for patch in patches:
+        patch.__enter__()
+    try:
+        with torch.no_grad():
+            lp = meter._final_logprobs(ids, att, sites)
+    finally:
+        for patch in patches:
+            patch.__exit__()
+    return sum(float(lp[i, clean[j][0]]) - clean[j][1] for i, j in enumerate(index)) / len(index)
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_introspect_data import batched_residuals  # noqa: E402
 
@@ -176,6 +208,8 @@ def main() -> int:
             null, layer, (args.tier,), residual_norm=norms[layer], verify=False)[args.tier]
 
         for arm, vec, sc in (("concept", v, scale), ("null", null, nscale), ("clean", None, 0.0)):
+            scoped = damage_at_scope(meter, vec, layer, sc, args.scope,
+                                     device=device, dtype=dtype, blocks=blocks)
             # both orders, so a preference for whichever option is listed first cannot masquerade
             lo_a, lo_b = measure(vec, layer, sc, near, far)      # near is option 1
             hi_a, hi_b = measure(vec, layer, sc, far, near)      # near is option 2
@@ -184,6 +218,7 @@ def main() -> int:
             rows.append(dict(arm=arm, concept=word, layer=layer, near=near, far=far,
                              cos_near=cos, tier=args.tier,
                              damage=damage if arm == "concept" else None,
+                             damage_at_scope=scoped,
                              how=note["how"], near_minus_far=near_minus_far,
                              position_bias=position_bias))
         if k % 10 == 0:
@@ -218,6 +253,19 @@ def main() -> int:
         sd = (sum((x - m) ** 2 for x in d) / max(len(d) - 1, 1)) ** 0.5
         se = sd / len(d) ** 0.5
         print(f"{arm:<10} {len(d):>4} {m:>+9.4f} {se:>8.4f} {m / se if se else 0:>+7.2f}")
+
+    print("\nARE THE ARMS MATCHED ON DAMAGE AT THE SCOPE THEY WERE INJECTED AT?")
+    dm = {}
+    for arm in ("concept", "null"):
+        at = [v[arm]["damage_at_scope"] for v in full]
+        m = sum(at) / len(at)
+        sd = (sum((x - m) ** 2 for x in at) / max(len(at) - 1, 1)) ** 0.5
+        dm[arm] = m
+        print(f"  {arm:<8} mean {m:+.4f} sd {sd:.4f}  (tier label {args.tier:+.2f})")
+    ref = max(abs(dm["concept"]), abs(dm["null"]), 1e-9)
+    gap = abs(dm["concept"] - dm["null"])
+    print(f"  gap {gap:.4f} ({gap / ref:.0%} of the larger) -> "
+          f"{'matched' if gap <= 0.15 * ref else 'NOT MATCHED'}")
 
     print(f"\nlog-odds of choosing the NEAR topic over the FAR one, averaged over both orders")
     print(f"{'arm':<10} {'n':>4} {'mean':>9} {'sd':>8} {'stderr':>8}")
