@@ -106,6 +106,9 @@ def build_masks(plan: PatchPlan, *, width: int, hidden: int, device, dtype,
                     raise IndexError(f"row {row}: site {site} outside its {limit} real tokens")
                 mask[row, site, 0] = 1.0
             else:
+                if not (isinstance(span, (tuple, list)) and len(span) == 2
+                        and all(isinstance(x, int) and not isinstance(x, bool) for x in span)):
+                    raise IndexError(f"row {row}: span {span!r} is not a pair of ints")
                 start, end = span
                 if not 0 <= start < end <= limit:
                     raise IndexError(f"row {row}: span {span} outside its {limit} real tokens")

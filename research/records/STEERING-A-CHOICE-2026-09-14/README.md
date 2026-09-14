@@ -34,7 +34,11 @@ concept's content.
 | 48 | −0.280 ± 0.166 | −1.69 | 53 / 117 | −0.221 | −1.42 |
 
 Three quarters of individual trials move toward the semantically nearer topic at layers 20, 32 and
-40, and the null moves nothing at any layer. At layer 48, four fifths of the way through the stack,
+40, and the null moves nothing at any layer. The "117" is not 120 minus rounding: the pairing key
+is (concept, layer, near, far) and `near` is determined by the other two, so trials that draw the
+same (concept, layer, far) cell collide and one is silently lost. Expected distinct cells for 120
+draws from 2,080 is 116.6, which is what we are seeing. The loss is unbiased but it was not
+declared, and the key now carries the trial index. At layer 48, four fifths of the way through the stack,
 the effect is gone and the two arms are indistinguishable.
 
 ## Scope is the whole difference
@@ -51,11 +55,21 @@ scope it happened to use, and nobody had said so.
 ## What this does NOT establish
 
 **The damage label is not the damage.** The strength was calibrated by the meter, which injects at
-one site, and then applied at roughly two hundred positions. The recorded "−0.45 nats" is the
-single-token cost of that scale, not what the sustained injection actually costs. The concept and
-the null share the scale and the scope exactly, so the contrast stands; the tier label does not.
-Measuring damage under prompt scope is the first thing to fix before any number here is quoted as a
-strength.
+one site, and then applied at roughly two hundred positions. Measured 2026-09-14, that costs
+between 1.3 and 11.4 times the label depending on layer and strength: at layer 20 the −0.45 tier
+really costs −3.46 nats and the −1.2 tier costs −11.8, while at layer 40 the same tiers cost −0.79
+and −2.15. So the large shifts at layers 20 and 32 were measured under a far heavier hand than the
+number says, and layer 40 is the one place the label is nearly honest.
+
+**CORRECTION, 2026-09-14.** An earlier version of this paragraph said "the concept and the null
+share the scale and the scope exactly, so the contrast stands". The second half is true and the
+first is false. They share the TIER, not the scale: `steer_choice.py` solves a scale for the
+concept and a separate one for the null, and they cannot share a scale, because `spectrum_matched`
+norm-matches the arms and the solver divides by the vector's norm, so matching on damage is
+precisely what forces the two magnitudes apart. Each solve also clamps independently and only the
+concept's clamp note was recorded, so a divergence was undiagnosable from the output file. What the
+arms genuinely share is the scope and the tier they were solved for. Whether they are matched on
+delivered damage at that scope was not checked in this run and is now measured and printed per arm.
 
 **The injection disrupts as well as tilts.** Position bias — the preference for whichever option is
 listed first — nearly doubles under injection, 2.58 against 1.49 clean. Asking both orders removes

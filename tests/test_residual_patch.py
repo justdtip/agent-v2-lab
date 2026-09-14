@@ -195,3 +195,80 @@ def test_a_row_the_layer_does_not_own_gets_a_zero_mask():
     assert set(masks) == {1, 2}
     assert float(masks[1][0][1].sum()) == 0.0 and float(masks[1][0][0].sum()) == 1.0
     assert float(masks[2][0][0].sum()) == 0.0 and float(masks[2][0][1].sum()) == 1.0
+
+
+# -- the span branch ---------------------------------------------------------------------------
+# Shipped with no test at all. An adversarial review mutated build_masks nine ways and ran the whole
+# suite against each: nine survived, and three of them make --scope prompt silently identical to
+# --scope final, which is the entire claim the steering result rests on.
+
+def _sp_plan(**kw):
+    from local_llm_lab.residual_patch import PatchPlan
+    base = dict(layer=[0], site=[3], scale=[2.0], vector=[torch.ones(4)])
+    base.update(kw)
+    return PatchPlan(**base)
+
+
+def _sp_masks(plan, *, width=8, lengths=None):
+    from local_llm_lab.residual_patch import build_masks
+    return build_masks(plan, width=width, hidden=4, device=torch.device("cpu"),
+                       dtype=torch.float32, lengths=lengths)
+
+
+def _sp_marked(mask, row=0):
+    return [int(i) for i in torch.nonzero(mask[row, :, 0]).flatten().tolist()]
+
+
+def test_a_plan_with_no_span_marks_the_site_and_only_the_site():
+    """The separating control. Without it every test below passes on a build_masks that spans
+    unconditionally, which is precisely the mutation that makes the two scopes identical."""
+    mask, _delta = _sp_masks(_sp_plan())[0]
+    assert _sp_marked(mask) == [3], _sp_marked(mask)
+
+
+def test_a_span_marks_every_position_in_the_half_open_range():
+    mask, _delta = _sp_masks(_sp_plan(span=[(1, 4)]))[0]
+    assert _sp_marked(mask) == [1, 2, 3], "half-open: start in, end out"
+
+
+def test_a_span_is_not_quietly_ignored():
+    plain = _sp_masks(_sp_plan())[0][0]
+    spanned = _sp_masks(_sp_plan(span=[(0, 6)]))[0][0]
+    assert not torch.equal(plain, spanned), "a span that changes nothing is a scope that lied"
+
+
+def test_a_span_may_not_reach_into_the_padding():
+    with pytest.raises(IndexError, match="row 0"):
+        _sp_masks(_sp_plan(span=[(2, 7)]), width=8, lengths=[5])
+
+
+def test_an_empty_or_inverted_or_negative_span_is_refused():
+    for bad in ((3, 3), (4, 2), (-1, 3)):
+        with pytest.raises(IndexError, match="row 0"):
+            _sp_masks(_sp_plan(span=[bad]), width=8, lengths=[8])
+
+
+def test_a_span_that_is_not_a_pair_of_ints_is_refused_with_its_row():
+    for bad in (5, (True, 2), (1, 2, 3), "ab"):
+        with pytest.raises(IndexError, match="row 0"):
+            _sp_masks(_sp_plan(span=[bad]), width=8, lengths=[8])
+
+
+def test_each_row_gets_its_own_span():
+    plan = _sp_plan(layer=[0, 0], site=[1, 1], scale=[1.0, 1.0],
+                    vector=[torch.ones(4), torch.ones(4)], span=[(0, 2), (5, 7)])
+    mask, _delta = _sp_masks(plan, width=8, lengths=[8, 8])[0]
+    assert _sp_marked(mask, 0) == [0, 1] and _sp_marked(mask, 1) == [5, 6]
+
+
+def test_the_span_list_must_have_one_entry_per_row():
+    with pytest.raises(ValueError, match="span"):
+        _sp_plan(layer=[0, 0], site=[1, 1], scale=[1.0, 1.0],
+                 vector=[torch.ones(4), torch.ones(4)], span=[(0, 2)])
+
+
+def test_a_span_on_one_row_does_not_disable_the_site_check_on_another():
+    plan = _sp_plan(layer=[0, 0], site=[1, 99], scale=[1.0, 1.0],
+                    vector=[torch.ones(4), torch.ones(4)], span=[(0, 2), None])
+    with pytest.raises(IndexError, match="row 1"):
+        _sp_masks(plan, width=8, lengths=[8, 8])
