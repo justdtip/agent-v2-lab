@@ -196,6 +196,14 @@ class Chat(Console):
         think = self.thinking if thinking is None else thinking
         head = self.system_head() if head is _UNSET else head
         full = ([{"role": "system", "content": head}] if head else []) + list(messages)
+        if not full:
+            # No head and no turns is genuinely nothing, and it is a state the server asks about:
+            # `head_tokens` calls this with [] to size the context window, and `clear` asks for a
+            # context count on an emptied history. Gemma 4's template refuses a wholly empty
+            # conversation -- a system turn alone is fine, an empty list is not -- so with the
+            # system prompt cleared in the interface, clearing the conversation took the bench
+            # down. Zero tokens is the right answer, not an exception.
+            return []
         ids = self.tokenizer(self._apply(full, generation_prompt=generation_prompt,
                                          thinking=think), add_special_tokens=False)["input_ids"]
         bos = self.tokenizer.bos_token_id

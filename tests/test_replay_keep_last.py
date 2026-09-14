@@ -73,3 +73,35 @@ def test_an_unknown_keyword_is_not_guessed(chat):
     chat.model.__class__ = NoKeyword
     chat._keep_kw = None
     assert chat._keep_last() == {}
+
+
+def test_rendering_nothing_at_all_is_zero_tokens_not_an_exception():
+    """`head_tokens` and `clear` both ask for a render of an empty conversation.
+
+    Gemma 4's template refuses a wholly empty message list while accepting a system turn alone, so
+    with the system prompt cleared in the interface, clearing the conversation raised inside the
+    server's own state() call and the bench stopped answering.
+    """
+    class _Tok:
+        def apply_chat_template(self, messages, **_kw):
+            if not messages:
+                raise ValueError("Cannot apply chat template to an empty conversation.")
+            return "<bos>" + "".join(m["content"] for m in messages)
+
+        def __call__(self, text, **_kw):
+            return {"input_ids": [1] * len(text)}
+        bos_token_id = None
+
+    import types
+
+    import steer_chat
+    chat = types.SimpleNamespace(tokenizer=_Tok(), thinking=False, system=None, summary=None)
+    chat._apply = steer_chat.Chat._apply.__get__(chat, steer_chat.Chat)
+    render = steer_chat.Chat.render_messages.__get__(chat, steer_chat.Chat)
+
+    chat.system_head = lambda: None
+    assert render([]) == [], "no head and no turns must be zero tokens, not an exception"
+
+    # and the fixture has to be able to fail: a system turn alone still renders
+    chat.system_head = lambda: "S."
+    assert len(render([])) > 0
